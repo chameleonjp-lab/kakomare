@@ -5,7 +5,7 @@ async function enterHome(page: Page): Promise<void> {
   const name = page.locator('.name-input');
   if (await name.count()) {
     await name.fill('テスト守');
-    await page.getByTestId('start-game').click();
+    await page.getByRole('button', { name: 'この名前で始める' }).click();
   }
   await expect(page.getByText('カコマレ', { exact: true }).first()).toBeVisible();
 }
