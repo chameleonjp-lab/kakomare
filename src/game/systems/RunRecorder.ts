@@ -26,7 +26,7 @@ export class RunRecorder {
     this.lastDamageSource = source;
   }
 
-  public result(outcome: BattleResult['outcome'], coreRemaining: number, partsEarned: number): BattleResult {
+  public result(outcome: BattleResult['outcome'], coreRemaining: number, partsEarned: number, retired = false): BattleResult {
     const result: BattleResult = {
       stageId: this.stageId,
       outcome,
@@ -40,6 +40,7 @@ export class RunRecorder {
       sectorDamage: [...this.sectorDamage],
       mainCause: this.lastDamageSource,
       upgrades: [...this.upgrades],
+      retired,
     };
     return result;
   }

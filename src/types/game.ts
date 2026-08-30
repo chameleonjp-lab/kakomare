@@ -99,6 +99,7 @@ export interface BattleResult {
   sectorDamage: number[];
   mainCause: string;
   upgrades: string[];
+  retired: boolean;
 }
 
 export interface BattleCallbacks {

@@ -11,6 +11,7 @@ html { min-width: 320px; background: #07131f; }
 body { margin: 0; min-width: 320px; min-height: 100dvh; background: #07131f; }
 button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, .battle-canvas-shell { -webkit-touch-callout: none; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .45; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #fff1a8; outline-offset: 3px; }

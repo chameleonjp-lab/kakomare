@@ -3,6 +3,7 @@ import { button, card, element, heading, pageShell } from './viewUtils';
 
 export interface SettingsActions {
   change: (next: SaveData) => void;
+  changeName: (name: string) => void;
   exportSave: () => void;
   importSave: (raw: string) => void;
   reset: () => void;
@@ -13,6 +14,11 @@ export function createSettingsView(save: SaveData, actions: SettingsActions): HT
   const shell = pageShell('設定', '音と演出を端末に保存します。');
   const settingsCard = card('settings-card');
   settingsCard.append(heading('ゲーム設定', 2));
+  const nameRow = element('label', 'setting-row', '名前');
+  const nameInput = element('input') as HTMLInputElement;
+  nameInput.type = 'text'; nameInput.maxLength = 12; nameInput.value = save.profile.name; nameInput.setAttribute('autocomplete', 'nickname');
+  nameInput.addEventListener('change', () => { const name = nameInput.value.trim(); if (name && [...name].length <= 12) actions.changeName(name); else nameInput.value = save.profile.name; });
+  nameRow.append(nameInput); settingsCard.append(nameRow);
 
   const sound = element('label', 'setting-row', '効果音');
   const soundValue = element('output', 'setting-value', `${save.settings.audio}`);

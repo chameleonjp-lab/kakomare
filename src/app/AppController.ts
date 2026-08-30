@@ -32,6 +32,7 @@ export class AppController {
     const loaded = this.saveService.load();
     this.state = createAppState(loaded.data);
     this.state.notice = loaded.message;
+    this.audio.setVolume(loaded.data.settings.audio);
     this.lifecycleCleanup = new LifecycleService(() => this.handleHidden(), () => this.saveService.persist(this.state.save)).start();
     this.render('boot');
     await Promise.resolve();
@@ -87,6 +88,7 @@ export class AppController {
   private settingsView(): HTMLElement {
     return createSettingsView(this.state.save, {
       change: (next) => { this.state.save = next; this.saveService.persist(next); this.audio.setVolume(next.settings.audio); },
+      changeName: (name) => { const next = { ...this.state.save, profile: { name } }; this.state.save = next; this.saveService.persist(next); this.announce('名前を変更しました'); },
       exportSave: () => { void this.exportSave(); },
       importSave: (raw) => this.importSave(raw),
       reset: () => this.resetSave(),
@@ -220,12 +222,15 @@ export class AppController {
     dialog.append(element('p', 'modal-copy', '戦闘速度を落としています。変更前と変更後を確認してください。'));
     const list = element('div', 'upgrade-list');
     let locked = true;
+    const choiceButtons: HTMLButtonElement[] = [];
+    let selectedIndex = 0;
     window.setTimeout(() => { locked = false; }, 150);
     for (const candidate of payload.candidates) {
       const card = element('article', 'upgrade-card');
       const choose = button(candidate.title, 'upgrade-choice');
       choose.dataset.testid = 'upgrade-candidate';
       choose.disabled = true;
+      choiceButtons.push(choose);
       choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate); });
       card.append(choose, element('p', 'upgrade-description', candidate.description), element('p', 'upgrade-change', `${candidate.before} → ${candidate.after}`), element('p', 'upgrade-role', `得意: ${candidate.role}`));
       const ban = button('この候補を除外', 'button button-small');
@@ -234,11 +239,17 @@ export class AppController {
       card.append(ban); list.append(card);
       window.setTimeout(() => { choose.disabled = false; }, 150);
     }
+    dialog.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); selectedIndex = (selectedIndex + 1) % choiceButtons.length; choiceButtons[selectedIndex]?.focus(); }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); selectedIndex = (selectedIndex + choiceButtons.length - 1) % choiceButtons.length; choiceButtons[selectedIndex]?.focus(); }
+      if (event.key === 'Enter') { event.preventDefault(); choiceButtons[selectedIndex]?.click(); }
+    });
     dialog.append(list);
     const footer = element('div', 'modal-footer');
     const reroll = button(`引き直す（残り${payload.rerollsLeft}回）`, 'button button-secondary');
     reroll.disabled = payload.rerollsLeft <= 0; reroll.addEventListener('click', () => this.gameHost.rerollUpgrade()); footer.append(reroll);
     dialog.append(footer); layer.append(dialog); shell.append(layer);
+    window.setTimeout(() => choiceButtons[0]?.focus(), 160);
   }
 
   private openPause(fromVisibility: boolean): void {
@@ -292,25 +303,30 @@ export class AppController {
     this.gameHost.stop();
     this.battleStarted = false;
     const previous = this.state.save.records.stageBest['stage-1'];
-    const nextBest = !previous || result.score > previous.bestScore;
+    const nextBest = !result.retired && (!previous || result.score > previous.bestScore);
+    const settledKills = result.retired ? 0 : result.kills;
+    const settledParts = result.retired ? 0 : result.partsEarned;
+    const weaponUsage = { ...this.state.save.statistics.weaponUsage };
+    if (!result.retired) for (const [id, amount] of Object.entries(result.weaponDamage)) weaponUsage[id as keyof typeof weaponUsage] = (weaponUsage[id as keyof typeof weaponUsage] ?? 0) + Math.round(amount ?? 0);
     const next: SaveData = {
       ...this.state.save,
-      progress: { ...this.state.save.progress, parts: this.state.save.progress.parts + result.partsEarned },
+      progress: { ...this.state.save.progress, parts: this.state.save.progress.parts + settledParts },
       records: {
         ...this.state.save.records,
         stageBest: {
           ...this.state.save.records.stageBest,
           'stage-1': {
-            bestScore: Math.max(previous?.bestScore ?? 0, result.score),
-            bestCore: Math.max(previous?.bestCore ?? 0, Math.round(result.coreRemaining)),
-            bestTime: Math.max(previous?.bestTime ?? 0, result.survivalTime),
+            bestScore: Math.max(previous?.bestScore ?? 0, result.retired ? 0 : result.score),
+            bestCore: Math.max(previous?.bestCore ?? 0, result.retired ? 0 : Math.round(result.coreRemaining)),
+            bestTime: Math.max(previous?.bestTime ?? 0, result.retired ? 0 : result.survivalTime),
           },
         },
       },
       statistics: {
         ...this.state.save.statistics,
-        clearCount: this.state.save.statistics.clearCount + (result.outcome === 'victory' ? 1 : 0),
-        totalKills: this.state.save.statistics.totalKills + result.kills,
+        clearCount: this.state.save.statistics.clearCount + (!result.retired && result.outcome === 'victory' ? 1 : 0),
+        totalKills: this.state.save.statistics.totalKills + settledKills,
+        weaponUsage,
       },
     };
     this.state.save = next; this.saveService.persist(next); this.state.notice = nextBest ? '自己最高記録を更新しました。' : '';

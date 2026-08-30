@@ -1,9 +1,9 @@
 .app-root-battle { padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
-.battle-shell { width: min(100%, 1500px); min-height: calc(100dvh - 20px); margin: 0 auto; overscroll-behavior: contain; }
+.battle-shell { width: min(100%, 1500px); height: calc(100dvh - 8px); margin: 0 auto; overflow: hidden; overscroll-behavior: contain; }
 .battle-header { display: flex; min-height: 48px; justify-content: space-between; align-items: center; gap: 12px; }
 .battle-header .eyebrow { margin: 0; }
 .pause-button { min-width: 112px; }
-.battle-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); gap: 16px; align-items: start; }
+.battle-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); gap: 16px; align-items: start; height: calc(100% - 50px); }
 .arena-column { min-width: 0; }
 .battle-canvas-shell { width: min(100%, 720px); aspect-ratio: 1; margin: 0 auto; overflow: hidden; border: 1px solid #22475c; border-radius: 22px; background: #07131f; box-shadow: 0 12px 46px rgba(0,0,0,.32); touch-action: none; user-select: none; -webkit-user-select: none; }
 .game-mount, .game-mount canvas { display: block; width: 100%; height: 100%; }
@@ -37,16 +37,26 @@
 .pause-rules p { color: #c3d7dc; }
 
 @media (max-width: 760px) {
-  .battle-layout { grid-template-columns: 1fr; }
+  .battle-layout { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; gap: 4px; }
+  .arena-column { min-height: 0; }
+  .battle-canvas-shell { width: min(100%, calc(100dvh - 210px)); max-height: 100%; }
   .battle-panel { position: static; padding: 10px; }
+  .battle-hud { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .hud-item { min-height: 48px; padding: 6px; }
+  .hud-label { font-size: .64rem; }
+  .hud-value { margin-top: 2px; font-size: .82rem; }
+  .build-panel { margin-top: 5px; padding-top: 5px; }
+  .build-panel h2 { display: inline; margin-right: 8px; font-size: .85rem; }
+  .build-list { display: inline; min-height: 0; font-size: .78rem; }
+  .battle-help { display: none; }
   .battle-canvas-shell { border-radius: 16px; }
   .upgrade-list { grid-template-columns: 1fr; }
   .upgrade-card { min-height: 0; }
 }
 
 @media (orientation: landscape) and (max-height: 620px) {
-  .battle-layout { grid-template-columns: minmax(0, 1fr) 250px; gap: 10px; }
-  .battle-canvas-shell { max-height: calc(100dvh - 72px); }
+  .battle-layout { grid-template-columns: minmax(0, 1fr) 250px; grid-template-rows: none; gap: 10px; }
+  .battle-canvas-shell { width: min(100%, calc(100dvh - 72px)); max-height: calc(100dvh - 72px); }
   .battle-panel { padding: 10px; }
   .battle-help { margin-top: 7px; font-size: .78rem; }
 }

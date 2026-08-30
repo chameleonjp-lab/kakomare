@@ -9,7 +9,7 @@ export interface ResultActions {
 
 export function createResultView(result: BattleResult, actions: ResultActions): HTMLElement {
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  const shell = pageShell(result.outcome === 'victory' ? '防衛成功' : '防衛失敗', result.outcome === 'victory' ? '回転冠を止め、コアを守り切りました。' : 'コアの耐久力が尽きました。');
+  const shell = pageShell(result.retired ? 'プレイ終了' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗', result.retired ? 'このプレイの得点と報酬は確定していません。' : result.outcome === 'victory' ? '回転冠を止め、コアを守り切りました。' : 'コアの耐久力が尽きました。');
   shell.dataset.testid = 'result-screen';
   const scoreCard = card('result-score-card');
   scoreCard.append(heading(`${result.score.toLocaleString('ja-JP')} 点`, 2));
@@ -28,6 +28,11 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
     const row = element('div', 'result-row'); row.append(element('span', 'result-label', label), element('strong', '', value)); details.append(row);
   }
   shell.append(details);
+  const weaponCard = card('result-details');
+  weaponCard.append(heading('装置の働き', 2));
+  for (const [id, amount] of Object.entries(result.weaponDamage)) weaponCard.append(element('p', 'summary-line', `${id}: ${Math.round(amount ?? 0)}`));
+  if (result.upgrades.length > 0) weaponCard.append(element('p', 'summary-line', `強化順: ${result.upgrades.join(' → ')}`));
+  shell.append(weaponCard);
   const actionsGrid = element('div', 'result-actions');
   const again = button('もう一度', 'button button-primary button-large'); again.addEventListener('click', actions.again);
   const share = button('結果を共有'); share.addEventListener('click', actions.share);

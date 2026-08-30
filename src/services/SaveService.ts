@@ -30,19 +30,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isName(value: unknown): value is string {
-  if (typeof value !== 'string' || value.trim().length < 1 || value.trim().length > 12) return false;
+  if (typeof value !== 'string' || [...value.trim()].length < 1 || [...value.trim()].length > 12) return false;
   return ![...value].some((char) => { const code = char.codePointAt(0) ?? 0; return code <= 0x1f || code === 0x7f; });
 }
 
+function isStoredName(value: unknown): value is string {
+  if (value === '') return true;
+  return isName(value);
+}
+
+function isCounter(value: unknown): value is number {
+  return isFiniteNonNegative(value) && Number.isInteger(value);
+}
+
 function isValidSave(value: unknown): value is SaveData {
-  if (!isRecord(value) || value.version !== 1 || !isRecord(value.profile) || !isName(value.profile.name)) return false;
-  if (!isRecord(value.progress) || !Array.isArray(value.progress.unlockedStages) || !value.progress.unlockedStages.every((stage) => stage === 'stage-1') || !isFiniteNonNegative(value.progress.parts) || !isRecord(value.progress.researchLevels)) return false;
-  if (!isRecord(value.records) || !isRecord(value.records.stageBest) || !isFiniteNonNegative(value.records.endlessBest)) return false;
-  if (!isRecord(value.settings) || !isFiniteNonNegative(value.settings.audio) || value.settings.audio > 100 || !isFiniteNonNegative(value.settings.music) || value.settings.music > 100) return false;
+  if (!isRecord(value) || value.version !== 1 || !isRecord(value.profile) || !isStoredName(value.profile.name)) return false;
+  if (!isRecord(value.progress) || !Array.isArray(value.progress.unlockedStages) || value.progress.unlockedStages.length < 1 || !value.progress.unlockedStages.every((stage) => stage === 'stage-1') || !isCounter(value.progress.parts) || !isRecord(value.progress.researchLevels)) return false;
+  if (!isRecord(value.records) || !isRecord(value.records.stageBest) || !isCounter(value.records.endlessBest)) return false;
+  if (!isRecord(value.settings) || !isCounter(value.settings.audio) || value.settings.audio > 100 || !isCounter(value.settings.music) || value.settings.music > 100) return false;
   if (!['standard', 'low', 'minimum'].includes(value.settings.effects as string)) return false;
   if (typeof value.settings.screenShake !== 'boolean' || typeof value.settings.reducedMotion !== 'boolean') return false;
   if (!['standard', 'strong'].includes(value.settings.aimAssist as string)) return false;
-  if (!isRecord(value.statistics) || !isFiniteNonNegative(value.statistics.playCount) || !isFiniteNonNegative(value.statistics.clearCount) || !isFiniteNonNegative(value.statistics.totalKills) || !isRecord(value.statistics.weaponUsage) || !isRecord(value.statistics.supportUsage)) return false;
+  if (!isRecord(value.statistics) || !isCounter(value.statistics.playCount) || !isCounter(value.statistics.clearCount) || !isCounter(value.statistics.totalKills) || !isRecord(value.statistics.weaponUsage) || !isRecord(value.statistics.supportUsage)) return false;
   return typeof value.updatedAt === 'string';
 }
 

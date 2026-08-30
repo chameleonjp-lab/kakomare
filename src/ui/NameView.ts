@@ -21,7 +21,7 @@ export function createNameView(onSubmit: (name: string) => void): HTMLElement {
   const submit = (): void => {
     const value = input.value.trim();
     const hasControl = [...value].some((char) => { const code = char.codePointAt(0) ?? 0; return code <= 0x1f || code === 0x7f; });
-    if (!value || hasControl || value.length > 12) {
+    if (!value || hasControl || [...value].length > 12) {
       error.textContent = '1〜12文字で入力してください。';
       input.focus();
       return;

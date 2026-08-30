@@ -149,7 +149,7 @@ export class BattleScene extends Phaser.Scene {
 
   public retire(): void {
     if (this.state === 'finished') return;
-    this.finish('defeat', 'プレイを終了しました');
+    this.finish('defeat', 'プレイを終了しました', true);
   }
 
   public shutdownBattle(): void {
@@ -295,13 +295,13 @@ export class BattleScene extends Phaser.Scene {
     this.options.callbacks.onStatus('強化候補を選んでください');
   }
 
-  private finish(outcome: BattleResult['outcome'], cause: string): void {
+  private finish(outcome: BattleResult['outcome'], cause: string, retired = false): void {
     if (this.state === 'finished') return;
     this.state = 'finished';
     if (cause) this.recorder.lastDamageSource = cause;
     this.recorder.survivalTime = this.elapsed;
     const parts = Math.max(20, Math.floor(20 + this.elapsed / 6 + (this.bossDefeated ? 25 : 0)));
-    const result = this.recorder.result(outcome, this.core.health, parts);
+    const result = this.recorder.result(outcome, this.core.health, parts, retired);
     this.options.callbacks.onFinish(result);
   }
 
