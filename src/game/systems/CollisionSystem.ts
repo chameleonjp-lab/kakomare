@@ -18,7 +18,7 @@ export function collideProjectiles(projectiles: Projectile[], enemies: Enemy[], 
       if (!enemy.active || projectile.targetId === enemy.id) continue;
       const distance = Math.hypot(projectile.x - enemy.x, projectile.y - enemy.y);
       if (distance > projectile.radius + 16) continue;
-      const result = applyDamage(enemy, projectile.damage, elapsed);
+      const result = applyDamage(enemy, projectile.damage, elapsed, Math.atan2(projectile.vy, projectile.vx));
       projectile.targetId = enemy.id;
       if (projectile.piercing <= 0) projectile.active = false;
       else projectile.piercing -= 1;

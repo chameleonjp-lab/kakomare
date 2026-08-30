@@ -10,7 +10,8 @@ export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySna
     graphics.lineStyle(4, 0xffbe5c, alpha);
     graphics.strokeCircle(x, y, 40);
     for (let index = 0; index < 3; index += 1) {
-      const angle = index * Math.PI * 2 / 3 + enemy.radius * 0.008;
+      const angle = (enemy.shieldRotation ?? 0) + index * Math.PI * 2 / 3;
+      graphics.lineStyle(7, 0xffbe5c, alpha * 0.9);
       graphics.lineBetween(x + Math.cos(angle) * 28, y + Math.sin(angle) * 28, x + Math.cos(angle) * 60, y + Math.sin(angle) * 60);
     }
     graphics.fillStyle(0xff706a, alpha);

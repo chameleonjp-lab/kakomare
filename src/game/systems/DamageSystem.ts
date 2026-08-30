@@ -7,8 +7,8 @@ export interface DamageResult {
   destroyed: boolean;
 }
 
-export function applyDamage(enemy: Enemy, amount: number, elapsed: number): DamageResult {
-  const result = enemy.damage(amount, elapsed);
+export function applyDamage(enemy: Enemy, amount: number, elapsed: number, attackAngle = 0): DamageResult {
+  const result = enemy.damage(amount, elapsed, attackAngle);
   return { amount: result.dealt, blocked: result.blocked, destroyed: result.destroyed };
 }
 

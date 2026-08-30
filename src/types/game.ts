@@ -18,6 +18,7 @@ export interface EnemySnapshot {
   invulnerable: boolean;
   telegraph: boolean;
   slowFactor: number;
+  shieldRotation?: number;
 }
 
 export interface ProjectileSnapshot {

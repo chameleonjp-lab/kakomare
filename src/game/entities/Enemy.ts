@@ -16,6 +16,7 @@ export class Enemy {
   public shieldHits: number;
   public invulnerable = false;
   public telegraph = false;
+  public shieldRotation = 0;
   public slowUntil = 0;
   public active = true;
   public splitDone = false;
@@ -50,20 +51,19 @@ export class Enemy {
     if (this.type === 'runner') this.y += Math.sin(elapsed * 8 + this.id) * 2;
     if (this.type === 'lattice') this.telegraph = this.shieldHits > 0;
     if (this.type === 'crown') this.telegraph = this.radius < 300;
+    if (this.type === 'crown') this.shieldRotation = elapsed * 0.9;
     return !this.isBoss && this.radius <= 52;
   }
 
-  public damage(amount: number, elapsed: number): { dealt: number; destroyed: boolean; blocked: boolean } {
+  public damage(amount: number, elapsed: number, attackAngle = 0): { dealt: number; destroyed: boolean; blocked: boolean } {
     if (!this.active || this.invulnerable) return { dealt: 0, destroyed: false, blocked: true };
     if (this.type === 'lattice' && this.shieldHits > 0) {
       this.shieldHits -= 1;
       return { dealt: 0, destroyed: false, blocked: true };
     }
+    if (this.type === 'crown' && this.isShielded(attackAngle, elapsed)) return { dealt: 0, destroyed: false, blocked: true };
     const limited = this.type === 'crown' ? Math.min(60, amount) : this.type === 'shard' ? amount : Math.min(24, amount);
     this.hp -= Math.max(0, limited);
-    if (this.type === 'crown') {
-      this.invulnerable = Math.floor(elapsed / 2.4) % 3 === 1;
-    }
     const destroyed = this.hp <= 0;
     if (destroyed) this.active = false;
     return { dealt: Math.max(0, limited), destroyed, blocked: false };
@@ -94,6 +94,17 @@ export class Enemy {
       invulnerable: this.invulnerable,
       telegraph: this.telegraph,
       slowFactor: this.slowUntil > 0 ? 0.55 : 1,
+      shieldRotation: this.isBoss ? this.shieldRotation : undefined,
     };
+  }
+
+  private isShielded(attackAngle: number, elapsed: number): boolean {
+    const rotation = elapsed * 0.9;
+    for (let index = 0; index < 3; index += 1) {
+      const plate = rotation + index * Math.PI * 2 / 3;
+      const difference = Math.abs(((attackAngle - plate + Math.PI) % (Math.PI * 2)) - Math.PI);
+      if (difference < 0.22) return true;
+    }
+    return false;
   }
 }

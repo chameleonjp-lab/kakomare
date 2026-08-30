@@ -179,7 +179,6 @@ export class BattleScene extends Phaser.Scene {
           this.options.callbacks.onStatus(`コアが${Math.round(damage)}ダメージを受けました`);
         }
       }
-      if (enemy.isBoss) enemy.invulnerable = Math.floor(this.elapsed / 2.4) % 3 === 1;
     }
     if (this.core.health <= 0) { this.finish('defeat', this.recorder.lastDamageSource); return; }
 
@@ -219,7 +218,7 @@ export class BattleScene extends Phaser.Scene {
         const enemyAngle = Math.atan2(enemy.y, enemy.x);
         const difference = Math.abs(((enemyAngle - angle + Math.PI) % (Math.PI * 2)) - Math.PI);
         if (difference <= Math.atan2((weapon.stats.width ?? 18) + 18, Math.max(30, enemy.radius))) {
-          const result = applyDamage(enemy, damage, this.elapsed);
+          const result = applyDamage(enemy, damage, this.elapsed, angle);
           this.recorder.recordWeaponDamage('ray', result.amount);
           this.addScore(result.amount);
           if (result.destroyed) this.handleEnemyDestroyed(enemy);
@@ -230,7 +229,7 @@ export class BattleScene extends Phaser.Scene {
       this.flashes.push({ x: targetPoint.x, y: targetPoint.y, color: WEAPONS.cluster.color, life: 0.45, maxLife: 0.45, radius: weapon.stats.radius ?? 72 });
       for (const enemy of this.enemies) {
         if (!enemy.active || Math.hypot(enemy.x - targetPoint.x, enemy.y - targetPoint.y) > (weapon.stats.radius ?? 72)) continue;
-        const result = applyDamage(enemy, damage, this.elapsed);
+        const result = applyDamage(enemy, damage, this.elapsed, target ? Math.atan2(target.y, target.x) : angle);
         this.recorder.recordWeaponDamage('cluster', result.amount);
         this.addScore(result.amount);
         if (result.destroyed) this.handleEnemyDestroyed(enemy);
