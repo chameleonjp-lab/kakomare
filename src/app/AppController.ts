@@ -35,7 +35,6 @@ export class AppController {
     this.audio.setVolume(loaded.data.settings.audio);
     this.lifecycleCleanup = new LifecycleService(() => this.handleHidden(), () => this.saveService.persist(this.state.save)).start();
     this.render('boot');
-    await Promise.resolve();
     this.render(this.state.view);
   }
 
