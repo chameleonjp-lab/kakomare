@@ -186,7 +186,7 @@ export class AppController {
       callbacks: {
         onSnapshot: (snapshot) => this.updateBattleHud(snapshot, health, time, xp, score, aimState, buildList),
         onUpgrade: (payload) => this.showUpgrade(payload, shell),
-        onFinish: (result) => this.finishBattle(result),
+        onFinish: (result) => { window.setTimeout(() => this.finishBattle(result), 0); },
         onStatus: (message) => { status.textContent = message; this.announce(message); this.audio.tone(message.includes('ダメージ') ? 'danger' : 'game', message.includes('ダメージ') ? 120 : 440); },
       },
     });
