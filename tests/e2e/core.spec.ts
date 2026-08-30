@@ -6,9 +6,7 @@ test.beforeEach(async ({ page }) => {
     window.addEventListener('error', (event) => console.error(`[window-error] ${event.message}`));
   });
   page.on('pageerror', (error) => console.log(`[pageerror] ${error.stack ?? error.message}`));
-  page.on('console', (message) => {
-    if (message.type() === 'error') console.log(`[console-error] ${message.text()}`);
-  });
+  page.on('console', (message) => console.log(`[console-${message.type()}] ${message.text()}`));
 });
 
 async function enterHome(page: Page): Promise<void> {

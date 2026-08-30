@@ -29,13 +29,19 @@ export class AppController {
   public constructor(private readonly root: HTMLElement) {}
 
   public async start(): Promise<void> {
+    console.log('[kakomare-start] begin');
     const loaded = this.saveService.load();
+    console.log('[kakomare-start] loaded', loaded.data.profile.name);
     this.state = createAppState(loaded.data);
     this.state.notice = loaded.message;
     this.audio.setVolume(loaded.data.settings.audio);
+    console.log('[kakomare-start] before-lifecycle');
     this.lifecycleCleanup = new LifecycleService(() => this.handleHidden(), () => this.saveService.persist(this.state.save)).start();
+    console.log('[kakomare-start] before-boot');
     this.render('boot');
+    console.log('[kakomare-start] before-route', this.state.view);
     this.render(this.state.view);
+    console.log('[kakomare-start] done');
   }
 
   private render(view: AppView): void {
