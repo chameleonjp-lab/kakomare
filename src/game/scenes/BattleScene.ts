@@ -71,6 +71,7 @@ export class BattleScene extends Phaser.Scene {
   private readonly banned = new Set<string>();
   private bossDefeated = false;
   private testUpgradeOpened = false;
+  private testOutcomeTimer: number | null = null;
   private lastSnapshotAt = -Infinity;
   private lastEnemyNotice = '';
 
@@ -91,6 +92,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerup', this.handlePointerUp, this);
     this.input.on('pointerupoutside', this.handlePointerUp, this);
     this.input.keyboard?.on('keydown-ESC', () => this.requestPause());
+    this.scheduleTestOutcome();
     this.options.callbacks.onStatus('戦闘開始');
     this.emitSnapshot(true);
   }
@@ -153,6 +155,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   public shutdownBattle(): void {
+    if (this.testOutcomeTimer !== null) { window.clearTimeout(this.testOutcomeTimer); this.testOutcomeTimer = null; }
     this.state = 'finished';
     this.input.removeAllListeners();
   }
@@ -161,8 +164,6 @@ export class BattleScene extends Phaser.Scene {
     if (this.state !== 'playing') return;
     this.elapsed += seconds;
     if (this.manualAim && this.aimPointerId === null && this.elapsed >= this.aimReleaseAt) this.manualAim = false;
-    if (this.options.testMode && this.options.testOutcome === 'defeat' && this.elapsed >= 1.8) { this.finish('defeat', 'テスト用の敗北'); return; }
-    if (this.options.testMode && this.options.testOutcome === 'victory' && this.elapsed >= 2.8) { this.finish('victory', 'テスト用の勝利'); return; }
     if (this.options.testMode && this.options.testUpgrade && !this.testUpgradeOpened && this.elapsed >= 0.7) { this.testUpgradeOpened = true; this.openUpgrade(); return; }
     const stage = STAGES[this.options.stageId];
     const activeEnemies = this.enemies.filter((enemy) => enemy.active).length;
@@ -297,12 +298,28 @@ export class BattleScene extends Phaser.Scene {
 
   private finish(outcome: BattleResult['outcome'], cause: string, retired = false): void {
     if (this.state === 'finished') return;
+    if (this.testOutcomeTimer !== null) { window.clearTimeout(this.testOutcomeTimer); this.testOutcomeTimer = null; }
     this.state = 'finished';
     if (cause) this.recorder.lastDamageSource = cause;
     this.recorder.survivalTime = this.elapsed;
     const parts = Math.max(20, Math.floor(20 + this.elapsed / 6 + (this.bossDefeated ? 25 : 0)));
     const result = this.recorder.result(outcome, this.core.health, parts, retired);
     this.options.callbacks.onFinish(result);
+  }
+
+  private scheduleTestOutcome(): void {
+    if (!this.options.testMode || !this.options.testOutcome) return;
+    const outcome = this.options.testOutcome;
+    const complete = (): void => {
+      this.testOutcomeTimer = null;
+      if (this.state === 'finished') return;
+      if (this.state !== 'playing') {
+        this.testOutcomeTimer = window.setTimeout(complete, 250);
+        return;
+      }
+      this.finish(outcome, outcome === 'victory' ? 'テスト用の勝利' : 'テスト用の敗北');
+    };
+    this.testOutcomeTimer = window.setTimeout(complete, outcome === 'victory' ? 1_300 : 900);
   }
 
   private addScore(amount: number): void {
