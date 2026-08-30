@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  page.on('pageerror', (error) => console.log(`[pageerror] ${error.stack ?? error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') console.log(`[console-error] ${message.text()}`);
+  });
+});
+
 async function enterHome(page: Page): Promise<void> {
   await page.goto('./?test=1');
   const name = page.locator('.name-input');
@@ -23,6 +30,7 @@ async function enterBattle(page: Page, query = '?test=1'): Promise<void> {
 
 test('初回の名前入力からホームへ進み、再読込で名前を保つ', async ({ page }) => {
   await page.goto('./?test=1');
+  console.log(`[initial-dom] ${await page.locator('#app').innerHTML()}`);
   await expect(page.locator('.name-input')).toBeVisible();
   await page.getByRole('button', { name: 'この名前で始める' }).click();
   await expect(page.locator('.form-error')).toContainText('1〜12文字');
