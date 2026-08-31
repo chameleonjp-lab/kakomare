@@ -132,7 +132,12 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerup', this.handlePointerUp, this);
     this.input.on('pointerupoutside', this.handlePointerUp, this);
     this.input.on('pointercancel', this.handlePointerUp, this);
-    this.input.keyboard?.on('keydown-ESC', () => this.options.callbacks.onPauseRequest());
+    this.input.keyboard?.on('keydown-ESC', () => {
+      // Upgrade selection already owns focus and freezes the simulation.
+      // Do not let a browser-level Escape race open a pause state behind it.
+      if (this.state === 'upgrade') return;
+      this.options.callbacks.onPauseRequest();
+    });
     this.scheduleTestOutcome();
     this.options.callbacks.onStatus('戦闘開始');
     this.emitSnapshot(true);
