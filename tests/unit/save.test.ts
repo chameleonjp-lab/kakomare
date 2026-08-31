@@ -27,6 +27,17 @@ describe('SaveService', () => {
     expect(migrated?.statistics.playCount).toBe(4);
   });
 
+  it('migrates a complete PR1 save while retaining its progress and settings', () => {
+    const service = new SaveService(new MemoryStorage());
+    const legacy = createDefaultSave();
+    legacy.profile.name = '旧版利用者';
+    const v1 = { ...legacy, version: 1, progress: { ...legacy.progress, unlockedStages: ['stage-1'], parts: 12 }, records: { ...legacy.records, stageBest: { 'stage-1': { bestScore: 80, bestCore: 70, bestTime: 40 } } } };
+    const migrated = service.validateImport(JSON.stringify(v1));
+    expect(migrated?.version).toBe(2);
+    expect(migrated?.progress.parts).toBe(12);
+    expect(migrated?.records.stageBest['stage-1']?.bestScore).toBe(80);
+  });
+
   it('rejects invalid imported values instead of silently clamping them', () => {
     const service = new SaveService(new MemoryStorage());
     expect(service.validateImport(JSON.stringify({ version: 1, profile: { name: '' } }))).toBeNull();

@@ -14,6 +14,16 @@ import { createStageSelectView } from '../ui/StageSelectView';
 import { createRulesView } from '../ui/RulesView';
 import { createSettingsView } from '../ui/SettingsView';
 import { createResultView } from '../ui/ResultView';
+import { createResearchView } from '../ui/ResearchView';
+import { getResearchEffects, purchaseResearch } from '../data/research';
+import { STAGES, stageIsUnlocked } from '../data/stages';
+import { SUPPORTS } from '../data/supports';
+import { WEAPONS } from '../data/weapons';
+import type { StageId } from '../types/content';
+
+function stageLabel(stageId: StageId): string {
+  return stageId === 'endless' ? 'ENDLESS' : stageId.replace('stage-', 'STAGE ');
+}
 
 export class AppController {
   private readonly saveService = new SaveService();
@@ -49,6 +59,7 @@ export class AppController {
     if (view === 'name-entry') { this.root.append(createNameView((name) => this.setName(name))); return; }
     if (view === 'home') { this.root.append(this.homeView()); return; }
     if (view === 'stage-select') { this.root.append(createStageSelectView(this.state.save, (id) => this.startStage(id), () => this.render('home'))); return; }
+    if (view === 'research') { this.root.append(this.researchView()); return; }
     if (view === 'rules') { this.root.append(createRulesView(() => this.render('home'))); return; }
     if (view === 'settings') { this.root.append(this.settingsView()); return; }
     if (view === 'countdown') { this.renderCountdown(); return; }
@@ -79,6 +90,7 @@ export class AppController {
       stages: () => this.render('stage-select'),
       settings: () => this.render('settings'),
       rules: () => this.render('rules'),
+      research: () => this.render('research'),
       share: () => { void this.shareHome(); },
     });
     this.addNotice(view);
@@ -96,8 +108,8 @@ export class AppController {
     });
   }
 
-  private startStage(stageId: 'stage-1'): void {
-    if (this.battleStarted) return;
+  private startStage(stageId: StageId): void {
+    if (this.battleStarted || !stageIsUnlocked(stageId, this.state.save.progress.unlockedStages)) return;
     this.battleStarted = true;
     const next: SaveData = {
       ...this.state.save,
@@ -134,7 +146,7 @@ export class AppController {
     const shell = element('section', 'battle-shell');
     shell.dataset.testid = 'battle-screen';
     const header = element('header', 'battle-header');
-    header.append(element('p', 'eyebrow', 'カコマレ / STAGE 1'));
+    header.append(element('p', 'eyebrow', `カコマレ / ${stageLabel(this.state.selectedStage)}`));
     const pause = button('一時停止', 'button button-secondary pause-button');
     pause.dataset.testid = 'pause-button';
     pause.addEventListener('click', () => this.openPause(false));
@@ -155,7 +167,8 @@ export class AppController {
 
     const panel = element('aside', 'battle-panel');
     const hud = element('div', 'battle-hud');
-    const health = this.hudItem('耐久力', '100 / 100', 'hud-health');
+    const maxCore = getResearchEffects(this.state.save).maxCore;
+    const health = this.hudItem('耐久力', `${maxCore} / ${maxCore}`, 'hud-health');
     const time = this.hudItem('経過時間', '0秒', 'hud-time');
     const xp = this.hudItem('経験値', '0 / 25', 'hud-xp');
     const score = this.hudItem('得点', '0', 'hud-score');
@@ -180,6 +193,7 @@ export class AppController {
       effectsLevel: this.state.save.settings.effects,
       reducedMotion: this.state.save.settings.reducedMotion,
       aimAssist: this.state.save.settings.aimAssist,
+      researchEffects: getResearchEffects(this.state.save),
       testMode,
       testOutcome: outcome === 'victory' || outcome === 'defeat' ? outcome : undefined,
       testUpgrade: query.get('upgrade') === '1',
@@ -220,6 +234,7 @@ export class AppController {
     dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'upgrade-title');
     dialog.append(element('p', 'eyebrow', '装置を更新')); const title = element('h2', '', '強化候補を1つ選ぶ'); title.id = 'upgrade-title'; dialog.append(title);
     dialog.append(element('p', 'modal-copy', '戦闘速度を落としています。変更前と変更後を確認してください。'));
+    if (getResearchEffects(this.state.save).candidateDetails) dialog.append(element('p', 'modal-copy', '詳細解析: 数値の変化と得意な敵を表示しています。'));
     const list = element('div', 'upgrade-list');
     let locked = true;
     const choiceButtons: HTMLButtonElement[] = [];
@@ -302,31 +317,51 @@ export class AppController {
     this.lastResult = result;
     this.gameHost.stop();
     this.battleStarted = false;
-    const previous = this.state.save.records.stageBest['stage-1'];
-    const nextBest = !result.retired && (!previous || result.score > previous.bestScore);
+    const previous = result.stageId === 'endless' ? null : this.state.save.records.stageBest[result.stageId];
+    const nextBest = !result.retired && (result.stageId === 'endless' ? result.score > this.state.save.records.endlessBest : !previous || result.score > previous.bestScore);
     const settledKills = result.retired ? 0 : result.kills;
     const settledParts = result.retired ? 0 : result.partsEarned;
     const weaponUsage = { ...this.state.save.statistics.weaponUsage };
     if (!result.retired) for (const [id, amount] of Object.entries(result.weaponDamage)) weaponUsage[id as keyof typeof weaponUsage] = (weaponUsage[id as keyof typeof weaponUsage] ?? 0) + Math.round(amount ?? 0);
+    const weaponBestDamage = { ...this.state.save.records.weaponBestDamage };
+    if (!result.retired) for (const [id, amount] of Object.entries(result.weaponDamage)) weaponBestDamage[id as keyof typeof weaponBestDamage] = Math.max(weaponBestDamage[id as keyof typeof weaponBestDamage] ?? 0, Math.round(amount ?? 0));
+    const enemyKills = { ...this.state.save.records.enemyKills };
+    if (!result.retired) {
+      for (const [id, amount] of Object.entries(result.enemyKills)) enemyKills[id as keyof typeof enemyKills] = (enemyKills[id as keyof typeof enemyKills] ?? 0) + Math.round(amount ?? 0);
+      if (result.bossDefeated) enemyKills[result.bossId] = (enemyKills[result.bossId] ?? 0) + 1;
+    }
+    const previousSector = this.state.save.records.sectorDamage[result.stageId] ?? [0, 0, 0, 0, 0, 0];
+    const sectorDamage = result.retired ? previousSector : previousSector.map((value, index) => value + (result.sectorDamage[index] ?? 0));
+    const unlockedStages = [...this.state.save.progress.unlockedStages];
+    if (!result.retired && result.outcome === 'victory' && result.newUnlock && !unlockedStages.includes(result.newUnlock)) unlockedStages.push(result.newUnlock);
     const next: SaveData = {
       ...this.state.save,
-      progress: { ...this.state.save.progress, parts: this.state.save.progress.parts + settledParts },
+      progress: { ...this.state.save.progress, parts: this.state.save.progress.parts + settledParts, unlockedStages },
       records: {
         ...this.state.save.records,
-        stageBest: {
+        stageBest: result.stageId === 'endless' ? this.state.save.records.stageBest : {
           ...this.state.save.records.stageBest,
-          'stage-1': {
+          [result.stageId]: {
             bestScore: Math.max(previous?.bestScore ?? 0, result.retired ? 0 : result.score),
             bestCore: Math.max(previous?.bestCore ?? 0, result.retired ? 0 : Math.round(result.coreRemaining)),
             bestTime: Math.max(previous?.bestTime ?? 0, result.retired ? 0 : result.survivalTime),
           },
         },
+        endlessBest: result.stageId === 'endless' && !result.retired ? Math.max(this.state.save.records.endlessBest, result.score) : this.state.save.records.endlessBest,
+        enemyKills,
+        weaponBestDamage,
+        sectorDamage: { ...this.state.save.records.sectorDamage, [result.stageId]: sectorDamage },
       },
       statistics: {
         ...this.state.save.statistics,
         clearCount: this.state.save.statistics.clearCount + (!result.retired && result.outcome === 'victory' ? 1 : 0),
         totalKills: this.state.save.statistics.totalKills + settledKills,
         weaponUsage,
+        controlSeconds: {
+          slowed: this.state.save.statistics.controlSeconds.slowed + (result.retired ? 0 : result.controlSeconds.slowed),
+          pushed: this.state.save.statistics.controlSeconds.pushed + (result.retired ? 0 : result.controlSeconds.pushed),
+          pulled: this.state.save.statistics.controlSeconds.pulled + (result.retired ? 0 : result.controlSeconds.pulled),
+        },
       },
     };
     this.state.save = next; this.saveService.persist(next); this.state.notice = nextBest ? '自己最高記録を更新しました。' : '';
@@ -334,8 +369,29 @@ export class AppController {
   }
 
   private resultView(result: BattleResult): HTMLElement {
-    const view = createResultView(result, { again: () => this.startStage(result.stageId), home: () => this.render('home'), share: () => { void this.shareResult(result); } });
+    const view = createResultView(result, {
+      again: () => this.startStage(result.stageId),
+      next: () => { if (result.newUnlock) this.startStage(result.newUnlock); },
+      home: () => this.render('home'),
+      share: () => { void this.shareResult(result); },
+    });
     this.addNotice(view); return view;
+  }
+
+  private researchView(): HTMLElement {
+    const view = createResearchView(this.state.save, {
+      purchase: (id) => {
+        const next = purchaseResearch(this.state.save, id);
+        if (!next) { this.announce('部品が足りないか、すでに取得済みです'); return; }
+        this.state.save = next;
+        this.saveService.persist(next);
+        this.state.notice = '研究を取得しました。';
+        this.render('research');
+      },
+      back: () => this.render('home'),
+    });
+    this.addNotice(view);
+    return view;
   }
 
   private async shareHome(): Promise<void> {
@@ -344,7 +400,7 @@ export class AppController {
   }
 
   private async shareResult(result: BattleResult): Promise<void> {
-    const text = `カコマレで ${result.score.toLocaleString('ja-JP')} 点、${Math.floor(result.survivalTime)}秒生存しました。`;
+    const text = `カコマレで ${STAGES[result.stageId].name}を${result.outcome === 'victory' ? '突破し' : '戦い'}、${result.score.toLocaleString('ja-JP')}点、${Math.floor(result.survivalTime)}秒でした。`;
     const shared = await this.shareService.share('カコマレの結果', text);
     if (!shared.success) this.showManualShare(text); else this.announce(shared.method === 'native' ? '共有画面を開きました' : '結果とURLをコピーしました');
   }
@@ -385,8 +441,8 @@ export class AppController {
 
   private announce(message: string): void { const live = document.querySelector<HTMLElement>('#live-region'); if (live) live.textContent = message; }
 
-  private weaponName(id: string): string { return ({ needle: '連針砲', ray: '光路刃', cluster: '群集弾', repulse: '反発輪' } as Record<string, string>)[id] ?? id; }
-  private supportName(id: string): string { return ({ output: '出力環', rhythm: '律動環', brake: '制動環' } as Record<string, string>)[id] ?? id; }
+  private weaponName(id: string): string { return WEAPONS[id as keyof typeof WEAPONS]?.name ?? id; }
+  private supportName(id: string): string { return SUPPORTS[id as keyof typeof SUPPORTS]?.name ?? id; }
   private clearCountdown(): void { if (this.countdownTimer !== null) { window.clearInterval(this.countdownTimer); this.countdownTimer = null; } }
 
   public destroy(): void { this.clearCountdown(); this.gameHost.stop(); this.lifecycleCleanup?.(); }

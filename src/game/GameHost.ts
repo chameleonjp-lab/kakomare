@@ -3,6 +3,20 @@ import { BattleScene, type BattleSceneOptions } from './scenes/BattleScene';
 import type { BattleCallbacks, UpgradeCandidate } from '../types/game';
 import type { StageId } from '../types/content';
 import type { EffectsLevel } from './systems/EffectBudget';
+import type { ResearchEffects } from '../data/research';
+
+const DEFAULT_RESEARCH_EFFECTS: ResearchEffects = {
+  maxCore: 100,
+  partMultiplier: 1,
+  powerMultiplier: 1,
+  projectileSpeedMultiplier: 1,
+  rerolls: 0,
+  bans: 0,
+  candidateDetails: false,
+  enemyRecords: false,
+  weaponRecords: false,
+  sectorRecords: false,
+};
 
 export class GameHost {
   private game: Phaser.Game | null = null;
@@ -13,13 +27,14 @@ export class GameHost {
     effectsLevel: EffectsLevel;
     reducedMotion: boolean;
     aimAssist: 'standard' | 'strong';
+    researchEffects?: ResearchEffects;
     testMode?: boolean;
     testOutcome?: 'victory' | 'defeat';
     testUpgrade?: boolean;
     callbacks: BattleCallbacks;
   }): void {
     this.stop();
-    const sceneOptions: BattleSceneOptions = options;
+    const sceneOptions: BattleSceneOptions = { ...options, researchEffects: options.researchEffects ?? DEFAULT_RESEARCH_EFFECTS };
     const scene = new BattleScene(sceneOptions);
     this.scene = scene;
     this.game = new Phaser.Game({

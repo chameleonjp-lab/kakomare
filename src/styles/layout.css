@@ -10,6 +10,18 @@
 .summary-card, .stage-card, .rules-card, .settings-card, .result-details { padding: 20px; margin: 14px 0; }
 .summary-card h2, .stage-card h2, .rules-card h2, .settings-card h2, .result-details h2 { margin-bottom: 12px; }
 .summary-line, .stage-meta { margin-bottom: 4px; color: #b3cbd5; }
+.stage-card-locked { opacity: .72; }
+.stage-lock, .record-lock { margin: 8px 0; color: #ffdb9a; }
+.research-section, .records-card { padding: 20px; margin: 14px 0; }
+.research-section h2, .records-card h2 { margin-bottom: 12px; }
+.research-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 14px; align-items: center; padding: 14px 0; border-top: 1px solid rgba(55, 106, 128, .45); }
+.research-card h3, .research-card p { margin: 0; }
+.research-card h3 { grid-column: 1; }
+.research-description, .research-level { color: #b3cbd5; font-size: .9rem; }
+.research-description { grid-column: 1; }
+.research-level { grid-column: 1; color: #63d7e6; }
+.research-card .button { grid-column: 2; grid-row: 1 / span 3; min-width: 148px; }
+.records-area { margin: 14px 0; }
 .action-grid, .result-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
 .experiment-link { display: inline-flex; min-height: 48px; align-items: center; margin-top: 8px; font-weight: 700; }
 .button { min-height: 48px; padding: 11px 16px; border: 1px solid #376a80; border-radius: 12px; color: #f2f0e8; background: #123044; font-weight: 700; text-align: center; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
@@ -49,4 +61,6 @@
 @media (max-width: 480px) {
   .action-grid, .result-actions { grid-template-columns: 1fr; }
   .setting-row { grid-template-columns: 74px minmax(0, 1fr) 40px; }
+  .research-card { grid-template-columns: 1fr; }
+  .research-card .button { grid-column: 1; grid-row: auto; min-width: 0; width: 100%; }
 }

@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
 import type { SupportSnapshot, WeaponSnapshot } from '../../types/game';
-import { drawHex } from './ShapeFactory';
+import { drawHex, drawPolygon, polygonPoints } from './ShapeFactory';
 
 const WEAPON_COLORS: Record<WeaponSnapshot['id'], number> = {
-  needle: 0x63d7e6,
-  ray: 0xffbe5c,
-  cluster: 0xa78bfa,
-  repulse: 0x76e6a7,
+  needle: 0x63d7e6, ray: 0xffbe5c, cluster: 0xa78bfa, repulse: 0x76e6a7,
+  chain: 0xff8bd8, orbit: 0xf4e285, disc: 0x78a8ff, gravity: 0xc084fc,
+};
+
+const SUPPORT_COLORS: Record<SupportSnapshot['id'], number> = {
+  output: 0xffbe5c, rhythm: 0x63d7e6, branch: 0xff8bd8, focus: 0x78a8ff, observe: 0xf4e285, brake: 0x76e6a7,
 };
 
 export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: number, centerY: number, weapons: WeaponSnapshot[], supports: SupportSnapshot[]): void {
@@ -25,18 +27,24 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
     const weapon = weapons[index];
     const point = points[index * 2];
     if (point && weapon) {
-      drawHex(graphics, point.x, point.y, 28, WEAPON_COLORS[weapon.id], 0.28, WEAPON_COLORS[weapon.id]);
-      graphics.lineStyle(3, WEAPON_COLORS[weapon.id], 0.9);
+      const color = WEAPON_COLORS[weapon.id];
+      drawHex(graphics, point.x, point.y, 28, color, 0.28, color);
+      graphics.lineStyle(3, color, 0.9);
       graphics.lineBetween(centerX, centerY, point.x, point.y);
+      drawWeaponGlyph(graphics, point.x, point.y, weapon.id, color);
+      if (weapon.branch) { graphics.lineStyle(2, 0xfff1a8, 0.9); graphics.strokeCircle(point.x, point.y, 33); }
     } else if (point) drawHex(graphics, point.x, point.y, 28, 0x07131f, 0.4, 0x163246);
   }
   for (let index = 0; index < 3; index += 1) {
     const support = supports[index];
     const point = points[index * 2 + 1];
     if (point && support) {
-      drawHex(graphics, point.x, point.y, 24, 0xffbe5c, 0.22, 0xffbe5c);
-      graphics.lineStyle(2, 0xffbe5c, 0.72);
+      const color = SUPPORT_COLORS[support.id];
+      drawHex(graphics, point.x, point.y, 24, color, 0.22, color);
+      graphics.lineStyle(2, color, 0.72);
       graphics.lineBetween(centerX, centerY, point.x, point.y);
+      graphics.lineStyle(1, color, 0.9);
+      graphics.strokeCircle(point.x, point.y, 15 + support.level * 2);
     } else if (point) drawHex(graphics, point.x, point.y, 24, 0x07131f, 0.4, 0x163246);
   }
   graphics.lineStyle(2, 0xf2f0e8, 0.9);
@@ -45,4 +53,18 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
   graphics.fillCircle(centerX, centerY, 29);
   graphics.fillStyle(0x63d7e6, 0.85);
   graphics.fillCircle(centerX, centerY, 12);
+}
+
+function drawWeaponGlyph(graphics: Phaser.GameObjects.Graphics, x: number, y: number, id: WeaponSnapshot['id'], color: number): void {
+  graphics.lineStyle(2, 0xf2f0e8, 0.86);
+  if (id === 'needle') graphics.lineBetween(x - 10, y, x + 10, y);
+  else if (id === 'ray') graphics.lineBetween(x - 11, y, x + 11, y);
+  else if (id === 'cluster') graphics.strokeCircle(x, y, 8);
+  else if (id === 'repulse') graphics.strokeCircle(x, y, 10);
+  else if (id === 'chain') graphics.lineBetween(x - 8, y - 7, x + 8, y + 7);
+  else if (id === 'orbit') graphics.strokeCircle(x, y, 9);
+  else if (id === 'disc') graphics.fillCircle(x, y, 7);
+  else graphics.strokeCircle(x, y, 7);
+  graphics.lineStyle(1, color, 0.75);
+  if (id === 'chain' || id === 'gravity') drawPolygon(graphics, polygonPoints(x, y, 11, 4, Math.PI / 4), color, 0.22, color);
 }
