@@ -73,8 +73,22 @@ test('勝利結果へ進み、もう一度でカウントダウンを開始で�
   await enterBattle(page, '?test=1&outcome=victory');
   await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 5000 });
   await expect(page.getByRole('heading', { name: '防衛成功' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '次のステージへ' })).toBeVisible();
   await page.getByRole('button', { name: 'もう一度' }).click();
   await expect(page.getByTestId('countdown-screen')).toBeVisible();
+});
+
+test('ホームから研究と記録、段階解放されたステージ選択へ進める', async ({ page }) => {
+  await enterHome(page);
+  await expect(page.getByRole('button', { name: '研究と記録' })).toBeVisible();
+  await page.getByRole('button', { name: '研究と記録' }).click();
+  await expect(page.getByRole('heading', { name: '研究と記録' })).toBeVisible();
+  await expect(page.getByTestId('research-buy-core-health')).toBeVisible();
+  await page.getByRole('button', { name: 'ホームへ戻る' }).click();
+  await page.getByRole('button', { name: 'ステージ選択' }).click();
+  await expect(page.getByTestId('select-stage-1')).toBeEnabled();
+  await expect(page.getByTestId('select-stage-2')).toBeDisabled();
+  await expect(page.getByTestId('select-stage-3')).toBeDisabled();
 });
 
 test('320px幅でも横スクロールを発生させない', async ({ page }) => {

@@ -13,7 +13,11 @@ function angularDistance(a: number, b: number): number {
 
 export function targetPriority(enemy: Enemy, aim: AimState, _now: number): number {
   const urgency = Math.max(0, 100 - Math.max(0, enemy.radius - 52) / 6);
-  const role = enemy.type === 'lattice' ? 20 : enemy.type === 'runner' ? 15 : enemy.type === 'crown' ? 30 : 0;
+  const role = enemy.type === 'lattice' ? 20
+    : enemy.type === 'runner' ? 15
+      : enemy.type === 'dropper' ? 25
+        : enemy.type === 'marker' ? 24
+          : enemy.isBoss ? 30 : 0;
   const manual = aim.manual && angularDistance(enemy.angle, aim.angle) <= Math.PI / 3 ? 80 : 0;
   const telegraph = enemy.telegraph ? 45 : 0;
   return urgency + role + manual + telegraph;

@@ -1,8 +1,9 @@
+import type { WeaponId } from '../../types/content';
 import type { ProjectileSnapshot } from '../../types/game';
 
 export class Projectile {
   public readonly id: number;
-  public readonly kind: 'needle' | 'cluster' | 'enemy';
+  public readonly kind: 'needle' | 'cluster' | 'disc' | 'enemy';
   public x: number;
   public y: number;
   public vx: number;
@@ -13,12 +14,16 @@ export class Projectile {
   public readonly maxLife: number;
   public piercing: number;
   public readonly enemyProjectile: boolean;
+  public readonly sourceWeaponId: WeaponId | null;
   public active = true;
   public targetId: number | null = null;
+  public bounces: number;
+  public readonly hitCooldown: number;
+  public readonly hitAt = new Map<number, number>();
 
   public constructor(options: {
     id: number;
-    kind: 'needle' | 'cluster' | 'enemy';
+    kind: 'needle' | 'cluster' | 'disc' | 'enemy';
     x: number;
     y: number;
     vx: number;
@@ -28,6 +33,9 @@ export class Projectile {
     life: number;
     piercing: number;
     enemyProjectile?: boolean;
+    bounces?: number;
+    hitCooldown?: number;
+    sourceWeaponId?: WeaponId | null;
   }) {
     this.id = options.id;
     this.kind = options.kind;
@@ -41,6 +49,9 @@ export class Projectile {
     this.maxLife = options.life;
     this.piercing = options.piercing;
     this.enemyProjectile = options.enemyProjectile ?? false;
+    this.sourceWeaponId = options.sourceWeaponId ?? null;
+    this.bounces = options.bounces ?? 0;
+    this.hitCooldown = options.hitCooldown ?? 0;
   }
 
   public update(seconds: number): void {
@@ -65,6 +76,8 @@ export class Projectile {
       maxLife: this.maxLife,
       piercing: this.piercing,
       enemyProjectile: this.enemyProjectile,
+      bounces: this.bounces,
+      sourceWeaponId: this.sourceWeaponId,
     };
   }
 }

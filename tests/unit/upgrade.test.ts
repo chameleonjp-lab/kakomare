@@ -28,4 +28,15 @@ describe('UpgradeSystem', () => {
     applyUpgradeCandidate({ id: 'support:output:new', kind: 'support', targetId: 'output', title: '出力', description: '', before: '', after: '', role: '', isExisting: false }, weapons, supports, () => undefined);
     expect(supports).toHaveLength(1);
   });
+
+  it('offers and applies a level-three development branch', () => {
+    const weapons = [new Weapon('needle', 0)];
+    weapons[0]!.level = 2;
+    const candidates = createUpgradeCandidateList(weapons, [], 100, new DeterministicRng(2), new Set());
+    const branch = candidates.find((candidate) => candidate.id.includes(':branch:'));
+    expect(branch).toBeDefined();
+    applyUpgradeCandidate(branch!, weapons, [], () => undefined);
+    expect(weapons[0]!.level).toBe(3);
+    expect(weapons[0]!.branch).not.toBeNull();
+  });
 });

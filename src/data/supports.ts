@@ -2,44 +2,29 @@ import type { SupportDefinition, SupportId } from '../types/content';
 
 export const SUPPORTS: Record<SupportId, SupportDefinition> = {
   output: {
-    id: 'output',
-    name: '出力環',
-    description: '左右に接続した武器の威力を高めます。',
-    role: '威力上昇',
-    color: 0xffbe5c,
-    maxLevel: 3,
-    levels: [
-      { value: 0.1, label: '威力 +10%' },
-      { value: 0.15, label: '威力 +15%' },
-      { value: 0.2, label: '威力 +20%' },
-    ],
+    id: 'output', name: '出力環', description: '左右に接続した武器の威力を高めます。', role: '威力上昇', color: 0xffbe5c, maxLevel: 3,
+    levels: [{ value: 0.1, label: '威力 +10%' }, { value: 0.15, label: '威力 +15%' }, { value: 0.2, label: '威力 +20%' }],
   },
   rhythm: {
-    id: 'rhythm',
-    name: '律動環',
-    description: '左右に接続した武器の発射間隔を短くします。',
-    role: '間隔短縮',
-    color: 0x63d7e6,
-    maxLevel: 3,
-    levels: [
-      { value: 0.08, label: '発射間隔 -8%' },
-      { value: 0.12, label: '発射間隔 -12%' },
-      { value: 0.16, label: '発射間隔 -16%' },
-    ],
+    id: 'rhythm', name: '律動環', description: '左右に接続した武器の発射間隔を短くします。', role: '間隔短縮', color: 0x63d7e6, maxLevel: 3,
+    levels: [{ value: 0.08, label: '発射間隔 -8%' }, { value: 0.12, label: '発射間隔 -12%' }, { value: 0.16, label: '発射間隔 -16%' }],
+  },
+  branch: {
+    id: 'branch', name: '分岐環', description: '一定回数ごとに、接続した武器を弱い威力で追加発動します。', role: '追加発動', color: 0xff8bd8, maxLevel: 3,
+    levels: [{ value: 6, label: '6回ごとに追加発動' }, { value: 5, label: '5回ごとに追加発動' }, { value: 4, label: '4回ごとに追加発動' }],
+  },
+  focus: {
+    id: 'focus', name: '収束環', description: '接続した武器の射程と弾速を高めます。', role: '射程・弾速', color: 0x78a8ff, maxLevel: 3,
+    levels: [{ value: 0.08, label: '射程 +8% / 弾速 +10%' }, { value: 0.12, label: '射程 +12% / 弾速 +15%' }, { value: 0.18, label: '射程 +18% / 弾速 +22%' }],
+  },
+  observe: {
+    id: 'observe', name: '観測環', description: '特殊な性質を持つ敵へ与える威力を高めます。', role: '特殊敵への威力', color: 0xf4e285, maxLevel: 3,
+    levels: [{ value: 0.1, label: '特殊敵への威力 +10%' }, { value: 0.18, label: '+18%' }, { value: 0.28, label: '+28%' }],
   },
   brake: {
-    id: 'brake',
-    name: '制動環',
-    description: '押し戻しの距離を伸ばし、敵の進行を遅くします。',
-    role: '減速・押し戻し',
-    color: 0x76e6a7,
-    maxLevel: 3,
-    levels: [
-      { value: 0.1, label: '制動効果 +10%' },
-      { value: 0.18, label: '制動効果 +18%' },
-      { value: 0.28, label: '制動効果 +28%' },
-    ],
+    id: 'brake', name: '制動環', description: '押し戻しの距離を伸ばし、敵の進行を遅くします。', role: '減速・押し戻し', color: 0x76e6a7, maxLevel: 3,
+    levels: [{ value: 0.1, label: '制動効果 +10%' }, { value: 0.18, label: '+18%' }, { value: 0.28, label: '+28%' }],
   },
 };
 
-export const SUPPORT_ORDER: SupportId[] = ['output', 'rhythm', 'brake'];
+export const SUPPORT_ORDER: SupportId[] = ['output', 'rhythm', 'branch', 'focus', 'observe', 'brake'];
