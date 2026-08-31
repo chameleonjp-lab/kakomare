@@ -6,6 +6,7 @@ export interface HomeActions {
   stages: () => void;
   settings: () => void;
   rules: () => void;
+  research: () => void;
   share: () => void;
 }
 
@@ -25,19 +26,20 @@ export function createHomeView(save: SaveData, actions: HomeActions): HTMLElemen
   const stageBest = save.records.stageBest['stage-1'];
   stats.append(element('p', 'summary-line', `ステージ1最高得点: ${stageBest?.bestScore ?? 0}`));
   stats.append(element('p', 'summary-line', `プレイ回数: ${save.statistics.playCount}`));
+  stats.append(element('p', 'summary-line', `部品: ${save.progress.parts}`));
   shell.append(stats);
 
   const actionsGrid = element('div', 'action-grid');
   const stageButton = button('ステージ選択');
   stageButton.addEventListener('click', actions.stages);
-  const researchButton = button('研究（次の実装で追加）');
-  researchButton.disabled = true;
-  researchButton.title = 'PR 2で追加予定です';
+  const researchButton = button('研究と記録');
+  researchButton.addEventListener('click', actions.research);
   const rulesButton = button('遊び方');
   rulesButton.addEventListener('click', actions.rules);
   const settingsButton = button('設定');
   settingsButton.addEventListener('click', actions.settings);
   const shareButton = button('ホームを共有');
+  shareButton.dataset.testid = 'share-home';
   shareButton.addEventListener('click', actions.share);
   actionsGrid.append(stageButton, researchButton, rulesButton, settingsButton, shareButton);
   shell.append(actionsGrid);

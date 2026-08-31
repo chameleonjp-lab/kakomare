@@ -7,12 +7,13 @@
 }
 
 * { box-sizing: border-box; }
-html { min-width: 320px; background: #07131f; }
-body { margin: 0; min-width: 320px; min-height: 100dvh; background: #07131f; }
+html { min-width: 320px; background: #07131f; overflow-x: hidden; }
+body { margin: 0; min-width: 320px; min-height: 100vh; min-height: 100dvh; background: #07131f; overflow-x: hidden; }
 button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button, .battle-canvas-shell { -webkit-touch-callout: none; }
 button { cursor: pointer; }
+button, a, input, select, textarea { max-width: 100%; }
 button:disabled { cursor: not-allowed; opacity: .45; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #fff1a8; outline-offset: 3px; }
 a { color: #63d7e6; }

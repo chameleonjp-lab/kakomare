@@ -1,9 +1,31 @@
-export type StageId = 'stage-1';
+export type StageId = 'stage-1' | 'stage-2' | 'stage-3' | 'endless';
 
-export type WeaponId = 'needle' | 'ray' | 'cluster' | 'repulse';
-export type SupportId = 'output' | 'rhythm' | 'brake';
-export type EnemyId = 'shard' | 'runner' | 'lattice' | 'spore';
-export type BossId = 'crown';
+export type WeaponId = 'needle' | 'ray' | 'cluster' | 'repulse' | 'chain' | 'orbit' | 'disc' | 'gravity';
+export type SupportId = 'output' | 'rhythm' | 'branch' | 'focus' | 'observe' | 'brake';
+export type EnemyId = 'shard' | 'runner' | 'shell' | 'lattice' | 'spore' | 'marker' | 'dropper' | 'phase';
+export type BossId = 'crown' | 'designer' | 'echo';
+
+export type ContentId = WeaponId | SupportId | EnemyId | BossId;
+
+export type WeaponBranch =
+  | 'spread'
+  | 'piercing'
+  | 'wide'
+  | 'reflect'
+  | 'chain'
+  | 'burst'
+  | 'split'
+  | 'residue'
+  | 'many'
+  | 'outer'
+  | 'echo'
+  | 'trail'
+  | 'strong-push'
+  | 'delayed'
+  | 'long'
+  | 'collapse';
+
+export type WeaponFinalBranch = 'power' | 'tempo';
 
 export interface WeaponStats {
   damage: number;
@@ -15,6 +37,15 @@ export interface WeaponStats {
   count?: number;
   radius?: number;
   pushDistance?: number;
+  chainCount?: number;
+  bounceCount?: number;
+  orbitRadius?: number;
+  orbitSpeed?: number;
+  hitCooldown?: number;
+  duration?: number;
+  pullRadius?: number;
+  pullStrength?: number;
+  safeDistance?: number;
 }
 
 export interface WeaponDefinition {
@@ -26,6 +57,14 @@ export interface WeaponDefinition {
   color: number;
   maxLevel: number;
   levels: WeaponStats[];
+  branches: Array<{
+    id: WeaponBranch | WeaponFinalBranch;
+    name: string;
+    description: string;
+    atLevel: 3 | 5;
+    damageMultiplier?: number;
+    cooldownMultiplier?: number;
+  }>;
 }
 
 export interface SupportDefinition {
@@ -35,7 +74,7 @@ export interface SupportDefinition {
   role: string;
   color: number;
   maxLevel: number;
-  levels: Array<{ value: number; label: string }>;
+  levels: Array<{ value: number; secondaryValue?: number; label: string }>;
 }
 
 export interface EnemyDefinition {
@@ -47,6 +86,7 @@ export interface EnemyDefinition {
   contactDamage: number;
   threatCost: number;
   color: number;
+  radius?: number;
 }
 
 export interface BossDefinition {
@@ -57,6 +97,7 @@ export interface BossDefinition {
   speed: number;
   contactDamage: number;
   color: number;
+  radius?: number;
 }
 
 export interface StageDefinition {
@@ -67,4 +108,10 @@ export interface StageDefinition {
   enemies: EnemyId[];
   boss: BossId;
   clearBonus: number;
+  budgetBase: number;
+  budgetRise: number;
+  enemyLimit: number;
+  bossAt: number;
+  difficultyFactor: number;
+  isEndless?: boolean;
 }

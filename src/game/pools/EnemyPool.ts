@@ -5,16 +5,15 @@ export class EnemyPool {
   private readonly items: Enemy[] = [];
   private nextId = 1;
 
-  public acquire(type: EnemyId | BossId, angle: number, distance: number, difficulty: number): Enemy {
+  public acquire(type: EnemyId | BossId, angle: number, distance: number, difficulty: number, speedMultiplierCap = 1.25): Enemy {
+    const id = this.nextId;
+    this.nextId += 1;
     const reusable = this.items.find((enemy) => !enemy.active && enemy.type === type);
     if (reusable) {
-      const fresh = new Enemy(reusable.id, type, angle, distance, difficulty);
-      const index = this.items.indexOf(reusable);
-      this.items[index] = fresh;
-      return fresh;
+      reusable.reset(id, angle, distance, difficulty, speedMultiplierCap);
+      return reusable;
     }
-    const enemy = new Enemy(this.nextId, type, angle, distance, difficulty);
-    this.nextId += 1;
+    const enemy = new Enemy(id, type, angle, distance, difficulty, speedMultiplierCap);
     this.items.push(enemy);
     return enemy;
   }

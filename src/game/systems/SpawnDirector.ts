@@ -1,4 +1,5 @@
 import { ENEMIES } from '../../data/enemies';
+import { STAGES } from '../../data/stages';
 import type { EnemyId, StageId } from '../../types/content';
 
 export class DeterministicRng {
@@ -30,50 +31,119 @@ export interface SpawnRequest {
 }
 
 export class SpawnDirector {
+  private static readonly UPDATE_STEP = 1 / 60;
+  private static readonly STEP_EPSILON = 1e-10;
   private budget = 0;
   private lastSector = -1;
   private consecutiveSectorCount = 0;
   private readonly rng: DeterministicRng;
   private bossSent = false;
+  private bossPending = false;
+  private nextBossAt: number;
+  private updateAccumulator = 0;
+  private simulatedElapsed = 0;
+  private pendingEnemy: EnemyId | null = null;
 
-  public constructor(_stageId: StageId, seed: number, private readonly testMode = false) {
+  public constructor(private readonly stageId: StageId, seed: number, private readonly testMode = false) {
     this.rng = new DeterministicRng(seed);
+    this.nextBossAt = this.testMode ? 5.5 : STAGES[stageId].bossAt;
   }
 
   public get bossSpawned(): boolean {
     return this.bossSent;
   }
 
-  public update(seconds: number, elapsed: number, activeEnemyCount: number, emit: (request: SpawnRequest) => void): void {
-    if (activeEnemyCount >= (this.testMode ? 40 : 90)) return;
-    const base = this.testMode ? 3.8 : 1.3;
-    const rise = this.testMode ? 0.09 : 0.012;
+  public get bossId() {
+    return STAGES[this.stageId].boss;
+  }
+
+  public get enemyLimit(): number {
+    return this.testMode ? 40 : STAGES[this.stageId].enemyLimit;
+  }
+
+  public update(seconds: number, _elapsed: number, activeEnemyCount: number, emit: (request: SpawnRequest) => void, reservedSlots = 0): void {
+    this.updateAccumulator += Math.max(0, seconds);
+    let count = activeEnemyCount;
+    const spawnLimit = Math.max(0, this.enemyLimit - Math.max(0, Math.floor(reservedSlots)));
+    while (this.updateAccumulator + SpawnDirector.STEP_EPSILON >= SpawnDirector.UPDATE_STEP) {
+      this.updateAccumulator -= SpawnDirector.UPDATE_STEP;
+      if (this.updateAccumulator < 0 && this.updateAccumulator > -SpawnDirector.STEP_EPSILON) this.updateAccumulator = 0;
+      this.simulatedElapsed += SpawnDirector.UPDATE_STEP;
+      count = this.updateSpawnStep(SpawnDirector.UPDATE_STEP, this.simulatedElapsed, count, spawnLimit, emit);
+    }
+  }
+
+  private updateSpawnStep(seconds: number, elapsed: number, activeEnemyCount: number, spawnLimit: number, emit: (request: SpawnRequest) => void): number {
+    const stage = STAGES[this.stageId];
+    const endlessScale = stage.isEndless ? Math.pow(1.12, Math.floor(elapsed / 300)) : 1;
+    const base = this.testMode ? 3.8 : stage.budgetBase * endlessScale;
+    const rise = this.testMode ? 0.09 : stage.budgetRise * endlessScale;
     this.budget += (base + elapsed * rise) * seconds;
-    const choices = this.availableEnemies(elapsed);
-    while (this.budget >= ENEMIES[choices[0]].threatCost && activeEnemyCount < (this.testMode ? 40 : 90)) {
-      const type = this.rng.pick(choices);
-      const cost = ENEMIES[type].threatCost;
-      if (this.budget < cost) break;
-      this.budget -= cost;
+    let count = activeEnemyCount;
+    while (count < spawnLimit) {
+      const type = this.pendingEnemy ?? this.rng.pick(this.availableEnemies(elapsed));
+      this.pendingEnemy = type;
+      if (this.budget + SpawnDirector.STEP_EPSILON < ENEMIES[type].threatCost) break;
+      this.budget -= ENEMIES[type].threatCost;
+      this.pendingEnemy = null;
       const sector = this.chooseSector();
       emit({ type, angle: sector * Math.PI / 3 + (this.rng.next() - 0.5) * 0.24 });
-      activeEnemyCount += 1;
+      count += 1;
     }
+    return count;
+  }
+
+  public requestBossSpawn(elapsed: number): boolean {
+    if (this.bossPending) return true;
+    if (this.stageId !== 'endless' && this.bossSent) return false;
+    if (elapsed < this.nextBossAt) return false;
+    this.bossPending = true;
+    return true;
   }
 
   public shouldSpawnBoss(elapsed: number): boolean {
-    const bossAt = this.testMode ? 5.5 : 145;
-    if (!this.bossSent && elapsed >= bossAt) {
-      this.bossSent = true;
-      return true;
-    }
-    return false;
+    return this.requestBossSpawn(elapsed);
+  }
+
+  public confirmBossSpawn(): void {
+    if (!this.bossPending) return;
+    this.bossPending = false;
+    this.bossSent = true;
+    if (this.stageId === 'endless') this.nextBossAt += 300;
+  }
+
+  public get rngForEvents(): DeterministicRng {
+    return this.rng;
   }
 
   private availableEnemies(elapsed: number): EnemyId[] {
-    if (elapsed < (this.testMode ? 1.6 : 40)) return ['shard', 'runner'];
-    if (elapsed < (this.testMode ? 3.5 : 85)) return ['shard', 'runner', 'lattice'];
-    return ['shard', 'runner', 'lattice', 'spore'];
+    if (this.testMode) return ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker', 'dropper', 'phase'];
+    const stage = STAGES[this.stageId];
+    const inStage = (ids: EnemyId[]): EnemyId[] => ids.filter((id) => stage.enemies.includes(id));
+    if (this.stageId === 'stage-1') {
+      if (elapsed < 40) return ['shard', 'runner'];
+      if (elapsed < 85) return ['shard', 'runner', 'lattice'];
+      return ['shard', 'runner', 'lattice', 'spore'];
+    }
+    if (this.stageId === 'stage-2') {
+      if (elapsed < 45) return inStage(['shard', 'runner', 'shell']);
+      if (elapsed < 110) return inStage(['shard', 'runner', 'shell', 'spore', 'marker']);
+      return inStage(['shard', 'runner', 'shell', 'spore', 'marker', 'dropper']);
+    }
+    if (this.stageId === 'stage-3') {
+      if (elapsed < 45) return inStage(['shard', 'runner', 'lattice']);
+      if (elapsed < 120) return inStage(['shard', 'runner', 'lattice', 'shell', 'spore', 'marker']);
+      return inStage(stage.enemies);
+    }
+    if (elapsed >= 900) {
+      const common = new Set<EnemyId>(['shard', 'runner']);
+      const special = stage.enemies.filter((id) => !common.has(id));
+      return [...stage.enemies, ...special, ...special];
+    }
+    const window = elapsed % 300;
+    if (window < 45) return ['shard', 'runner', 'shell'];
+    if (window < 120) return ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker'];
+    return stage.enemies;
   }
 
   private chooseSector(): number {

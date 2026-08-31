@@ -1,4 +1,4 @@
-import type { EnemyId, StageId, SupportId, WeaponId } from './content';
+import type { BossId, EnemyId, StageId, SupportId, WeaponBranch, WeaponFinalBranch, WeaponId } from './content';
 
 export interface Point {
   x: number;
@@ -7,7 +7,7 @@ export interface Point {
 
 export interface EnemySnapshot {
   id: number;
-  type: EnemyId;
+  type: EnemyId | BossId;
   x: number;
   y: number;
   radius: number;
@@ -23,7 +23,7 @@ export interface EnemySnapshot {
 
 export interface ProjectileSnapshot {
   id: number;
-  kind: 'needle' | 'cluster' | 'enemy';
+  kind: 'needle' | 'cluster' | 'disc' | 'enemy';
   x: number;
   y: number;
   vx: number;
@@ -34,12 +34,16 @@ export interface ProjectileSnapshot {
   maxLife: number;
   piercing: number;
   enemyProjectile: boolean;
+  bounces: number;
+  sourceWeaponId: WeaponId | null;
 }
 
 export interface WeaponSnapshot {
   id: WeaponId;
   level: number;
   damageDealt: number;
+  branch: WeaponBranch | null;
+  finalBranch: WeaponFinalBranch | null;
 }
 
 export interface SupportSnapshot {
@@ -78,6 +82,8 @@ export interface UpgradeCandidate {
   after: string;
   role: string;
   isExisting: boolean;
+  details?: string;
+  requiresNewItemFirst?: boolean;
 }
 
 export interface UpgradePayload {
@@ -94,11 +100,19 @@ export interface BattleResult {
   coreRemaining: number;
   kills: number;
   bossDefeated: boolean;
+  bossesDefeated: number;
+  bossId: BossId;
   partsEarned: number;
   weaponDamage: Partial<Record<WeaponId, number>>;
+  supportUsage: Partial<Record<SupportId, number>>;
+  enemyKills: Partial<Record<EnemyId, number>>;
   sectorDamage: number[];
+  controlSeconds: { slowed: number; pushed: number; pulled: number };
   mainCause: string;
   upgrades: string[];
+  branches: string[];
+  runSeed: number;
+  newUnlock: StageId | null;
   retired: boolean;
 }
 
@@ -107,4 +121,5 @@ export interface BattleCallbacks {
   onUpgrade: (payload: UpgradePayload) => void;
   onFinish: (result: BattleResult) => void;
   onStatus: (message: string) => void;
+  onPauseRequest: () => void;
 }
