@@ -348,6 +348,13 @@ export class AppController {
       list.querySelectorAll<HTMLButtonElement>('.button-small').forEach((ban) => { ban.disabled = payload.bansLeft <= 0; });
     }, 150);
     dialog.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        // Escape belongs to the upgrade dialog. Consume it here so a
+        // delayed browser key event cannot reach Phaser after selection.
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); selectedIndex = (selectedIndex + 1) % choiceButtons.length; choiceButtons[selectedIndex]?.focus(); }
       if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); selectedIndex = (selectedIndex + choiceButtons.length - 1) % choiceButtons.length; choiceButtons[selectedIndex]?.focus(); }
     });
