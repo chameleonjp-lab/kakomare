@@ -21,6 +21,8 @@ npm run check
 
 GitHub Pagesの公開パスは `/kakomare/` です。`main`へのpushだけが公開処理を起動します。Pull Requestでは品質検査だけを実行します。
 
+公開前の静的ファイル、favicon、OGP画像、公開サブパスは `npm run verify:dist` で確認します。公開後のiPhone Safari確認は [公開確認手順](docs/RELEASE_CHECKLIST.md) の順番で行います。
+
 ゲーム画面は画像素材に依存せず、Phaserの図形描画とWeb Audio APIで生成します。名前、進行、研究、記録、設定は端末の保存領域だけに保存し、外部データベースへ送信しません。保存データは版を持ち、旧版からの変換と破損データの退避に対応します。
 
 ## 関連文書
@@ -28,3 +30,4 @@ GitHub Pagesの公開パスは `/kakomare/` です。`main`へのpushだけが�
 - [実装計画](docs/IMPLEMENTATION_PLAN.md)
 - [ゲームルール](docs/GAME_RULES.md)
 - [検査チェックリスト](docs/TEST_CHECKLIST.md)
+- [公開確認手順](docs/RELEASE_CHECKLIST.md)

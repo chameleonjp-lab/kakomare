@@ -39,6 +39,7 @@ export function createHomeView(save: SaveData, actions: HomeActions): HTMLElemen
   const settingsButton = button('設定');
   settingsButton.addEventListener('click', actions.settings);
   const shareButton = button('ホームを共有');
+  shareButton.dataset.testid = 'share-home';
   shareButton.addEventListener('click', actions.share);
   actionsGrid.append(stageButton, researchButton, rulesButton, settingsButton, shareButton);
   shell.append(actionsGrid);

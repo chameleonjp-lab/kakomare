@@ -12,7 +12,6 @@ export interface ResultActions {
 }
 
 export function createResultView(result: BattleResult, actions: ResultActions): HTMLElement {
-  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   const stage = STAGES[result.stageId];
   const shell = pageShell(result.retired ? 'プレイ終了' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗', result.retired ? 'このプレイの得点と報酬は確定していません。' : result.outcome === 'victory' ? `${stage.name}を突破しました。` : 'コアの耐久力が尽きました。');
   shell.dataset.testid = 'result-screen';
@@ -49,7 +48,7 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
     const next = button(result.newUnlock === 'endless' ? '無限モードへ' : '次のステージへ', 'button button-secondary button-large');
     next.addEventListener('click', actions.next); actionsGrid.append(next);
   }
-  const share = button('結果を共有'); share.addEventListener('click', actions.share);
+  const share = button('結果を共有'); share.dataset.testid = 'share-result'; share.addEventListener('click', actions.share);
   const home = button('ホーム'); home.addEventListener('click', actions.home);
   actionsGrid.append(share, home); shell.append(actionsGrid);
   const external = element('a', 'experiment-link', 'カメレオンJPの実験場'); external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/'; external.target = '_blank'; external.rel = 'noopener noreferrer'; shell.append(external);

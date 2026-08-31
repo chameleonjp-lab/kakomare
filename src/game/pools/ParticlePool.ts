@@ -2,6 +2,7 @@ export interface ParticleItem {
   x: number;
   y: number;
   life: number;
+  maxLife: number;
   color: number;
 }
 
@@ -9,8 +10,10 @@ export class ParticlePool {
   private readonly items: ParticleItem[] = [];
 
   public emit(x: number, y: number, color: number, life = 0.35, limit = 500): void {
-    if (this.items.length >= limit) this.items.shift();
-    this.items.push({ x, y, life, color });
+    const safeLimit = Math.max(0, Math.floor(limit));
+    if (safeLimit === 0) return;
+    while (this.items.length >= safeLimit) this.items.shift();
+    this.items.push({ x, y, life, maxLife: life, color });
   }
 
   public update(seconds: number): void {
