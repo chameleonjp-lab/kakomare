@@ -15,11 +15,11 @@
 - [x] `npm run typecheck`
 - [x] `npm run test`（14ファイル、89件）
 - [x] `npm run test:e2e:chromium`（24件）
-- [ ] `npm run test:e2e`（ローカルWebKitはOS共有ライブラリ不足。Actionsで実施）
+- [x] `npm run test:e2e`相当（ActionsでChromium、WebKitを順番に実施）
 - [x] `npm run build`
 - [x] `npm run verify:dist`
 - [x] `npm run verify:originality`
-- [ ] `npm run check`（ActionsでChromium、WebKitを順番に実施）
+- [x] `npm run check`相当（Actionsで各検査を順番に実施）
 
 ## 画面
 
@@ -65,4 +65,4 @@
 - [x] ネイティブ共有またはクリップボードが使えない場合に画面内コピー欄が出る
 - [x] 破損保存から初期画面へ復帰し、退避データを確認できる
 - [x] favicon、OGP、canonical、GitHub Pagesサブパスが `npm run verify:dist` で確認できる
-- [ ] GitHub ActionsのChromiumとWebKitが成功する
+- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #11](https://github.com/chameleonjp-lab/kakomare/actions/runs/33353475007)）

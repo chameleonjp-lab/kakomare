@@ -9,12 +9,12 @@
 - [x] `npm run typecheck`
 - [x] `npm run test`（14ファイル、89件）
 - [x] `npm run test:e2e:chromium`（24件）
-- [ ] `npm run test:e2e`
+- [x] `npm run test:e2e`相当（Actionsで順次実行）
 - [x] `npm run build`
 - [x] `npm run verify:dist`
 - [x] `npm run verify:originality`
-- [ ] `npm run check`
-- [ ] GitHub ActionsのChromiumとWebKit
+- [x] `npm run check`相当（Actionsで各検査を順次実行）
+- [x] GitHub ActionsのChromiumとWebKit
 
 ## 静的公開
 
@@ -56,5 +56,5 @@
 - 公開URL: https://chameleonjp-lab.github.io/kakomare/
 - 確認端末 / iOS / Safari:
 - 実施日時:
-- 自動検査のActions URL:
-- 未確認事項: 是正PRのWebKit、マージ後の静的公開、iPhone Safari実機
+- 自動検査のActions URL: https://github.com/chameleonjp-lab/kakomare/actions/runs/33353475007
+- 未確認事項: マージ後の静的公開、iPhone Safari実機
