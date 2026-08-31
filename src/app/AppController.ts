@@ -370,7 +370,10 @@ export class AppController {
 
   private openPause(fromVisibility: boolean, reason = ''): void {
     if (!this.runLifecycle.active || this.state.view !== 'battle') return;
-    if (!fromVisibility && (this.battleUpgradeOpen || this.gameHost.isUpgrading())) return;
+    // The upgrade dialog already owns the pause boundary.  Ignore every
+    // pause entry (including visibility recovery) while it is open so a
+    // browser Escape/visibility event cannot leave a hidden pause state.
+    if (this.battleUpgradeOpen || this.gameHost.isUpgrading()) return;
     const shell = this.root.querySelector<HTMLElement>('.battle-shell');
     if (!shell) return;
     const interruptedResume = this.resumeCountdownTimer !== null;
