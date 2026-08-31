@@ -8,7 +8,6 @@ export interface ResearchDefinition {
   maxLevel: number;
   costs: number[];
 }
-
 export const RESEARCH: Record<ResearchId, ResearchDefinition> = {
   'core-health': { id: 'core-health', section: 'コア', name: '耐久フレーム', description: 'コアの最大耐久力を1段階につき5増やします。', maxLevel: 3, costs: [30, 45, 60] },
   'part-yield': { id: 'part-yield', section: 'コア', name: '回収効率', description: '結果で得る部品を1段階につき5%増やします。', maxLevel: 2, costs: [35, 55] },
@@ -79,4 +78,3 @@ export function purchaseResearch(save: SaveData, id: ResearchId): SaveData | nul
     },
   };
 }
-

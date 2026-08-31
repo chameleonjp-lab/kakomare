@@ -57,6 +57,11 @@
 .result-row:last-child { border-bottom: 0; }
 .result-label { color: #9db9c7; }
 .result-row strong { text-align: right; }
+.online-ranking { margin: 16px 0 4px; padding: 14px; border: 1px solid #22475c; border-radius: 16px; background: rgba(7, 19, 31, .72); }
+.online-ranking h3 { margin: 0 0 9px; color: #63d7e6; font-size: .95rem; text-align: center; }
+.online-ranking ol { margin: 0; padding-left: 26px; }
+.online-ranking li { padding: 6px 0; border-bottom: 1px solid rgba(55, 106, 128, .4); color: #c3d7dc; font-size: .88rem; }
+.ranking-status { min-height: 1.5em; margin: 7px 0 0; color: #9db9c7; font-size: .8rem; text-align: center; }
 
 .boot-screen { padding: 24px; }
 .boot-status { max-width: 36ch; overflow-wrap: anywhere; }

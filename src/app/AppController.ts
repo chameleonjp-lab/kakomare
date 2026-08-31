@@ -14,6 +14,7 @@ import { createStageSelectView } from '../ui/StageSelectView';
 import { createRulesView } from '../ui/RulesView';
 import { createSettingsView } from '../ui/SettingsView';
 import { createResultView } from '../ui/ResultView';
+import { getTopScores, submitScore, type OnlineRankingRow } from '../services/OnlineRankingService';
 import { createResearchView } from '../ui/ResearchView';
 import { getResearchEffects, purchaseResearch } from '../data/research';
 import { STAGES, stageIsUnlocked } from '../data/stages';
@@ -565,7 +566,32 @@ export class AppController {
       home: () => this.render('home'),
       share: () => { void this.shareResult(result); },
     });
+    void this.loadOnlineRanking(view, result);
     this.addNotice(view); return view;
+  }
+
+  private async loadOnlineRanking(view: HTMLElement, result: BattleResult): Promise<void> {
+    const list = view.querySelector<HTMLOListElement>('[data-online-ranking-list]');
+    const status = view.querySelector<HTMLElement>('[data-online-ranking-status]');
+    if (!list || !status) return;
+    if (result.retired) {
+      list.innerHTML = '<li>リタイア結果はランキング対象外です。</li>';
+      status.textContent = 'ランキングは通常プレイの結果を表示します。';
+      return;
+    }
+    status.textContent = 'ランキングを更新中…';
+    try { await submitScore(this.state.save.profile.name, result.score); }
+    catch { status.textContent = '今回のスコアを送信できませんでした。ランキングを表示します。'; }
+    try {
+      const rows = await getTopScores();
+      list.innerHTML = rows.length ? '' : '<li>まだランキングがありません。</li>';
+      rows.forEach((row: OnlineRankingRow, index) => {
+        const item = element('li');
+        item.textContent = `${row.rank_no ?? index + 1}位 / ${row.display_name ?? row.player_name ?? 'ななし'}: ${Number(row.score ?? row.best_score ?? 0).toLocaleString('ja-JP')}点`;
+        list.appendChild(item);
+      });
+      if (status.textContent === 'ランキングを更新中…') status.textContent = '上位10名を表示しています。';
+    } catch { list.innerHTML = '<li>ランキングを読み込めませんでした。</li>'; status.textContent = 'ランキングを読み込めませんでした。'; }
   }
 
   private researchView(): HTMLElement {
@@ -590,7 +616,9 @@ export class AppController {
   }
 
   private async shareResult(result: BattleResult): Promise<void> {
-    const text = `カコマレで ${STAGES[result.stageId].name}を${result.outcome === 'victory' ? '突破し' : '戦い'}、${result.score.toLocaleString('ja-JP')}点、${Math.floor(result.survivalTime)}秒でした。`;
+    const stage = STAGES[result.stageId];
+    const outcome = result.retired ? 'リタイア' : result.outcome === 'victory' ? '突破' : '防衛失敗';
+    const text = `カコマレで${stage.name}を${outcome}。${result.score.toLocaleString('ja-JP')}点、${Math.floor(result.survivalTime)}秒生存、${result.kills}体撃破しました。`;
     const shared = await this.shareService.share('カコマレの結果', text);
     if (shared.method === 'cancelled') return;
     if (!shared.success) this.showManualShare(text);
