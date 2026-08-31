@@ -18,6 +18,9 @@ const DEFAULT_RESEARCH_EFFECTS: ResearchEffects = {
   sectorRecords: false,
 };
 
+// Keep the logical canvas bounded on high-DPI phones and wide desktop displays.
+const GAME_RESOLUTION = 720;
+
 export class GameHost {
   private game: Phaser.Game | null = null;
   private scene: BattleScene | null = null;
@@ -26,6 +29,7 @@ export class GameHost {
     stageId: StageId;
     effectsLevel: EffectsLevel;
     reducedMotion: boolean;
+    screenShake: boolean;
     aimAssist: 'standard' | 'strong';
     researchEffects?: ResearchEffects;
     testMode?: boolean;
@@ -39,12 +43,12 @@ export class GameHost {
     this.scene = scene;
     this.game = new Phaser.Game({
       type: Phaser.CANVAS,
-      width: 720,
-      height: 720,
+      width: GAME_RESOLUTION,
+      height: GAME_RESOLUTION,
       parent: mount,
       backgroundColor: '#07131f',
       render: { antialias: true, roundPixels: true, pixelArt: false },
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 720, height: 720 },
+      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_RESOLUTION, height: GAME_RESOLUTION },
       scene: [scene],
       banner: false,
     });

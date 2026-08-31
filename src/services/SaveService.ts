@@ -158,13 +158,20 @@ export class SaveService {
   public load(): LoadResult {
     const fallback = createDefaultSave();
     if (!this.storage) return { data: fallback, recovered: false, message: '' };
-    const raw = this.storage.getItem(SAVE_KEY) ?? this.storage.getItem(LEGACY_SAVE_KEY);
+    let raw: string | null;
+    let currentSave: string | null;
+    try {
+      currentSave = this.storage.getItem(SAVE_KEY);
+      raw = currentSave ?? this.storage.getItem(LEGACY_SAVE_KEY);
+    } catch {
+      return { data: fallback, recovered: true, message: '保存領域を読み込めなかったため、初期状態で開始しました。' };
+    }
     if (!raw) return { data: fallback, recovered: false, message: '' };
     try {
       const parsed: unknown = JSON.parse(raw);
       const migrated = migrateSave(parsed);
       if (!migrated) throw new Error('保存形式が不正です。');
-      if (parsed !== migrated || this.storage.getItem(SAVE_KEY) === null) this.persist(migrated);
+      if (parsed !== migrated || currentSave === null) this.persist(migrated);
       return { data: migrated, recovered: false, message: '' };
     } catch {
       try { this.storage.setItem(DAMAGED_SAVE_KEY, raw); } catch { /* Storage may be full or unavailable. */ }
@@ -174,7 +181,15 @@ export class SaveService {
 
   public persist(data: SaveData): void {
     if (!this.storage) return;
-    this.storage.setItem(SAVE_KEY, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }));
+    try {
+      this.storage.setItem(SAVE_KEY, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }));
+    } catch {
+      // Storage may be unavailable or full. Play can continue in memory.
+    }
+  }
+
+  public damagedJson(): string | null {
+    try { return this.storage?.getItem(DAMAGED_SAVE_KEY) ?? null; } catch { return null; }
   }
 
   public exportJson(data: SaveData): string {

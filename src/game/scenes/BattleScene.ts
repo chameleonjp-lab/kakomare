@@ -30,6 +30,7 @@ export interface BattleSceneOptions {
   stageId: StageId;
   effectsLevel: EffectsLevel;
   reducedMotion: boolean;
+  screenShake: boolean;
   aimAssist: 'standard' | 'strong';
   researchEffects: ResearchEffects;
   seed?: number;
@@ -66,6 +67,7 @@ export class BattleScene extends Phaser.Scene {
   private readonly rng: DeterministicRng;
   private readonly effectBudget: EffectBudget;
   private readonly runSeed: number;
+  private created = false;
   private graphics!: Phaser.GameObjects.Graphics;
   private elapsed = 0;
   private experience = 0;
@@ -75,6 +77,7 @@ export class BattleScene extends Phaser.Scene {
   private manualAim = false;
   private aimPointerId: number | null = null;
   private aimStart: Point | null = null;
+  private aimMoved = false;
   private aimReleaseAt = 0;
   private state: 'playing' | 'upgrade' | 'paused' | 'finished' = 'playing';
   private upgradePayload: UpgradePayload | null = null;
@@ -101,11 +104,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   public create(): void {
+    this.created = true;
     this.graphics = this.add.graphics();
     this.input.on('pointerdown', this.handlePointerDown, this);
     this.input.on('pointermove', this.handlePointerMove, this);
     this.input.on('pointerup', this.handlePointerUp, this);
     this.input.on('pointerupoutside', this.handlePointerUp, this);
+    this.input.on('pointercancel', this.handlePointerUp, this);
     this.input.keyboard?.on('keydown-ESC', () => this.requestPause());
     this.scheduleTestOutcome();
     this.options.callbacks.onStatus('戦闘開始');
@@ -116,8 +121,8 @@ export class BattleScene extends Phaser.Scene {
     if (this.state === 'finished') return;
     const frameStart = performance.now();
     this.clock.advance(delta / 1000, (seconds) => this.step(seconds));
-    this.effectBudget.sample(performance.now() - frameStart, this.elapsed, this.options.reducedMotion);
     this.renderScene();
+    this.effectBudget.sample(performance.now() - frameStart, this.elapsed, this.options.reducedMotion);
     this.emitSnapshot(false);
   }
 
@@ -169,7 +174,8 @@ export class BattleScene extends Phaser.Scene {
   public shutdownBattle(): void {
     if (this.testOutcomeTimer !== null) { window.clearTimeout(this.testOutcomeTimer); this.testOutcomeTimer = null; }
     this.state = 'finished';
-    this.input.removeAllListeners();
+    if (this.created) this.input.removeAllListeners();
+    this.created = false;
   }
 
   private step(seconds: number): void {
@@ -190,6 +196,7 @@ export class BattleScene extends Phaser.Scene {
       if (reached) {
         const damage = applyContactDamage(this.core, enemy);
         if (damage > 0) {
+          this.triggerScreenShake(damage);
           this.recorder.recordContact(enemy.angle, damage, `${enemy.isBoss ? BOSSES[enemy.type as BossId].name : ENEMIES[enemy.type as EnemyId].name}の接触`);
           this.options.callbacks.onStatus(`コアが${Math.round(damage)}ダメージを受けました`);
         }
@@ -249,21 +256,20 @@ export class BattleScene extends Phaser.Scene {
     const speed = (weapon.stats.projectileSpeed ?? 480) * this.options.researchEffects.projectileSpeedMultiplier * (1 + this.supportEffect('focus', weapon.slot));
     for (let index = 0; index < spread; index += 1) {
       const offset = spread === 1 ? 0 : (index - 1) * 0.14;
-      this.projectiles.push(this.projectilePool.acquire({
+    this.addProjectile({
         kind: 'needle', x: 0, y: 0, vx: Math.cos(angle + offset) * speed, vy: Math.sin(angle + offset) * speed,
         radius: 6, damage, life: 1.4, piercing, sourceWeaponId: weapon.id,
-      }));
+      });
     }
-    this.options.callbacks.onStatus('連針砲を発射');
   }
 
   private fireRay(weapon: Weapon, angle: number, damage: number): void {
     const width = (weapon.stats.width ?? 18) + (weapon.branch === 'wide' ? 20 : 0);
-    this.lines.push({ angle, color: WEAPONS.ray.color, life: weapon.branch === 'wide' ? 0.22 : 0.16, maxLife: weapon.branch === 'wide' ? 0.22 : 0.16, width });
+    this.addLine({ angle, color: WEAPONS.ray.color, life: weapon.branch === 'wide' ? 0.22 : 0.16, maxLife: weapon.branch === 'wide' ? 0.22 : 0.16, width });
     this.hitRay(weapon, angle, width, damage);
     if (weapon.branch === 'reflect') {
       const reflected = angle + Math.PI * 0.72;
-      this.lines.push({ angle: reflected, color: WEAPONS.ray.color, life: 0.14, maxLife: 0.14, width: width * 0.7 });
+      this.addLine({ angle: reflected, color: WEAPONS.ray.color, life: 0.14, maxLife: 0.14, width: width * 0.7 });
       this.hitRay(weapon, reflected, width * 0.7, damage * 0.55);
     }
   }
@@ -284,7 +290,7 @@ export class BattleScene extends Phaser.Scene {
   private fireCluster(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
     const radius = weapon.stats.radius ?? 72;
     const targetPoint = target ? { x: target.x, y: target.y } : { x: Math.cos(angle) * 250, y: Math.sin(angle) * 250 };
-    this.flashes.push({ x: targetPoint.x, y: targetPoint.y, color: WEAPONS.cluster.color, life: 0.45, maxLife: 0.45, radius });
+    this.addFlash({ x: targetPoint.x, y: targetPoint.y, color: WEAPONS.cluster.color, life: 0.45, maxLife: 0.45, radius });
     this.hitArea(weapon, targetPoint.x, targetPoint.y, radius, damage, angle);
     if (weapon.branch === 'split') for (let index = 0; index < 3; index += 1) {
       const splitAngle = angle + index * Math.PI * 2 / 3;
@@ -297,7 +303,7 @@ export class BattleScene extends Phaser.Scene {
     const radius = weapon.stats.radius ?? 165;
     const pushBonus = weapon.branch === 'strong-push' ? 1.5 : 1;
     const push = (weapon.stats.pushDistance ?? 58) * (1 + this.supportEffect('brake', weapon.slot)) * pushBonus;
-    this.lines.push({ angle: 0, color: WEAPONS.repulse.color, life: 0.3, maxLife: 0.3, width: radius });
+    this.addLine({ angle: 0, color: WEAPONS.repulse.color, life: 0.3, maxLife: 0.3, width: radius });
     for (const enemy of this.enemies) {
       if (!enemy.active || enemy.radius > radius) continue;
       const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed);
@@ -318,7 +324,7 @@ export class BattleScene extends Phaser.Scene {
     for (let index = 0; index < count && current; index += 1) {
       hit.add(current.id);
       const currentPoint = { x: current.x, y: current.y };
-      this.lines.push({ angle: Math.atan2(currentPoint.y - lastPoint.y, currentPoint.x - lastPoint.x), color: WEAPONS.chain.color, life: 0.22, maxLife: 0.22, width: 5 });
+      this.addLine({ angle: Math.atan2(currentPoint.y - lastPoint.y, currentPoint.x - lastPoint.x), color: WEAPONS.chain.color, life: 0.22, maxLife: 0.22, width: 5 });
       const result = applyDamage(current, this.adjustForSpecialEnemy(current, damage * Math.pow(0.8, index), weapon.slot), this.elapsed, Math.atan2(current.y, current.x));
       this.recordWeaponDamage(weapon.id, result.amount);
       this.addScore(result.amount);
@@ -356,10 +362,10 @@ export class BattleScene extends Phaser.Scene {
 
   private fireDisc(weapon: Weapon, angle: number, damage: number): void {
     const speed = (weapon.stats.projectileSpeed ?? 290) * this.options.researchEffects.projectileSpeedMultiplier * (1 + this.supportEffect('focus', weapon.slot));
-    this.projectiles.push(this.projectilePool.acquire({
+    this.addProjectile({
       kind: 'disc', x: 0, y: 0, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
       radius: 10, damage, life: 4, piercing: 0, bounces: weapon.stats.bounceCount ?? 3, hitCooldown: weapon.stats.hitCooldown ?? 0.3, sourceWeaponId: weapon.id,
-    }));
+    });
   }
 
   private fireGravity(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
@@ -370,7 +376,7 @@ export class BattleScene extends Phaser.Scene {
     const x = Math.cos(angle) * distance;
     const y = Math.sin(angle) * distance;
     this.createGravityField(x, y, stats.duration ?? 2.2, stats.pullRadius ?? 125, damage, stats.pullStrength ?? 34, safeDistance, weapon.branch === 'collapse');
-    this.lines.push({ angle, color: WEAPONS.gravity.color, life: 0.38, maxLife: 0.38, width: stats.pullRadius ?? 125 });
+    this.addLine({ angle, color: WEAPONS.gravity.color, life: 0.38, maxLife: 0.38, width: stats.pullRadius ?? 125 });
   }
 
   private hitArea(weapon: Weapon, x: number, y: number, radius: number, damage: number, attackAngle: number): void {
@@ -385,6 +391,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createGravityField(x: number, y: number, duration: number, radius: number, damage: number, pullStrength: number, safeDistance: number, collapse: boolean): void {
+    const fieldLimit = this.effectBudget.effectsLevel === 'standard' ? 24 : this.effectBudget.effectsLevel === 'low' ? 16 : 8;
+    if (this.gravityFields.length >= fieldLimit) this.gravityFields.shift();
     this.gravityFields.push({ x, y, life: duration, maxLife: duration, radius, damage, pullStrength, safeDistance, damageTimer: 0, collapse });
   }
 
@@ -444,6 +452,7 @@ export class BattleScene extends Phaser.Scene {
       const damage = this.core.damage(projectile.damage);
       projectile.active = false;
       if (damage > 0) {
+        this.triggerScreenShake(damage);
         this.recorder.recordContact(Math.atan2(projectile.y, projectile.x), damage, '遠隔弾の被害');
         this.options.callbacks.onStatus(`遠隔弾がコアへ${Math.round(damage)}ダメージ`);
       }
@@ -454,10 +463,10 @@ export class BattleScene extends Phaser.Scene {
     for (const enemy of this.enemies) {
       if (!enemy.active || enemy.type !== 'dropper' || enemy.radius > 250 || enemy.shotCooldown > 0) continue;
       const angle = Math.atan2(enemy.y, enemy.x);
-      this.projectiles.push(this.projectilePool.acquire({
+      this.addProjectile({
         kind: 'enemy', x: enemy.x, y: enemy.y, vx: -Math.cos(angle) * 180, vy: -Math.sin(angle) * 180,
         radius: 9, damage: 10, life: 2.2, piercing: 0, enemyProjectile: true,
-      }));
+      });
       enemy.shotCooldown = 1.1;
       this.options.callbacks.onStatus('投下体が遠隔弾を準備しました');
     }
@@ -494,10 +503,10 @@ export class BattleScene extends Phaser.Scene {
         this.echoWave.life -= seconds;
         if (this.echoWave.life <= 0) {
           const angle = this.echoWave.angle;
-          this.projectiles.push(this.projectilePool.acquire({
+          this.addProjectile({
             kind: 'enemy', x: Math.cos(angle) * 325, y: Math.sin(angle) * 325, vx: -Math.cos(angle) * 210, vy: -Math.sin(angle) * 210,
             radius: 10, damage: 10, life: 2.3, piercing: 0, enemyProjectile: true,
-          }));
+          });
           this.echoWave = null;
           boss.specialCooldown = 3;
         }
@@ -515,6 +524,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private spawnBoss(): void {
+    if (this.enemies.filter((enemy) => enemy.active).length >= this.effectBudget.limits.enemies) return;
     const bossId = this.spawnDirector.bossId;
     const stage = STAGES[this.options.stageId];
     const boss = this.enemyPool.acquire(bossId, this.rng.next() * Math.PI * 2, 370, 1 + this.elapsed * stage.difficultyFactor);
@@ -536,7 +546,8 @@ export class BattleScene extends Phaser.Scene {
     this.recorder.recordEnemyKill(enemyId);
     this.addScore(10 * (1 + ENEMIES[enemyId].threatCost));
     this.experience += enemyId === 'spore' ? 8 : 4;
-    this.flashes.push({ x: enemy.x, y: enemy.y, color: ENEMIES[enemyId].color, life: 0.32, maxLife: 0.32, radius: 26 });
+    this.addFlash({ x: enemy.x, y: enemy.y, color: ENEMIES[enemyId].color, life: 0.32, maxLife: 0.32, radius: 26 });
+    this.emitParticles(enemy.x, enemy.y, ENEMIES[enemyId].color);
     if (enemyId === 'spore' && !enemy.splitDone) {
       enemy.splitDone = true;
       this.spawnEnemy('shard', enemy.angle - 0.2);
@@ -596,6 +607,43 @@ export class BattleScene extends Phaser.Scene {
 
   private addScore(amount: number): void { this.recorder.score += amount; }
 
+  private addProjectile(options: Omit<ConstructorParameters<typeof Projectile>[0], 'id'>): Projectile | null {
+    const activeCount = this.projectiles.filter((projectile) => projectile.active).length;
+    const enemyCount = this.projectiles.filter((projectile) => projectile.active && projectile.enemyProjectile).length;
+    if (activeCount >= this.effectBudget.limits.projectiles) return null;
+    if (options.enemyProjectile && enemyCount >= this.effectBudget.limits.enemyProjectiles) return null;
+    const projectile = this.projectilePool.acquire(options);
+    this.projectiles.push(projectile);
+    return projectile;
+  }
+
+  private addLine(effect: LineEffect): void {
+    const limit = this.effectBudget.effectsLevel === 'standard' ? 48 : this.effectBudget.effectsLevel === 'low' ? 28 : 14;
+    if (this.lines.length >= limit) this.lines.shift();
+    this.lines.push(effect);
+  }
+
+  private addFlash(effect: FlashEffect): void {
+    const limit = this.effectBudget.effectsLevel === 'standard' ? 32 : this.effectBudget.effectsLevel === 'low' ? 20 : 10;
+    if (this.flashes.length >= limit) this.flashes.shift();
+    this.flashes.push(effect);
+  }
+
+  private emitParticles(x: number, y: number, color: number): void {
+    if (this.options.reducedMotion) return;
+    const count = this.effectBudget.effectsLevel === 'standard' ? 8 : this.effectBudget.effectsLevel === 'low' ? 5 : 2;
+    for (let index = 0; index < count; index += 1) {
+      const angle = index * Math.PI * 2 / count;
+      this.particles.emit(x + Math.cos(angle) * 5, y + Math.sin(angle) * 5, color, 0.28, this.effectBudget.limits.particles);
+    }
+  }
+
+  private triggerScreenShake(damage: number): void {
+    if (!this.options.screenShake || this.options.reducedMotion || this.effectBudget.limits.shake <= 0) return;
+    const intensity = Math.min(this.effectBudget.limits.shake, Math.max(1, damage / 8));
+    this.cameras.main.shake(120, Math.min(0.02, intensity / 200), false);
+  }
+
   private recordWeaponDamage(id: WeaponId, amount: number): void {
     if (amount <= 0) return;
     this.recorder.recordWeaponDamage(id, amount);
@@ -625,10 +673,15 @@ export class BattleScene extends Phaser.Scene {
   private compactEntities(): void {
     for (let index = this.projectiles.length - 1; index >= 0; index -= 1) if (!this.projectiles[index]?.active) this.projectiles.splice(index, 1);
     for (let index = this.enemies.length - 1; index >= 0; index -= 1) if (!this.enemies[index]?.active) this.enemies.splice(index, 1);
+    const activeEnemyIds = new Set(this.enemies.map((enemy) => enemy.id));
+    for (const key of this.orbitHits.keys()) {
+      const enemyId = Number(key.split(':')[1]);
+      if (!activeEnemyIds.has(enemyId)) this.orbitHits.delete(key);
+    }
   }
 
   private updateEffects(seconds: number): void {
-    for (const flash of this.flashes) { flash.life -= seconds; flash.radius += seconds * 80; }
+    for (const flash of this.flashes) { flash.life -= seconds; if (!this.options.reducedMotion) flash.radius += seconds * 80; }
     for (const line of this.lines) line.life -= seconds;
     for (const telegraph of this.specialTelegraphs) telegraph.life -= seconds;
     this.particles.update(seconds);
@@ -695,12 +748,11 @@ export class BattleScene extends Phaser.Scene {
       this.graphics.lineStyle(3, flash.color, alpha);
       this.graphics.strokeCircle(cx + flash.x, cy + flash.y, flash.radius);
     }
-    for (const projectile of this.projectiles) {
-      if (!projectile.active) continue;
-      const color = projectile.enemyProjectile ? 0xfff1a8 : projectile.kind === 'disc' ? WEAPONS.disc.color : projectile.sourceWeaponId ? WEAPONS[projectile.sourceWeaponId].color : 0x63d7e6;
-      this.graphics.fillStyle(color, 1); this.graphics.fillCircle(cx + projectile.x, cy + projectile.y, projectile.radius);
-      this.graphics.lineStyle(2, projectile.enemyProjectile ? 0xff706a : color, 0.7);
-      this.graphics.lineBetween(cx + projectile.x - projectile.vx * 0.025, cy + projectile.y - projectile.vy * 0.025, cx + projectile.x, cy + projectile.y);
+    for (const projectile of this.projectiles) if (projectile.active && !projectile.enemyProjectile) this.drawProjectile(projectile, cx, cy);
+    for (const particle of this.particles.active()) {
+      const alpha = Math.max(0, particle.life / particle.maxLife);
+      this.graphics.fillStyle(particle.color, alpha * 0.8);
+      this.graphics.fillCircle(cx + particle.x, cy + particle.y, 2 + alpha * 2);
     }
     drawDevice(this.graphics, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch })), this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })));
     for (const enemy of this.enemies) if (enemy.active) drawEnemy(this.graphics, enemy.snapshot({ x: 0, y: 0 }), cx, cy);
@@ -709,6 +761,7 @@ export class BattleScene extends Phaser.Scene {
       this.graphics.lineStyle(2, 0xfff1a8, 0.7);
       this.graphics.lineBetween(cx, cy, cx + Math.cos(this.aimAngle) * arena, cy + Math.sin(this.aimAngle) * arena);
     }
+    for (const projectile of this.projectiles) if (projectile.active && projectile.enemyProjectile) this.drawProjectile(projectile, cx, cy);
   }
 
   private drawSpecialLine(cx: number, cy: number, arena: number, angle: number, alpha: number, color: number, width: number): void {
@@ -716,10 +769,25 @@ export class BattleScene extends Phaser.Scene {
     this.graphics.lineBetween(cx + Math.cos(angle) * 170, cy + Math.sin(angle) * 170, cx + Math.cos(angle) * arena, cy + Math.sin(angle) * arena);
   }
 
+  private drawProjectile(projectile: Projectile, centerX: number, centerY: number): void {
+    const color = projectile.enemyProjectile ? 0xfff1a8 : projectile.kind === 'disc' ? WEAPONS.disc.color : projectile.sourceWeaponId ? WEAPONS[projectile.sourceWeaponId].color : 0x63d7e6;
+    const x = centerX + projectile.x;
+    const y = centerY + projectile.y;
+    this.graphics.fillStyle(color, 1);
+    this.graphics.fillCircle(x, y, projectile.radius);
+    this.graphics.lineStyle(projectile.enemyProjectile ? 3 : 2, projectile.enemyProjectile ? 0xff706a : color, 0.9);
+    this.graphics.lineBetween(x - projectile.vx * 0.025, y - projectile.vy * 0.025, x, y);
+    if (projectile.enemyProjectile) {
+      this.graphics.lineStyle(2, 0xfff1a8, 0.95);
+      this.graphics.strokeCircle(x, y, projectile.radius + 5);
+    }
+  }
+
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
     if (this.state !== 'playing' || this.aimPointerId !== null) return;
     this.aimPointerId = pointer.id;
     this.aimStart = { x: pointer.x, y: pointer.y };
+    this.aimMoved = false;
   }
 
   private handlePointerMove(pointer: Phaser.Input.Pointer): void {
@@ -728,6 +796,7 @@ export class BattleScene extends Phaser.Scene {
     const dy = pointer.y - this.aimStart.y;
     if (Math.hypot(dx, dy) < 18) return;
     this.aimAngle = Math.atan2(dy, dx);
+    this.aimMoved = true;
     this.manualAim = true;
     this.aimReleaseAt = this.elapsed + (this.options.aimAssist === 'strong' ? 1.1 : 0.8);
   }
@@ -736,7 +805,9 @@ export class BattleScene extends Phaser.Scene {
     if (this.aimPointerId !== pointer.id) return;
     this.aimPointerId = null;
     this.aimStart = null;
+    if (!this.aimMoved) return;
     this.aimReleaseAt = this.elapsed + (this.options.aimAssist === 'strong' ? 1.1 : 0.8);
     this.manualAim = true;
+    this.aimMoved = false;
   }
 }

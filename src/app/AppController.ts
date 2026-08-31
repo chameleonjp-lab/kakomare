@@ -6,7 +6,7 @@ import { ShareService } from '../services/ShareService';
 import { LifecycleService } from '../services/LifecycleService';
 import { GameHost } from '../game/GameHost';
 import type { BattleResult, BattleSnapshot, UpgradePayload } from '../types/game';
-import type { SaveData } from '../types/save';
+import { createDefaultSave, type SaveData } from '../types/save';
 import { button, element } from '../ui/viewUtils';
 import { createNameView } from '../ui/NameView';
 import { createHomeView } from '../ui/HomeView';
@@ -30,33 +30,56 @@ export class AppController {
   private readonly audio = new AudioService();
   private readonly shareService = new ShareService();
   private readonly gameHost = new GameHost();
-  private state: AppState = createAppState(this.saveService.load().data);
+  private state: AppState = createAppState(createDefaultSave());
   private lastResult: BattleResult | null = null;
   private countdownTimer: number | null = null;
+  private resumeCountdownTimer: number | null = null;
   private battleStarted = false;
   private lifecycleCleanup: (() => void) | null = null;
+  private started = false;
 
   public constructor(private readonly root: HTMLElement) {}
 
   public start(): void {
-    const initialView = this.state.view;
-    const loaded = this.saveService.load();
-    this.state = createAppState(loaded.data);
-    this.state.notice = loaded.message;
-    this.audio.setVolume(loaded.data.settings.audio);
-    this.lifecycleCleanup = new LifecycleService(() => this.handleHidden(), () => this.saveService.persist(this.state.save)).start();
+    if (this.started) return;
+    this.started = true;
     this.render('boot');
-    this.render(initialView);
+    window.setTimeout(() => this.finishStartup(), 0);
+  }
+
+  private finishStartup(): void {
+    try {
+      const loaded = this.saveService.load();
+      this.state = createAppState(loaded.data);
+      this.state.notice = loaded.message;
+      this.audio.setVolume(loaded.data.settings.audio);
+      this.audio.setMusicVolume(loaded.data.settings.music);
+      this.lifecycleCleanup = new LifecycleService(
+        () => this.handleHidden(),
+        () => this.saveService.persist(this.state.save),
+        () => this.handleViewportChange(),
+        () => this.handleOrientationChange(),
+      ).start();
+      this.render(this.state.view);
+    } catch {
+      this.renderBootError();
+    }
   }
 
   private render(view: AppView): void {
     this.clearCountdown();
+    this.clearResumeCountdown();
     if (view !== 'battle' && view !== 'countdown') this.gameHost.stop();
     this.state.view = view;
     this.root.className = view === 'battle' ? 'app-root app-root-battle' : 'app-root';
     this.root.replaceChildren();
     if (view === 'boot') { this.renderBoot(); return; }
-    if (view === 'name-entry') { this.root.append(createNameView((name) => this.setName(name))); return; }
+    if (view === 'name-entry') {
+      const nameView = createNameView((name) => this.setName(name));
+      this.addNotice(nameView);
+      this.root.append(nameView);
+      return;
+    }
     if (view === 'home') { this.root.append(this.homeView()); return; }
     if (view === 'stage-select') { this.root.append(createStageSelectView(this.state.save, (id) => this.startStage(id), () => this.render('home'))); return; }
     if (view === 'research') { this.root.append(this.researchView()); return; }
@@ -64,15 +87,38 @@ export class AppController {
     if (view === 'settings') { this.root.append(this.settingsView()); return; }
     if (view === 'countdown') { this.renderCountdown(); return; }
     if (view === 'battle') { this.renderBattle(); return; }
-    if (view === 'result' && this.lastResult) { this.root.append(this.resultView(this.lastResult)); return; }
+    if (view === 'result' && this.lastResult) {
+      this.root.append(this.resultView(this.lastResult));
+      this.scrollToTop();
+      return;
+    }
     this.render('home');
   }
 
   private renderBoot(): void {
     const shell = element('section', 'boot-screen');
+    shell.dataset.testid = 'boot-screen';
     shell.append(element('p', 'eyebrow', 'CODE-GENERATED DEFENSE')); 
     shell.append(element('h1', '', 'カコマレ'));
     shell.append(element('p', 'boot-status', '準備しています…'));
+    this.root.append(shell);
+  }
+
+  private renderBootError(): void {
+    this.root.className = 'app-root';
+    this.root.replaceChildren();
+    const shell = element('section', 'boot-screen');
+    shell.dataset.testid = 'boot-error';
+    shell.append(element('p', 'eyebrow', 'カコマレ'));
+    shell.append(element('h1', '', '読み込みに失敗しました'));
+    shell.append(element('p', 'boot-status', '保存データまたは画面の準備に失敗しました。もう一度試してください。'));
+    const retry = button('もう一度試す', 'button button-primary button-large');
+    retry.dataset.testid = 'boot-retry';
+    retry.addEventListener('click', () => {
+      this.started = false;
+      this.start();
+    });
+    shell.append(retry);
     this.root.append(shell);
   }
 
@@ -99,9 +145,17 @@ export class AppController {
 
   private settingsView(): HTMLElement {
     return createSettingsView(this.state.save, {
-      change: (next) => { this.state.save = next; this.saveService.persist(next); this.audio.setVolume(next.settings.audio); },
+      change: (patch) => {
+        const next = { ...this.state.save, settings: { ...this.state.save.settings, ...patch } };
+        this.state.save = next;
+        this.saveService.persist(next);
+        this.audio.setVolume(next.settings.audio);
+        this.audio.setMusicVolume(next.settings.music);
+      },
       changeName: (name) => { const next = { ...this.state.save, profile: { name } }; this.state.save = next; this.saveService.persist(next); this.announce('名前を変更しました'); },
       exportSave: () => { void this.exportSave(); },
+      copyDamaged: () => { void this.copyDamagedSave(); },
+      hasDamagedSave: this.saveService.damagedJson() !== null,
       importSave: (raw) => this.importSave(raw),
       reset: () => this.resetSave(),
       back: () => this.render('home'),
@@ -132,6 +186,7 @@ export class AppController {
     this.root.append(shell);
     let remaining = 3;
     this.countdownTimer = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
       remaining -= 1;
       if (remaining <= 0) {
         this.clearCountdown();
@@ -160,9 +215,9 @@ export class AppController {
     gameMount.id = 'game-mount';
     mount.append(gameMount);
     arenaColumn.append(mount);
-    const aimState = element('p', 'aim-state', '自動照準'); aimState.dataset.testid = 'aim-state';
+    const aimState = element('p', 'aim-state', '自動照準'); aimState.dataset.testid = 'aim-state'; aimState.setAttribute('role', 'status');
     arenaColumn.append(aimState);
-    const status = element('p', 'battle-status', '戦闘準備中'); status.dataset.testid = 'battle-status';
+    const status = element('p', 'battle-status', '戦闘準備中'); status.dataset.testid = 'battle-status'; status.setAttribute('role', 'status');
     arenaColumn.append(status);
 
     const panel = element('aside', 'battle-panel');
@@ -192,6 +247,7 @@ export class AppController {
       stageId: this.state.selectedStage,
       effectsLevel: this.state.save.settings.effects,
       reducedMotion: this.state.save.settings.reducedMotion,
+      screenShake: this.state.save.settings.screenShake,
       aimAssist: this.state.save.settings.aimAssist,
       researchEffects: getResearchEffects(this.state.save),
       testMode,
@@ -231,7 +287,7 @@ export class AppController {
     if (payload.candidates.length === 0) return;
     const layer = element('div', 'modal-layer');
     const dialog = element('div', 'modal-dialog');
-    dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'upgrade-title');
+    dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'upgrade-title'); dialog.tabIndex = -1;
     dialog.append(element('p', 'eyebrow', '装置を更新')); const title = element('h2', '', '強化候補を1つ選ぶ'); title.id = 'upgrade-title'; dialog.append(title);
     dialog.append(element('p', 'modal-copy', '戦闘速度を落としています。変更前と変更後を確認してください。'));
     if (getResearchEffects(this.state.save).candidateDetails) dialog.append(element('p', 'modal-copy', '詳細解析: 数値の変化と得意な敵を表示しています。'));
@@ -239,7 +295,6 @@ export class AppController {
     let locked = true;
     const choiceButtons: HTMLButtonElement[] = [];
     let selectedIndex = 0;
-    window.setTimeout(() => { locked = false; }, 150);
     for (const candidate of payload.candidates) {
       const card = element('article', 'upgrade-card');
       const choose = button(candidate.title, 'upgrade-choice');
@@ -249,11 +304,20 @@ export class AppController {
       choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate); });
       card.append(choose, element('p', 'upgrade-description', candidate.description), element('p', 'upgrade-change', `${candidate.before} → ${candidate.after}`), element('p', 'upgrade-role', `得意: ${candidate.role}`));
       const ban = button('この候補を除外', 'button button-small');
-      ban.disabled = payload.bansLeft <= 0;
-      ban.addEventListener('click', () => this.gameHost.banUpgrade(candidate.id));
+      ban.disabled = true;
+      ban.addEventListener('click', () => {
+        if (locked || ban.disabled) return;
+        locked = true;
+        ban.disabled = true;
+        this.gameHost.banUpgrade(candidate.id);
+      });
       card.append(ban); list.append(card);
-      window.setTimeout(() => { choose.disabled = false; }, 150);
     }
+    window.setTimeout(() => {
+      locked = false;
+      choiceButtons.forEach((choice) => { choice.disabled = false; });
+      list.querySelectorAll<HTMLButtonElement>('.button-small').forEach((ban) => { ban.disabled = payload.bansLeft <= 0; });
+    }, 150);
     dialog.addEventListener('keydown', (event) => {
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); selectedIndex = (selectedIndex + 1) % choiceButtons.length; choiceButtons[selectedIndex]?.focus(); }
       if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); selectedIndex = (selectedIndex + choiceButtons.length - 1) % choiceButtons.length; choiceButtons[selectedIndex]?.focus(); }
@@ -262,20 +326,32 @@ export class AppController {
     dialog.append(list);
     const footer = element('div', 'modal-footer');
     const reroll = button(`引き直す（残り${payload.rerollsLeft}回）`, 'button button-secondary');
-    reroll.disabled = payload.rerollsLeft <= 0; reroll.addEventListener('click', () => this.gameHost.rerollUpgrade()); footer.append(reroll);
+    reroll.disabled = payload.rerollsLeft <= 0 || locked;
+    reroll.addEventListener('click', () => {
+      if (locked || reroll.disabled) return;
+      locked = true;
+      reroll.disabled = true;
+      this.gameHost.rerollUpgrade();
+    });
+    footer.append(reroll);
     dialog.append(footer); layer.append(dialog); shell.append(layer);
+    window.setTimeout(() => { reroll.disabled = payload.rerollsLeft <= 0; }, 150);
     window.setTimeout(() => choiceButtons[0]?.focus(), 160);
   }
 
-  private openPause(fromVisibility: boolean): void {
+  private openPause(fromVisibility: boolean, reason = ''): void {
     if (!this.battleStarted || this.state.view !== 'battle') return;
     this.gameHost.pause();
     const shell = this.root.querySelector<HTMLElement>('.battle-shell');
     if (!shell) return;
     this.removeModal(shell);
     const layer = element('div', 'modal-layer');
-    const dialog = element('div', 'modal-dialog pause-dialog'); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
-    dialog.append(element('p', 'eyebrow', '一時停止'), element('h2', '', fromVisibility ? '画面を離れたため停止中' : '戦闘を停止しました'), element('p', 'modal-copy', '再開するまでゲーム時間と敵の動きを止めています。'));
+    const dialog = element('div', 'modal-dialog pause-dialog'); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.tabIndex = -1;
+    const title = reason || (fromVisibility ? '画面を離れたため停止中' : '戦闘を停止しました');
+    const titleNode = element('h2', '', title); titleNode.id = 'pause-title';
+    const copy = element('p', 'modal-copy', '再開するまでゲーム時間と敵の動きを止めています。'); copy.id = 'pause-copy';
+    dialog.setAttribute('aria-labelledby', titleNode.id); dialog.setAttribute('aria-describedby', copy.id);
+    dialog.append(element('p', 'eyebrow', '一時停止'), titleNode, copy);
     const resume = button('再開', 'button button-primary button-large'); resume.dataset.testid = 'resume-button';
     resume.addEventListener('click', () => { this.removeModal(shell); if (fromVisibility) this.shortResume(); else this.gameHost.resume(); });
     const rules = button('遊び方'); rules.addEventListener('click', () => this.showPauseRules(dialog));
@@ -283,6 +359,7 @@ export class AppController {
     const retire = button('リタイア', 'button button-danger'); retire.addEventListener('click', () => { if (window.confirm('このプレイを終了しますか？得点は確定しません。')) this.gameHost.retire(); });
     const home = button('ホームへ戻る'); home.addEventListener('click', () => { if (window.confirm('プレイを終了してホームへ戻りますか？')) { this.gameHost.stop(); this.battleStarted = false; this.render('home'); } });
     dialog.append(resume, rules, settings, retire, home); layer.append(dialog); shell.append(layer);
+    window.setTimeout(() => resume.focus(), 0);
   }
 
   private showPauseRules(dialog: HTMLElement): void {
@@ -296,8 +373,13 @@ export class AppController {
     box.append(element('h3', '', '音量と演出'));
     const label = element('label', 'setting-row', '効果音');
     const input = element('input') as HTMLInputElement;
-    input.type = 'range'; input.min = '0'; input.max = '100'; input.value = String(this.state.save.settings.audio);
-    input.addEventListener('input', () => { const next = { ...this.state.save, settings: { ...this.state.save.settings, audio: Number(input.value) } }; this.state.save = next; this.saveService.persist(next); this.audio.setVolume(next.settings.audio); });
+    input.id = 'pause-audio'; input.type = 'range'; input.min = '0'; input.max = '100'; input.value = String(this.state.save.settings.audio); input.setAttribute('aria-label', '効果音の音量');
+    input.addEventListener('input', () => {
+      const next = { ...this.state.save, settings: { ...this.state.save.settings, audio: Number(input.value) } };
+      this.state.save = next;
+      this.saveService.persist(next);
+      this.audio.setVolume(next.settings.audio);
+    });
     label.append(input); box.append(label); dialog.append(box);
   }
 
@@ -305,11 +387,37 @@ export class AppController {
     const shell = this.root.querySelector<HTMLElement>('.battle-shell'); if (!shell) return;
     const layer = element('div', 'modal-layer'); const message = element('div', 'resume-countdown', '3'); layer.append(message); shell.append(layer);
     let remaining = 3;
-    const timer = window.setInterval(() => { remaining -= 1; if (remaining <= 0) { window.clearInterval(timer); layer.remove(); this.gameHost.resume(); } else message.textContent = String(remaining); }, 500);
+    this.resumeCountdownTimer = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      remaining -= 1;
+      if (remaining <= 0) {
+        this.clearResumeCountdown();
+        layer.remove();
+        this.gameHost.resume();
+      } else message.textContent = String(remaining);
+    }, 500);
   }
 
   private handleHidden(): void {
-    if (this.state.view === 'battle' && !this.gameHost.isPaused() && !this.root.querySelector('.battle-shell .modal-layer')) this.openPause(true);
+    if (this.state.view !== 'battle') return;
+    if (this.resumeCountdownTimer !== null) {
+      this.clearResumeCountdown();
+      this.root.querySelector('.battle-shell .modal-layer')?.remove();
+    }
+    if (!this.gameHost.isPaused() && !this.root.querySelector('.battle-shell .modal-layer')) this.openPause(true);
+  }
+
+  private handleOrientationChange(): void {
+    if (this.state.view !== 'battle' || !this.battleStarted || this.gameHost.isPaused()) return;
+    if (!this.root.querySelector('.battle-shell .modal-layer')) this.openPause(true, '画面の向きが変わったため停止中');
+  }
+
+  private handleViewportChange(): void {
+    const viewport = window.visualViewport;
+    const height = viewport?.height ?? window.innerHeight;
+    const width = viewport?.width ?? window.innerWidth;
+    document.documentElement.style.setProperty('--visual-viewport-height', `${height}px`);
+    document.documentElement.style.setProperty('--visual-viewport-width', `${width}px`);
   }
 
   private finishBattle(result: BattleResult): void {
@@ -366,6 +474,7 @@ export class AppController {
     };
     this.state.save = next; this.saveService.persist(next); this.state.notice = nextBest ? '自己最高記録を更新しました。' : '';
     this.render('result');
+    this.announce(result.retired ? 'プレイを終了しました' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗');
   }
 
   private resultView(result: BattleResult): HTMLElement {
@@ -406,14 +515,79 @@ export class AppController {
   }
 
   private showManualShare(text: string): void {
-    const value = `${text}\n${window.location.href}`;
-    window.prompt('次の内容をコピーしてください。', value);
+    this.showCopyDialog(
+      '共有文をコピー',
+      '共有機能が使えないため、下の文章をコピーして共有してください。',
+      `${text}\n${this.shareService.getShareUrl()}`,
+      '共有文をコピー',
+      'manual-share-copy',
+      'share-modal',
+    );
   }
 
   private async exportSave(): Promise<void> {
     const raw = this.saveService.exportJson(this.state.save);
     try { await navigator.clipboard.writeText(raw); this.announce('保存データをコピーしました'); }
-    catch { window.prompt('保存データをコピーしてください。', raw); }
+    catch { this.showCopyDialog('保存データをコピー', 'クリップボードが使えないため、下のJSONをコピーしてください。', raw, '保存データをコピー', 'manual-save-copy'); }
+  }
+
+  private async copyDamagedSave(): Promise<void> {
+    const raw = this.saveService.damagedJson();
+    if (!raw) {
+      this.announce('退避した破損データはありません');
+      return;
+    }
+    try {
+      if (!navigator.clipboard) throw new Error('クリップボードが使えません。');
+      await navigator.clipboard.writeText(raw);
+      this.announce('退避した破損データをコピーしました');
+    } catch {
+      this.showCopyDialog('退避データをコピー', '保存データを復旧する場合に使える退避データです。', raw, '退避データをコピー', 'copy-damaged-modal');
+    }
+  }
+
+  private showCopyDialog(titleText: string, copyText: string, value: string, actionLabel: string, testid: string, className = 'copy-modal'): void {
+    this.root.querySelector('.copy-modal, .share-modal')?.remove();
+    const layer = element('div', `modal-layer ${className}`);
+    const dialog = element('div', 'modal-dialog share-dialog');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'copy-dialog-title');
+    dialog.setAttribute('aria-describedby', 'copy-dialog-copy');
+    dialog.tabIndex = -1;
+    const title = element('h2', '', titleText); title.id = 'copy-dialog-title';
+    const copy = element('p', 'modal-copy', copyText); copy.id = 'copy-dialog-copy';
+    const field = element('textarea', 'share-text', value) as HTMLTextAreaElement;
+    field.readOnly = true;
+    field.rows = 6;
+    field.setAttribute('aria-label', 'コピーする文章');
+    const status = element('p', 'share-status', '');
+    status.setAttribute('role', 'status');
+    const actions = element('div', 'modal-footer');
+    const copyButton = button(actionLabel, 'button button-primary');
+    copyButton.dataset.testid = testid;
+    const selectFallback = (): void => {
+      field.focus();
+      field.select();
+      status.textContent = '文章を選択しました。コピーしてください。';
+    };
+    copyButton.addEventListener('click', () => {
+      if (!navigator.clipboard) {
+        selectFallback();
+        return;
+      }
+      void navigator.clipboard.writeText(value).then(() => {
+        status.textContent = 'コピーしました。';
+        this.announce(`${actionLabel}しました`);
+      }).catch(selectFallback);
+    });
+    const closeButton = button('閉じる', 'button button-secondary');
+    closeButton.addEventListener('click', () => layer.remove());
+    actions.append(copyButton, closeButton);
+    dialog.append(title, copy, field, status, actions);
+    layer.append(dialog);
+    this.root.append(layer);
+    window.setTimeout(() => { field.focus(); field.select(); }, 0);
   }
 
   private importSave(raw: string): void {
@@ -441,9 +615,23 @@ export class AppController {
 
   private announce(message: string): void { const live = document.querySelector<HTMLElement>('#live-region'); if (live) live.textContent = message; }
 
+  private scrollToTop(): void {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+  }
+
   private weaponName(id: string): string { return WEAPONS[id as keyof typeof WEAPONS]?.name ?? id; }
   private supportName(id: string): string { return SUPPORTS[id as keyof typeof SUPPORTS]?.name ?? id; }
   private clearCountdown(): void { if (this.countdownTimer !== null) { window.clearInterval(this.countdownTimer); this.countdownTimer = null; } }
+  private clearResumeCountdown(): void { if (this.resumeCountdownTimer !== null) { window.clearInterval(this.resumeCountdownTimer); this.resumeCountdownTimer = null; } }
 
-  public destroy(): void { this.clearCountdown(); this.gameHost.stop(); this.lifecycleCleanup?.(); }
+  public destroy(): void {
+    this.clearCountdown();
+    this.clearResumeCountdown();
+    this.gameHost.stop();
+    this.lifecycleCleanup?.();
+    this.lifecycleCleanup = null;
+    this.audio.stop();
+    this.started = false;
+  }
 }

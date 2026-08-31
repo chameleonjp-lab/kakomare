@@ -1,4 +1,4 @@
-import { button, element, heading, pageShell } from './viewUtils';
+import { button, element, heading, isValidPlayerName, pageShell } from './viewUtils';
 
 export function createNameView(onSubmit: (name: string) => void): HTMLElement {
   const shell = pageShell('カコマレ', '名前を決めると、端末内に進行と記録を保存できます。');
@@ -6,6 +6,8 @@ export function createNameView(onSubmit: (name: string) => void): HTMLElement {
   card.append(heading('プレイヤー名', 2));
   const label = element('label', 'field-label', '1〜12文字');
   const input = element('input', 'name-input') as HTMLInputElement;
+  input.id = 'player-name';
+  label.htmlFor = input.id;
   input.type = 'text';
   input.name = 'player-name';
   input.setAttribute('autocomplete', 'nickname');
@@ -20,8 +22,7 @@ export function createNameView(onSubmit: (name: string) => void): HTMLElement {
   const start = button('この名前で始める', 'button button-primary button-large');
   const submit = (): void => {
     const value = input.value.trim();
-    const hasControl = [...value].some((char) => { const code = char.codePointAt(0) ?? 0; return code <= 0x1f || code === 0x7f; });
-    if (!value || hasControl || [...value].length > 12) {
+    if (!isValidPlayerName(value)) {
       error.textContent = '1〜12文字で入力してください。';
       input.focus();
       return;
