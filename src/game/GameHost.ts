@@ -61,6 +61,7 @@ export class GameHost {
   public resume(): void { this.scene?.resume(); }
   public retire(): void { this.scene?.retire(); }
   public isPaused(): boolean { return this.scene?.paused ?? false; }
+  public isUpgrading(): boolean { return this.scene?.upgrading ?? false; }
 
   public stop(): void {
     this.scene?.shutdownBattle();

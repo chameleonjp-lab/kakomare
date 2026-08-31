@@ -1,9 +1,26 @@
 import type { WeaponId } from '../../types/content';
 import type { ProjectileSnapshot } from '../../types/game';
 
+export interface ProjectileOptions {
+  id: number;
+  kind: 'needle' | 'cluster' | 'disc' | 'enemy';
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  damage: number;
+  life: number;
+  piercing: number;
+  enemyProjectile?: boolean;
+  bounces?: number;
+  hitCooldown?: number;
+  sourceWeaponId?: WeaponId | null;
+}
+
 export class Projectile {
   public readonly id: number;
-  public readonly kind: 'needle' | 'cluster' | 'disc' | 'enemy';
+  public kind: 'needle' | 'cluster' | 'disc' | 'enemy';
   public x: number;
   public y: number;
   public vx: number;
@@ -11,33 +28,36 @@ export class Projectile {
   public radius: number;
   public damage: number;
   public life: number;
-  public readonly maxLife: number;
+  public maxLife: number;
   public piercing: number;
-  public readonly enemyProjectile: boolean;
-  public readonly sourceWeaponId: WeaponId | null;
+  public enemyProjectile: boolean;
+  public sourceWeaponId: WeaponId | null;
   public active = true;
   public targetId: number | null = null;
   public bounces: number;
-  public readonly hitCooldown: number;
+  public hitCooldown: number;
   public readonly hitAt = new Map<number, number>();
 
-  public constructor(options: {
-    id: number;
-    kind: 'needle' | 'cluster' | 'disc' | 'enemy';
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    radius: number;
-    damage: number;
-    life: number;
-    piercing: number;
-    enemyProjectile?: boolean;
-    bounces?: number;
-    hitCooldown?: number;
-    sourceWeaponId?: WeaponId | null;
-  }) {
+  public constructor(options: ProjectileOptions) {
     this.id = options.id;
+    this.kind = options.kind;
+    this.x = 0;
+    this.y = 0;
+    this.vx = 0;
+    this.vy = 0;
+    this.radius = 0;
+    this.damage = 0;
+    this.life = 0;
+    this.maxLife = 0;
+    this.piercing = 0;
+    this.enemyProjectile = false;
+    this.sourceWeaponId = null;
+    this.bounces = 0;
+    this.hitCooldown = 0;
+    this.reset(options);
+  }
+
+  public reset(options: Omit<ProjectileOptions, 'id'>): void {
     this.kind = options.kind;
     this.x = options.x;
     this.y = options.y;
@@ -52,6 +72,9 @@ export class Projectile {
     this.sourceWeaponId = options.sourceWeaponId ?? null;
     this.bounces = options.bounces ?? 0;
     this.hitCooldown = options.hitCooldown ?? 0;
+    this.active = true;
+    this.targetId = null;
+    this.hitAt.clear();
   }
 
   public update(seconds: number): void {

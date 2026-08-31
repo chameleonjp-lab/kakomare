@@ -33,6 +33,7 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
       graphics.lineBetween(centerX, centerY, point.x, point.y);
       drawWeaponGlyph(graphics, point.x, point.y, weapon.id, color);
       if (weapon.branch) { graphics.lineStyle(2, 0xfff1a8, 0.9); graphics.strokeCircle(point.x, point.y, 33); }
+      if (weapon.finalBranch) { graphics.lineStyle(2, color, 0.95); graphics.strokeCircle(point.x, point.y, 37); }
     } else if (point) drawHex(graphics, point.x, point.y, 28, 0x07131f, 0.4, 0x163246);
   }
   for (let index = 0; index < 3; index += 1) {

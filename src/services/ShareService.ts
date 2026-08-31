@@ -1,6 +1,6 @@
 export interface ShareResult {
   success: boolean;
-  method: 'native' | 'clipboard' | 'manual' | 'failed';
+  method: 'native' | 'clipboard' | 'manual' | 'failed' | 'cancelled';
 }
 
 export class ShareService {
@@ -18,8 +18,9 @@ export class ShareService {
         await navigator.share({ title, text, url });
         return { success: true, method: 'native' };
       }
-    } catch {
-      // The user may close the native share sheet. Continue to a copy fallback.
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return { success: false, method: 'cancelled' };
+      if (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') return { success: false, method: 'cancelled' };
     }
     try {
       if (!navigator.clipboard) throw new Error('クリップボードが使えません。');

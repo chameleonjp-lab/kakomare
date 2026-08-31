@@ -19,7 +19,7 @@ npm run check
 
 ## 公開
 
-GitHub Pagesの公開パスは `/kakomare/` です。`main`へのpushだけが公開処理を起動します。Pull Requestでは品質検査だけを実行します。
+GitHub Pagesの公開パスは `/kakomare/` です。`main`へのpush、または`main`を対象にした手動実行だけが公開処理を起動します。Pull Requestでは品質検査だけを実行し、公開前にも同じ検査を再実行します。
 
 公開前の静的ファイル、favicon、OGP画像、公開サブパスは `npm run verify:dist` で確認します。公開後のiPhone Safari確認は [公開確認手順](docs/RELEASE_CHECKLIST.md) の順番で行います。
 

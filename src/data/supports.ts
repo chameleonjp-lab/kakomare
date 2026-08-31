@@ -15,7 +15,11 @@ export const SUPPORTS: Record<SupportId, SupportDefinition> = {
   },
   focus: {
     id: 'focus', name: '収束環', description: '接続した武器の射程と弾速を高めます。', role: '射程・弾速', color: 0x78a8ff, maxLevel: 3,
-    levels: [{ value: 0.08, label: '射程 +8% / 弾速 +10%' }, { value: 0.12, label: '射程 +12% / 弾速 +15%' }, { value: 0.18, label: '射程 +18% / 弾速 +22%' }],
+    levels: [
+      { value: 0.08, secondaryValue: 0.1, label: '射程 +8% / 弾速 +10%' },
+      { value: 0.12, secondaryValue: 0.15, label: '射程 +12% / 弾速 +15%' },
+      { value: 0.18, secondaryValue: 0.22, label: '射程 +18% / 弾速 +22%' },
+    ],
   },
   observe: {
     id: 'observe', name: '観測環', description: '特殊な性質を持つ敵へ与える威力を高めます。', role: '特殊敵への威力', color: 0xf4e285, maxLevel: 3,

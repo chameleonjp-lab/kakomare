@@ -8,7 +8,7 @@ function isBossId(type: EnemyId | BossId): type is BossId {
 }
 
 export class Enemy {
-  public readonly id: number;
+  public id: number;
   public readonly type: EnemyId | BossId;
   public readonly isBoss: boolean;
   public angle: number;
@@ -16,7 +16,7 @@ export class Enemy {
   public y: number;
   public radius: number;
   public hp: number;
-  public readonly maxHp: number;
+  public maxHp: number;
   public shieldHits: number;
   public invulnerable = false;
   public telegraph = false;
@@ -29,27 +29,53 @@ export class Enemy {
   public shotCooldown = 0;
   public specialCooldown = 0;
   public lastHitAt = -Infinity;
+  public specialDamageTaken = 0;
+  private age = 0;
 
-  public constructor(id: number, type: EnemyId | BossId, angle: number, distance: number, difficulty = 1) {
+  public constructor(id: number, type: EnemyId | BossId, angle: number, distance: number, difficulty = 1, speedMultiplierCap = 1.25) {
     this.id = id;
     this.type = type;
     this.isBoss = isBossId(type);
     this.angle = angle;
-    const definition = this.isBoss ? BOSSES[type as BossId] : ENEMIES[type as EnemyId];
+    this.x = 0;
+    this.y = 0;
+    this.radius = distance;
+    this.hp = 0;
+    this.maxHp = 0;
+    this.shieldHits = 0;
+    this.contactDamage = 0;
+    this.speed = 0;
+    this.reset(id, angle, distance, difficulty, speedMultiplierCap);
+  }
+
+  public reset(id: number, angle: number, distance: number, difficulty = 1, speedMultiplierCap = 1.25): void {
+    const definition = this.isBoss ? BOSSES[this.type as BossId] : ENEMIES[this.type as EnemyId];
+    this.id = id;
+    this.angle = angle;
     this.maxHp = definition.hp * difficulty;
     this.hp = this.maxHp;
     this.contactDamage = definition.contactDamage;
-    this.speed = definition.speed * Math.min(1.4, 1 + (difficulty - 1) * 0.3);
+    this.speed = definition.speed * Math.min(speedMultiplierCap, 1 + (difficulty - 1) * 0.3);
     this.radius = distance;
     this.x = Math.cos(angle) * distance;
     this.y = Math.sin(angle) * distance;
-    this.shieldHits = type === 'lattice' ? 8 : 0;
-    this.shotCooldown = type === 'dropper' ? 1.1 : 0;
+    this.shieldHits = this.type === 'lattice' ? 8 : 0;
+    this.invulnerable = false;
+    this.telegraph = false;
+    this.shieldRotation = 0;
+    this.slowUntil = 0;
+    this.active = true;
+    this.splitDone = false;
+    this.shotCooldown = this.type === 'dropper' ? 1.1 : 0;
     this.specialCooldown = this.isBoss ? 1.2 : 0;
+    this.lastHitAt = -Infinity;
+    this.specialDamageTaken = 0;
+    this.age = 0;
   }
 
   public update(seconds: number, elapsed: number, core: Point, movementMultiplier: number, speedMultiplier = 1): boolean {
     if (!this.active) return false;
+    this.age += seconds;
     const isStopped = this.isBoss && this.radius <= 196 || this.type === 'dropper' && this.radius <= 250;
     const slow = elapsed < this.slowUntil ? 0.55 : 1;
     if (!isStopped) this.radius -= this.speed * slow * movementMultiplier * speedMultiplier * seconds;
@@ -58,17 +84,18 @@ export class Enemy {
     if (this.type === 'runner') this.y += Math.sin(elapsed * 8 + this.id) * 2;
     if (this.type === 'lattice') this.telegraph = this.shieldHits > 0;
     if (this.type === 'dropper') {
-      this.shotCooldown -= seconds;
-      this.telegraph = this.radius <= 250 && this.shotCooldown <= 0.2;
+      if (this.radius <= 250) this.shotCooldown -= seconds;
+      this.telegraph = this.radius <= 250 && this.shotCooldown <= 1.1;
     }
     if (this.type === 'phase') {
-      const cycle = elapsed % 1.4;
+      const cycle = this.age % 1.4;
       this.invulnerable = cycle >= 0.85;
       this.telegraph = cycle >= 0.6;
     }
     if (this.type === 'crown') {
       this.telegraph = this.radius < 300;
-      this.shieldRotation = elapsed * (elapsed > 175 ? -1.1 : 0.9);
+      const phase = this.age % 16;
+      this.shieldRotation = (phase <= 8 ? phase : 16 - phase) * 0.9;
     }
     if (this.type === 'designer' || this.type === 'echo') this.telegraph = this.specialCooldown <= 0;
     return !this.isBoss && this.radius <= 52;
@@ -80,10 +107,11 @@ export class Enemy {
       this.shieldHits -= 1;
       return { dealt: 0, destroyed: false, blocked: true };
     }
-    if (this.type === 'crown' && this.isShielded(attackAngle, elapsed)) return { dealt: 0, destroyed: false, blocked: true };
+    if (this.type === 'crown' && this.isShielded(attackAngle)) return { dealt: 0, destroyed: false, blocked: true };
     const limited = this.type === 'crown' ? Math.min(60, amount) : this.type === 'shell' ? Math.min(24, amount) : amount;
-    const dealt = Math.max(0, limited);
+    const dealt = Math.max(0, Math.min(this.hp, limited));
     this.hp -= dealt;
+    if (this.type === 'echo') this.specialDamageTaken += dealt;
     this.lastHitAt = elapsed;
     const destroyed = this.hp <= 0;
     if (destroyed) this.active = false;
@@ -138,8 +166,8 @@ export class Enemy {
     };
   }
 
-  private isShielded(attackAngle: number, elapsed: number): boolean {
-    const rotation = elapsed > 175 ? -elapsed * 1.1 : elapsed * 0.9;
+  private isShielded(attackAngle: number): boolean {
+    const rotation = this.shieldRotation;
     for (let index = 0; index < 3; index += 1) {
       const plate = rotation + index * Math.PI * 2 / 3;
       const difference = Math.abs(((attackAngle - plate + Math.PI) % (Math.PI * 2)) - Math.PI);

@@ -31,12 +31,18 @@ export interface SpawnRequest {
 }
 
 export class SpawnDirector {
+  private static readonly UPDATE_STEP = 1 / 60;
+  private static readonly STEP_EPSILON = 1e-10;
   private budget = 0;
   private lastSector = -1;
   private consecutiveSectorCount = 0;
   private readonly rng: DeterministicRng;
   private bossSent = false;
+  private bossPending = false;
   private nextBossAt: number;
+  private updateAccumulator = 0;
+  private simulatedElapsed = 0;
+  private pendingEnemy: EnemyId | null = null;
 
   public constructor(private readonly stageId: StageId, seed: number, private readonly testMode = false) {
     this.rng = new DeterministicRng(seed);
@@ -55,39 +61,55 @@ export class SpawnDirector {
     return this.testMode ? 40 : STAGES[this.stageId].enemyLimit;
   }
 
-  public update(seconds: number, elapsed: number, activeEnemyCount: number, emit: (request: SpawnRequest) => void): void {
-    if (activeEnemyCount >= this.enemyLimit) return;
+  public update(seconds: number, _elapsed: number, activeEnemyCount: number, emit: (request: SpawnRequest) => void, reservedSlots = 0): void {
+    this.updateAccumulator += Math.max(0, seconds);
+    let count = activeEnemyCount;
+    const spawnLimit = Math.max(0, this.enemyLimit - Math.max(0, Math.floor(reservedSlots)));
+    while (this.updateAccumulator + SpawnDirector.STEP_EPSILON >= SpawnDirector.UPDATE_STEP) {
+      this.updateAccumulator -= SpawnDirector.UPDATE_STEP;
+      if (this.updateAccumulator < 0 && this.updateAccumulator > -SpawnDirector.STEP_EPSILON) this.updateAccumulator = 0;
+      this.simulatedElapsed += SpawnDirector.UPDATE_STEP;
+      count = this.updateSpawnStep(SpawnDirector.UPDATE_STEP, this.simulatedElapsed, count, spawnLimit, emit);
+    }
+  }
+
+  private updateSpawnStep(seconds: number, elapsed: number, activeEnemyCount: number, spawnLimit: number, emit: (request: SpawnRequest) => void): number {
     const stage = STAGES[this.stageId];
-    const endlessScale = stage.isEndless ? 1 + Math.floor(elapsed / 300) * 0.12 : 1;
+    const endlessScale = stage.isEndless ? Math.pow(1.12, Math.floor(elapsed / 300)) : 1;
     const base = this.testMode ? 3.8 : stage.budgetBase * endlessScale;
     const rise = this.testMode ? 0.09 : stage.budgetRise * endlessScale;
     this.budget += (base + elapsed * rise) * seconds;
-    const choices = this.availableEnemies(elapsed);
-    const cheapest = Math.min(...choices.map((type) => ENEMIES[type].threatCost));
     let count = activeEnemyCount;
-    while (this.budget >= cheapest && count < this.enemyLimit) {
-      const affordable = choices.filter((type) => ENEMIES[type].threatCost <= this.budget);
-      if (affordable.length === 0) break;
-      const type = this.rng.pick(affordable);
+    while (count < spawnLimit) {
+      const type = this.pendingEnemy ?? this.rng.pick(this.availableEnemies(elapsed));
+      this.pendingEnemy = type;
+      if (this.budget + SpawnDirector.STEP_EPSILON < ENEMIES[type].threatCost) break;
       this.budget -= ENEMIES[type].threatCost;
+      this.pendingEnemy = null;
       const sector = this.chooseSector();
       emit({ type, angle: sector * Math.PI / 3 + (this.rng.next() - 0.5) * 0.24 });
       count += 1;
     }
+    return count;
+  }
+
+  public requestBossSpawn(elapsed: number): boolean {
+    if (this.bossPending) return true;
+    if (this.stageId !== 'endless' && this.bossSent) return false;
+    if (elapsed < this.nextBossAt) return false;
+    this.bossPending = true;
+    return true;
   }
 
   public shouldSpawnBoss(elapsed: number): boolean {
-    if (this.stageId === 'endless') {
-      if (elapsed < this.nextBossAt) return false;
-      this.nextBossAt += 300;
-      this.bossSent = true;
-      return true;
-    }
-    if (!this.bossSent && elapsed >= this.nextBossAt) {
-      this.bossSent = true;
-      return true;
-    }
-    return false;
+    return this.requestBossSpawn(elapsed);
+  }
+
+  public confirmBossSpawn(): void {
+    if (!this.bossPending) return;
+    this.bossPending = false;
+    this.bossSent = true;
+    if (this.stageId === 'endless') this.nextBossAt += 300;
   }
 
   public get rngForEvents(): DeterministicRng {
@@ -112,6 +134,11 @@ export class SpawnDirector {
       if (elapsed < 45) return inStage(['shard', 'runner', 'lattice']);
       if (elapsed < 120) return inStage(['shard', 'runner', 'lattice', 'shell', 'spore', 'marker']);
       return inStage(stage.enemies);
+    }
+    if (elapsed >= 900) {
+      const common = new Set<EnemyId>(['shard', 'runner']);
+      const special = stage.enemies.filter((id) => !common.has(id));
+      return [...stage.enemies, ...special, ...special];
     }
     const window = elapsed % 300;
     if (window < 45) return ['shard', 'runner', 'shell'];

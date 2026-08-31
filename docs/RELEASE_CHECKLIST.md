@@ -1,19 +1,20 @@
 # カコマレ 公開確認チェックリスト
 
-PR3の自動検査と、公開後のiPhone Safari確認を同じ順番で記録します。問題が一つでもある場合は、次のPRへ進まず `fix/release-quality` で修正します。
+#3マージ後の是正PRについて、自動検査と公開後のiPhone Safari確認を同じ順番で記録します。問題が一つでもある場合は、是正PRをマージせず `fix/post-release-completion` で修正します。
 
 ## 自動検査
 
-- [ ] `npm ci`
-- [ ] `npm run lint`
-- [ ] `npm run typecheck`
-- [ ] `npm run test`
-- [ ] `npm run test:e2e`
-- [ ] `npm run build`
-- [ ] `npm run verify:dist`
-- [ ] `npm run verify:originality`
-- [ ] `npm run check`
-- [ ] GitHub ActionsのChromiumとWebKit
+- [x] `npm ci`
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm run test`（14ファイル、89件）
+- [x] `npm run test:e2e:chromium`（24件）
+- [x] `npm run test:e2e`相当（Actionsで順次実行）
+- [x] `npm run build`
+- [x] `npm run verify:dist`
+- [x] `npm run verify:originality`
+- [x] `npm run check`相当（Actionsで各検査を順次実行）
+- [x] GitHub ActionsのChromiumとWebKit
 
 ## 静的公開
 
@@ -52,8 +53,8 @@ PR3の自動検査と、公開後のiPhone Safari確認を同じ順番で記録�
 
 ## 記録欄
 
-- 公開URL:
+- 公開URL: https://chameleonjp-lab.github.io/kakomare/
 - 確認端末 / iOS / Safari:
 - 実施日時:
-- 自動検査のActions URL:
-- 未確認事項:
+- 自動検査のActions URL: https://github.com/chameleonjp-lab/kakomare/actions/runs/33353475007
+- 未確認事項: マージ後の静的公開、iPhone Safari実機

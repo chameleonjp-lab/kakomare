@@ -1,4 +1,4 @@
-import type { BossId, EnemyId, StageId, SupportId, WeaponBranch, WeaponId } from './content';
+import type { BossId, EnemyId, StageId, SupportId, WeaponBranch, WeaponFinalBranch, WeaponId } from './content';
 
 export interface Point {
   x: number;
@@ -43,6 +43,7 @@ export interface WeaponSnapshot {
   level: number;
   damageDealt: number;
   branch: WeaponBranch | null;
+  finalBranch: WeaponFinalBranch | null;
 }
 
 export interface SupportSnapshot {
@@ -81,6 +82,8 @@ export interface UpgradeCandidate {
   after: string;
   role: string;
   isExisting: boolean;
+  details?: string;
+  requiresNewItemFirst?: boolean;
 }
 
 export interface UpgradePayload {
@@ -97,9 +100,11 @@ export interface BattleResult {
   coreRemaining: number;
   kills: number;
   bossDefeated: boolean;
+  bossesDefeated: number;
   bossId: BossId;
   partsEarned: number;
   weaponDamage: Partial<Record<WeaponId, number>>;
+  supportUsage: Partial<Record<SupportId, number>>;
   enemyKills: Partial<Record<EnemyId, number>>;
   sectorDamage: number[];
   controlSeconds: { slowed: number; pushed: number; pulled: number };
@@ -116,4 +121,5 @@ export interface BattleCallbacks {
   onUpgrade: (payload: UpgradePayload) => void;
   onFinish: (result: BattleResult) => void;
   onStatus: (message: string) => void;
+  onPauseRequest: () => void;
 }

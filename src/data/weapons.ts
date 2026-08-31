@@ -14,6 +14,8 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     branches: [
       { id: 'spread', name: '分散型', description: '三方向へ弾を広げ、小型の集団に対応します。', atLevel: 3 },
       { id: 'piercing', name: '貫通型', description: '弾速と貫通数を増やし、硬い敵の列を抜きます。', atLevel: 3 },
+      { id: 'power', name: '針圧深化', description: '一射ごとの威力を22%高め、硬い敵を削り切ります。', atLevel: 5, damageMultiplier: 1.22 },
+      { id: 'tempo', name: '連射深化', description: '発射間隔を18%短くし、盾と小型敵へ途切れず撃ち込みます。', atLevel: 5, cooldownMultiplier: 0.82 },
     ],
   },
   ray: {
@@ -29,6 +31,8 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     branches: [
       { id: 'wide', name: '幅広型', description: '攻撃幅と残る時間を増やし、横に広い列を切ります。', atLevel: 3 },
       { id: 'reflect', name: '反射型', description: '外周で一度跳ね返り、別方向へも届きます。', atLevel: 3 },
+      { id: 'power', name: '光圧深化', description: '一閃の威力を22%高め、硬い列を切り抜きます。', atLevel: 5, damageMultiplier: 1.22 },
+      { id: 'tempo', name: '残光深化', description: '発射間隔を18%短くし、直線攻撃を重ねます。', atLevel: 5, cooldownMultiplier: 0.82 },
     ],
   },
   cluster: {
@@ -44,6 +48,8 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     branches: [
       { id: 'split', name: '分裂型', description: '着弾後に三方向へ小弾を放ちます。', atLevel: 3 },
       { id: 'residue', name: '残留型', description: '着弾地点へ短い減速領域を残します。', atLevel: 3 },
+      { id: 'power', name: '爆圧深化', description: '着弾威力を22%高め、密集した敵をまとめて崩します。', atLevel: 5, damageMultiplier: 1.22 },
+      { id: 'tempo', name: '装填深化', description: '発射間隔を18%短くし、危険な方向へ範囲攻撃を重ねます。', atLevel: 5, cooldownMultiplier: 0.82 },
     ],
   },
   repulse: {
@@ -59,6 +65,8 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     branches: [
       { id: 'strong-push', name: '強反発型', description: '押し戻し距離と威力を増やします。', atLevel: 3 },
       { id: 'delayed', name: '遅延型', description: '押し戻した敵の速度をさらに下げます。', atLevel: 3 },
+      { id: 'power', name: '衝圧深化', description: '衝撃波の威力を22%高め、コア近くの敵を崩します。', atLevel: 5, damageMultiplier: 1.22 },
+      { id: 'tempo', name: '循環深化', description: '発射間隔を18%短くし、防衛の空白を減らします。', atLevel: 5, cooldownMultiplier: 0.82 },
     ],
   },
   chain: {
@@ -74,6 +82,8 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     branches: [
       { id: 'chain', name: '多連鎖型', description: '連鎖回数を増やし、離れた敵へ攻撃を渡します。', atLevel: 3 },
       { id: 'burst', name: '終端破裂型', description: '最後の敵で小さな範囲攻撃を起こします。', atLevel: 3 },
+      { id: 'power', name: '電圧深化', description: '連鎖ごとの威力を22%高め、集団の奥まで削ります。', atLevel: 5, damageMultiplier: 1.22 },
+      { id: 'tempo', name: '導通深化', description: '発射間隔を18%短くし、新しい集団へ素早くつなぎます。', atLevel: 5, cooldownMultiplier: 0.82 },
     ],
   },
   orbit: {
@@ -89,6 +99,8 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     branches: [
       { id: 'many', name: '多刃型', description: '刃の数と回転速度を増やします。', atLevel: 3 },
       { id: 'outer', name: '外周型', description: '周回半径と刃の長さを増やします。', atLevel: 3 },
+      { id: 'power', name: '刃圧深化', description: '刃の威力を22%高め、接近した敵を確実に削ります。', atLevel: 5, damageMultiplier: 1.22 },
+      { id: 'tempo', name: '回転深化', description: '攻撃間隔を18%短くし、周囲へ細かく当て続けます。', atLevel: 5, cooldownMultiplier: 0.82 },
     ],
   },
   disc: {
@@ -104,6 +116,8 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     branches: [
       { id: 'echo', name: '反響型', description: '反射回数と速度を増やします。', atLevel: 3 },
       { id: 'trail', name: '軌跡型', description: '通過した場所へ短い攻撃線を残します。', atLevel: 3 },
+      { id: 'power', name: '円圧深化', description: '円盤の威力を22%高め、反射ごとの打撃を強めます。', atLevel: 5, damageMultiplier: 1.22 },
+      { id: 'tempo', name: '反響深化', description: '発射間隔を18%短くし、戦場へ複数の円盤を保ちます。', atLevel: 5, cooldownMultiplier: 0.82 },
     ],
   },
   gravity: {
@@ -119,6 +133,8 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     branches: [
       { id: 'long', name: '長時間型', description: '継続時間と吸引半径を増やします。', atLevel: 3 },
       { id: 'collapse', name: '崩壊型', description: '終了時に範囲攻撃を起こします。', atLevel: 3 },
+      { id: 'power', name: '重圧深化', description: '重力点の威力を22%高め、集めた敵を削ります。', atLevel: 5, damageMultiplier: 1.22 },
+      { id: 'tempo', name: '展開深化', description: '発射間隔を18%短くし、制御できない時間を減らします。', atLevel: 5, cooldownMultiplier: 0.82 },
     ],
   },
 };
