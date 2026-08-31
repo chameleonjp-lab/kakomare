@@ -38,6 +38,12 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
   const share = button('結果を共有'); share.addEventListener('click', actions.share);
   const home = button('ホーム'); home.addEventListener('click', actions.home);
   actionsGrid.append(again, share, home); shell.append(actionsGrid);
+  const ranking = card('online-ranking');
+  ranking.append(heading('スコアランキング TOP10', 3));
+  const rankingList = element('ol'); rankingList.dataset.onlineRankingList = 'true'; rankingList.append(element('li', '', 'ランキングを読み込み中…'));
+  const rankingStatus = element('p', 'ranking-status', ''); rankingStatus.dataset.onlineRankingStatus = 'true';
+  ranking.append(rankingList, rankingStatus);
+  shell.append(ranking);
   const external = element('a', 'experiment-link', 'カメレオンJPの実験場'); external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/'; external.target = '_blank'; external.rel = 'noopener noreferrer'; shell.append(external);
   return shell;
 }
