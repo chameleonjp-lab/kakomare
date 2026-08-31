@@ -25,6 +25,8 @@ export type WeaponBranch =
   | 'long'
   | 'collapse';
 
+export type WeaponFinalBranch = 'power' | 'tempo';
+
 export interface WeaponStats {
   damage: number;
   cooldown: number;
@@ -55,7 +57,14 @@ export interface WeaponDefinition {
   color: number;
   maxLevel: number;
   levels: WeaponStats[];
-  branches: Array<{ id: WeaponBranch; name: string; description: string; atLevel: 3 | 5 }>;
+  branches: Array<{
+    id: WeaponBranch | WeaponFinalBranch;
+    name: string;
+    description: string;
+    atLevel: 3 | 5;
+    damageMultiplier?: number;
+    cooldownMultiplier?: number;
+  }>;
 }
 
 export interface SupportDefinition {
@@ -65,7 +74,7 @@ export interface SupportDefinition {
   role: string;
   color: number;
   maxLevel: number;
-  levels: Array<{ value: number; label: string }>;
+  levels: Array<{ value: number; secondaryValue?: number; label: string }>;
 }
 
 export interface EnemyDefinition {

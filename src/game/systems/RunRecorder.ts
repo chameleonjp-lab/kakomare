@@ -1,4 +1,4 @@
-import type { BossId, EnemyId, StageId, WeaponId } from '../../types/content';
+import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
 import type { BattleResult } from '../../types/game';
 
 export class RunRecorder {
@@ -7,6 +7,7 @@ export class RunRecorder {
   public readonly runSeed: number;
   public readonly weaponDamage: Partial<Record<WeaponId, number>> = {};
   public readonly enemyKills: Partial<Record<EnemyId, number>> = {};
+  public readonly supportUsage: Partial<Record<SupportId, number>> = {};
   public readonly sectorDamage = [0, 0, 0, 0, 0, 0];
   public readonly upgrades: string[] = [];
   public readonly branches: string[] = [];
@@ -14,6 +15,7 @@ export class RunRecorder {
   public kills = 0;
   public score = 0;
   public bossDefeated = false;
+  public bossesDefeated = 0;
   public survivalTime = 0;
   public lastDamageSource = 'まだ被害はありません';
 
@@ -30,6 +32,10 @@ export class RunRecorder {
 
   public recordEnemyKill(id: EnemyId): void {
     this.enemyKills[id] = (this.enemyKills[id] ?? 0) + 1;
+  }
+
+  public recordSupportUsage(id: SupportId): void {
+    this.supportUsage[id] = (this.supportUsage[id] ?? 0) + 1;
   }
 
   public recordContact(angle: number, amount: number, source: string): void {
@@ -51,9 +57,11 @@ export class RunRecorder {
       coreRemaining,
       kills: this.kills,
       bossDefeated: this.bossDefeated,
+      bossesDefeated: this.bossesDefeated,
       bossId: this.bossId,
       partsEarned,
       weaponDamage: { ...this.weaponDamage },
+      supportUsage: { ...this.supportUsage },
       enemyKills: { ...this.enemyKills },
       sectorDamage: [...this.sectorDamage],
       controlSeconds: { ...this.controlSeconds },

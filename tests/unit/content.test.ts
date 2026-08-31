@@ -21,8 +21,9 @@ describe('PR2 content registry', () => {
   it('gives every weapon five levels and two planned branches', () => {
     for (const id of WEAPON_ORDER) {
       expect(WEAPONS[id].levels).toHaveLength(5);
-      expect(WEAPONS[id].branches).toHaveLength(2);
-      expect(WEAPONS[id].branches.every((branch) => branch.atLevel === 3)).toBe(true);
+      expect(WEAPONS[id].branches).toHaveLength(4);
+      expect(WEAPONS[id].branches.filter((branch) => branch.atLevel === 3)).toHaveLength(2);
+      expect(WEAPONS[id].branches.filter((branch) => branch.atLevel === 5)).toHaveLength(2);
     }
   });
 

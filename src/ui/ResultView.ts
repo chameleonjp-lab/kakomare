@@ -13,10 +13,10 @@ export interface ResultActions {
 
 export function createResultView(result: BattleResult, actions: ResultActions): HTMLElement {
   const stage = STAGES[result.stageId];
-  const shell = pageShell(result.retired ? 'プレイ終了' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗', result.retired ? 'このプレイの得点と報酬は確定していません。' : result.outcome === 'victory' ? `${stage.name}を突破しました。` : 'コアの耐久力が尽きました。');
+  const shell = pageShell(result.retired ? 'プレイ終了' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗', result.retired ? 'このプレイの得点と報酬は保存されません。' : result.outcome === 'victory' ? `${stage.name}を突破しました。` : result.mainCause);
   shell.dataset.testid = 'result-screen';
   const scoreCard = card('result-score-card');
-  scoreCard.append(heading(`${result.score.toLocaleString('ja-JP')} 点`, 2));
+  scoreCard.append(heading(result.retired ? '記録は未確定です' : `${result.score.toLocaleString('ja-JP')} 点`, 2));
   scoreCard.append(element('p', 'result-highlight', `${Math.floor(result.survivalTime)}秒生存 / 撃破 ${result.kills} / ${BOSSES[result.bossId].name}`));
   shell.append(scoreCard);
   const details = card('result-details');
@@ -24,9 +24,9 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
   const rows: Array<[string, string]> = [
     ['ステージ', stage.name],
     ['残り耐久力', `${Math.max(0, Math.round(result.coreRemaining))}`],
-    ['ボス撃破', result.bossDefeated ? 'あり' : 'なし'],
-    ['獲得部品', `${result.partsEarned}`],
-    ['主な敗因', result.mainCause],
+    ['ボス撃破', `${result.bossesDefeated}体`],
+    ['獲得部品', result.retired ? '未確定' : `${result.partsEarned}`],
+    [result.retired ? '終了理由' : '主な敗因', result.mainCause],
     ['減速 / 押し戻し / 吸引', `${result.controlSeconds.slowed.toFixed(1)}秒 / ${result.controlSeconds.pushed.toFixed(1)}秒 / ${result.controlSeconds.pulled.toFixed(1)}秒`],
     ['方向別の被害', result.sectorDamage.map((value, index) => `${index + 1}方向 ${Math.round(value)}`).join(' / ')],
   ];
@@ -50,7 +50,8 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
   }
   const share = button('結果を共有'); share.dataset.testid = 'share-result'; share.addEventListener('click', actions.share);
   const home = button('ホーム'); home.addEventListener('click', actions.home);
-  actionsGrid.append(share, home); shell.append(actionsGrid);
+  if (!result.retired) actionsGrid.append(share);
+  actionsGrid.append(home); shell.append(actionsGrid);
   const external = element('a', 'experiment-link', 'カメレオンJPの実験場'); external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/'; external.target = '_blank'; external.rel = 'noopener noreferrer'; shell.append(external);
   return shell;
 }

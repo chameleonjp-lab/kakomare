@@ -6,9 +6,13 @@ export class ProjectilePool {
 
   public acquire(options: Omit<ConstructorParameters<typeof Projectile>[0], 'id'>): Projectile {
     const reusable = this.items.find((projectile) => !projectile.active && projectile.kind === options.kind);
-    const projectile = new Projectile({ ...options, id: reusable?.id ?? this.nextId });
-    if (reusable) this.items[this.items.indexOf(reusable)] = projectile;
-    else { this.items.push(projectile); this.nextId += 1; }
+    if (reusable) {
+      reusable.reset(options);
+      return reusable;
+    }
+    const projectile = new Projectile({ ...options, id: this.nextId });
+    this.items.push(projectile);
+    this.nextId += 1;
     return projectile;
   }
 
