@@ -21,7 +21,8 @@ import { RunRecorder } from '../systems/RunRecorder';
 import { collideEnemyProjectiles, collideProjectiles } from '../systems/CollisionSystem';
 import { createUpgradeCandidateList, applyUpgradeCandidate, shouldRetryUpgradeDraw, wouldStrandNewItems } from '../systems/UpgradeSystem';
 import { DeterministicRng, seedFromStage, SpawnDirector } from '../systems/SpawnDirector';
-import { selectTarget } from '../systems/TargetingSystem';
+import { MANUAL_AIM_HALF_ANGLE, selectTarget } from '../systems/TargetingSystem';
+import { advanceOrbitAngle } from '../systems/OrbitSystem';
 import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
 import type { BattleCallbacks, BattleResult, BattleSnapshot, Point, UpgradeCandidate, UpgradePayload } from '../../types/game';
 import type { ResearchEffects } from '../../data/research';
@@ -50,7 +51,6 @@ const MAX_ENEMY_PROJECTILES = 80;
 const MAX_GRAVITY_FIELDS = 24;
 const LOGICAL_RENDER_SIZE = 720;
 const ARENA_RADIUS = 325;
-const MANUAL_AIM_HALF_ANGLE = Math.PI / 6;
 const CLUSTER_TELEGRAPH_SECONDS = 0.45;
 
 export class BattleScene extends Phaser.Scene {
@@ -278,6 +278,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (this.core.health <= 0) { this.finish('defeat', this.recorder.lastDamageSource); return; }
     this.updateDropperAttacks();
+    this.updateOrbitAngles(seconds);
 
     for (const weapon of this.weapons) {
       const intervalMultiplier = Math.max(0.7, 1 - this.supportEffect('rhythm', weapon.slot));
@@ -471,10 +472,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fireOrbit(weapon: Weapon, damage: number): void {
-    const previous = this.orbitAngles.get(weapon.slot) ?? 0;
-    const speed = (weapon.stats.orbitSpeed ?? 1.9) * (weapon.branch === 'many' ? 1.25 : 1);
-    const angle = previous + speed * 0.1;
-    this.orbitAngles.set(weapon.slot, angle);
+    const angle = this.orbitAngles.get(weapon.slot) ?? 0;
     const count = (weapon.stats.count ?? 2) + (weapon.branch === 'many' ? 1 : 0);
     const radius = (weapon.stats.orbitRadius ?? 108) + (weapon.branch === 'outer' ? 38 : 0);
     const bladeLength = (weapon.stats.bladeLength ?? 32) + (weapon.branch === 'outer' ? 28 : 0);
@@ -495,6 +493,15 @@ export class BattleScene extends Phaser.Scene {
         if (result.destroyed) this.handleEnemyDestroyed(enemy);
         if (this.state === 'finished') return;
       }
+    }
+  }
+
+  private updateOrbitAngles(seconds: number): void {
+    for (const weapon of this.weapons) {
+      if (weapon.id !== 'orbit') continue;
+      const speed = (weapon.stats.orbitSpeed ?? 1.9) * (weapon.branch === 'many' ? 1.25 : 1);
+      const previous = this.orbitAngles.get(weapon.slot) ?? 0;
+      this.orbitAngles.set(weapon.slot, advanceOrbitAngle(previous, speed, seconds));
     }
   }
 
