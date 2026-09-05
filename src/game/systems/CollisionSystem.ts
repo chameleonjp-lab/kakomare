@@ -20,6 +20,7 @@ export interface CollisionDiagnostics {
 }
 
 const COLLISION_CELL_SIZE = 64;
+const MAX_ENEMY_HIT_RADIUS = 48;
 
 export function collideProjectiles(
   projectiles: Projectile[],
@@ -33,22 +34,31 @@ export function collideProjectiles(
   const enemyGrid = createSpatialGrid(enemies, (enemy) => enemy.active);
   for (const projectile of projectiles) {
     if (!projectile.active || projectile.enemyProjectile) continue;
-    for (const enemyIndex of nearbyIndices(enemyGrid, projectile.x, projectile.y, projectile.radius + 16)) {
+    // Cluster shots resolve their area damage at the stored impact point.
+    // They must not damage enemies while travelling there.
+    if (projectile.kind === 'cluster') continue;
+    for (const enemyIndex of nearbyIndices(enemyGrid, projectile.x, projectile.y, projectile.radius + MAX_ENEMY_HIT_RADIUS)) {
       const enemy = enemies[enemyIndex];
       if (!enemy) continue;
       if (!enemy.active) continue;
       if (diagnostics) diagnostics.candidateChecks += 1;
       const lastHit = projectile.hitAt.get(enemy.id);
       if (projectile.kind === 'disc' && lastHit !== undefined && elapsed - lastHit < projectile.hitCooldown) continue;
-      if (projectile.kind !== 'disc' && projectile.targetId === enemy.id) continue;
+      // A piercing shot may remain active across several frames. Remember
+      // every enemy it has already passed through, rather than only the last
+      // one, so a slow shot cannot repeatedly damage the same target.
+      if (projectile.kind !== 'disc' && projectile.hitAt.has(enemy.id)) continue;
       const distance = Math.hypot(projectile.x - enemy.x, projectile.y - enemy.y);
-      if (distance > projectile.radius + 16) continue;
+      if (distance > projectile.radius + enemy.hitRadius) continue;
       const result = applyDamage(enemy, damageForEnemy(projectile, enemy), elapsed, Math.atan2(projectile.vy, projectile.vx));
       projectile.targetId = enemy.id;
       projectile.hitAt.set(enemy.id, elapsed);
       if (projectile.kind === 'disc') {
         if (projectile.bounces <= 0) projectile.active = false;
-        else projectile.bounces -= 1;
+        else {
+          projectile.bounces -= 1;
+          reflectProjectileFromEnemy(projectile, enemy);
+        }
       } else if (projectile.piercing <= 0) projectile.active = false;
       else projectile.piercing -= 1;
       const event = { projectile, enemy, damage: result.amount, destroyed: result.destroyed, blocked: result.blocked };
@@ -58,6 +68,26 @@ export function collideProjectiles(
     }
   }
   return events;
+}
+
+function reflectProjectileFromEnemy(projectile: Projectile, enemy: Enemy): void {
+  let nx = projectile.x - enemy.x;
+  let ny = projectile.y - enemy.y;
+  const normalLength = Math.hypot(nx, ny);
+  if (normalLength < 1e-6) {
+    const speed = Math.hypot(projectile.vx, projectile.vy) || 1;
+    nx = -projectile.vx / speed;
+    ny = -projectile.vy / speed;
+  } else {
+    nx /= normalLength;
+    ny /= normalLength;
+  }
+  const dot = projectile.vx * nx + projectile.vy * ny;
+  projectile.vx -= 2 * dot * nx;
+  projectile.vy -= 2 * dot * ny;
+  const separation = projectile.radius + enemy.hitRadius + 0.5;
+  projectile.x = enemy.x + nx * separation;
+  projectile.y = enemy.y + ny * separation;
 }
 
 export function collideEnemyProjectiles(projectiles: Projectile[], diagnostics?: CollisionDiagnostics): EnemyProjectileCollisionEvent[] {

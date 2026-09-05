@@ -46,6 +46,13 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
       graphics.lineBetween(centerX, centerY, point.x, point.y);
       graphics.lineStyle(1, color, 0.9);
       graphics.strokeCircle(point.x, point.y, 15 + support.level * 2);
+      const connectedWeaponSlots = [support.slot, (support.slot + 1) % 3];
+      for (const weaponSlot of connectedWeaponSlots) {
+        const weaponPoint = points[weaponSlot * 2];
+        if (!weaponPoint || !weapons[weaponSlot]) continue;
+        graphics.lineStyle(3, color, Math.min(1, 0.35 + support.level * 0.18));
+        graphics.lineBetween(point.x, point.y, weaponPoint.x, weaponPoint.y);
+      }
     } else if (point) drawHex(graphics, point.x, point.y, 24, 0x07131f, 0.4, 0x163246);
   }
   graphics.lineStyle(2, 0xf2f0e8, 0.9);
@@ -58,14 +65,44 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
 
 function drawWeaponGlyph(graphics: Phaser.GameObjects.Graphics, x: number, y: number, id: WeaponSnapshot['id'], color: number): void {
   graphics.lineStyle(2, 0xf2f0e8, 0.86);
-  if (id === 'needle') graphics.lineBetween(x - 10, y, x + 10, y);
-  else if (id === 'ray') graphics.lineBetween(x - 11, y, x + 11, y);
-  else if (id === 'cluster') graphics.strokeCircle(x, y, 8);
-  else if (id === 'repulse') graphics.strokeCircle(x, y, 10);
-  else if (id === 'chain') graphics.lineBetween(x - 8, y - 7, x + 8, y + 7);
-  else if (id === 'orbit') graphics.strokeCircle(x, y, 9);
-  else if (id === 'disc') graphics.fillCircle(x, y, 7);
-  else graphics.strokeCircle(x, y, 7);
+  if (id === 'needle') {
+    graphics.lineBetween(x - 10, y - 6, x + 8, y - 6);
+    graphics.lineBetween(x - 10, y, x + 10, y);
+    graphics.lineBetween(x - 8, y + 6, x + 10, y + 6);
+    graphics.fillTriangle(x + 10, y - 3, x + 10, y + 3, x + 14, y);
+  } else if (id === 'ray') {
+    graphics.lineBetween(x - 12, y, x + 12, y);
+    graphics.lineBetween(x - 7, y - 6, x - 7, y + 6);
+    graphics.lineBetween(x + 7, y - 6, x + 7, y + 6);
+  } else if (id === 'cluster') {
+    graphics.strokeCircle(x - 5, y + 4, 4);
+    graphics.strokeCircle(x + 5, y + 4, 4);
+    graphics.strokeCircle(x, y - 5, 4);
+  } else if (id === 'repulse') {
+    graphics.strokeCircle(x, y, 5);
+    graphics.strokeCircle(x, y, 10);
+    for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      graphics.lineBetween(x + Math.cos(angle) * 7, y + Math.sin(angle) * 7, x + Math.cos(angle) * 13, y + Math.sin(angle) * 13);
+    }
+  } else if (id === 'chain') {
+    graphics.strokeCircle(x - 7, y, 5);
+    graphics.strokeCircle(x + 7, y, 5);
+    graphics.lineBetween(x - 3, y - 3, x + 3, y - 3);
+    graphics.lineBetween(x - 3, y + 3, x + 3, y + 3);
+  } else if (id === 'orbit') {
+    graphics.strokeCircle(x, y, 10);
+    graphics.fillCircle(x, y, 3);
+    graphics.lineBetween(x - 1, y - 13, x + 1, y - 7);
+  } else if (id === 'disc') {
+    drawPolygon(graphics, polygonPoints(x, y, 9, 6), color, 0.55, 0xf2f0e8);
+    graphics.strokeCircle(x, y, 4);
+  } else {
+    graphics.strokeCircle(x, y, 7);
+    graphics.lineBetween(x - 10, y, x - 4, y);
+    graphics.lineBetween(x + 4, y, x + 10, y);
+    graphics.lineBetween(x, y - 10, x, y - 4);
+    graphics.lineBetween(x, y + 4, x, y + 10);
+  }
   graphics.lineStyle(1, color, 0.75);
-  if (id === 'chain' || id === 'gravity') drawPolygon(graphics, polygonPoints(x, y, 11, 4, Math.PI / 4), color, 0.22, color);
+  if (id === 'gravity') drawPolygon(graphics, polygonPoints(x, y, 11, 4, Math.PI / 4), color, 0.22, color);
 }

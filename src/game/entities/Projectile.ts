@@ -16,6 +16,10 @@ export interface ProjectileOptions {
   bounces?: number;
   hitCooldown?: number;
   sourceWeaponId?: WeaponId | null;
+  impactX?: number;
+  impactY?: number;
+  impactRadius?: number;
+  impactAngle?: number;
 }
 
 export class Projectile {
@@ -36,6 +40,11 @@ export class Projectile {
   public targetId: number | null = null;
   public bounces: number;
   public hitCooldown: number;
+  public impactX: number | null;
+  public impactY: number | null;
+  public impactRadius: number;
+  public impactAngle: number;
+  public impactWarningShown = false;
   public readonly hitAt = new Map<number, number>();
 
   public constructor(options: ProjectileOptions) {
@@ -54,6 +63,10 @@ export class Projectile {
     this.sourceWeaponId = null;
     this.bounces = 0;
     this.hitCooldown = 0;
+    this.impactX = null;
+    this.impactY = null;
+    this.impactRadius = 0;
+    this.impactAngle = 0;
     this.reset(options);
   }
 
@@ -72,6 +85,11 @@ export class Projectile {
     this.sourceWeaponId = options.sourceWeaponId ?? null;
     this.bounces = options.bounces ?? 0;
     this.hitCooldown = options.hitCooldown ?? 0;
+    this.impactX = options.impactX ?? null;
+    this.impactY = options.impactY ?? null;
+    this.impactRadius = options.impactRadius ?? 0;
+    this.impactAngle = options.impactAngle ?? 0;
+    this.impactWarningShown = false;
     this.active = true;
     this.targetId = null;
     this.hitAt.clear();

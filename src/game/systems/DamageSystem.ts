@@ -13,7 +13,9 @@ export function applyDamage(enemy: Enemy, amount: number, elapsed: number, attac
 }
 
 export function applyContactDamage(core: Core, enemy: Enemy): number {
-  if (!enemy.active || enemy.isBoss && enemy.radius > 52) return 0;
+  // Bosses stop on the inner ring and use their own special attacks. They are
+  // never allowed to become an invisible contact-damage source at the core.
+  if (!enemy.active || enemy.isBoss) return 0;
   enemy.active = false;
   return core.damage(enemy.contactDamage);
 }

@@ -85,6 +85,29 @@ describe('UpgradeSystem', () => {
     expect(supportEffectsFor([brake], 'brake', 1).primary).toBe(0);
   });
 
+  it('caps additive support effects at their documented limits', () => {
+    const observeA = new SupportModule('observe', 0);
+    const observeB = new SupportModule('observe', 1);
+    observeA.level = 3;
+    observeB.level = 3;
+    expect(supportEffectsFor([observeA, observeB], 'observe', 1).primary).toBe(0.45);
+
+    const focusA = new SupportModule('focus', 0);
+    const focusB = new SupportModule('focus', 1);
+    focusA.level = 3;
+    focusB.level = 3;
+    expect(supportEffectsFor([focusA, focusB], 'focus', 1)).toEqual({ primary: 0.35, secondary: 0.35 });
+  });
+
+  it('installs new weapons and supports on the requested empty face', () => {
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1)];
+    const supports: SupportModule[] = [];
+    applyUpgradeCandidate({ id: 'weapon:cluster:new', kind: 'weapon', targetId: 'cluster', title: '', description: '', before: '', after: '', role: '', isExisting: false, placementSlot: 2 }, weapons, supports, () => undefined);
+    expect(weapons.find((weapon) => weapon.id === 'cluster')?.slot).toBe(2);
+    applyUpgradeCandidate({ id: 'support:focus:new', kind: 'support', targetId: 'focus', title: '', description: '', before: '', after: '', role: '', isExisting: false, placementSlot: 1 }, weapons, supports, () => undefined);
+    expect(supports[0]?.slot).toBe(1);
+  });
+
   it('offers and applies a level-three development branch', () => {
     const weapons = [new Weapon('needle', 0)];
     weapons[0]!.level = 2;

@@ -9,11 +9,13 @@ export function drawTelegraphs(graphics: Phaser.GameObjects.Graphics, enemies: E
     graphics.lineStyle(enemy.isBoss ? 4 : 2, 0xfff1a8, 0.9);
     graphics.lineBetween(centerX + Math.cos(angle) * 185, centerY + Math.sin(angle) * 185, centerX + Math.cos(angle) * length, centerY + Math.sin(angle) * length);
     if (!enemy.isBoss) {
-      graphics.strokeCircle(centerX + enemy.x, centerY + enemy.y, enemy.radius > 0 ? 22 : 12);
+      graphics.strokeCircle(centerX + enemy.x, centerY + enemy.y, enemy.hitRadius + 8);
     }
     if (enemy.type === 'phase') {
-      graphics.lineStyle(2, 0x78a8ff, 0.8);
-      graphics.strokeCircle(centerX + enemy.x, centerY + enemy.y, 28);
+      const phase = enemy.telegraphPhase ?? 0;
+      const pulse = 0.25 + (Math.sin(phase * Math.PI * 24) + 1) * 0.3;
+      graphics.lineStyle(2, 0x78a8ff, pulse);
+      graphics.strokeCircle(centerX + enemy.x, centerY + enemy.y, enemy.hitRadius + 10 + pulse * 4);
     }
   }
 }

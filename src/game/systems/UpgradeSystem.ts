@@ -131,7 +131,7 @@ export function applyUpgradeCandidate(candidate: UpgradeCandidate, weapons: Weap
   if (candidate.kind === 'repair') { heal(20); return; }
   if (candidate.kind === 'weapon') {
     const weapon = weapons.find((item) => item.id === candidate.targetId);
-    if (candidate.id.endsWith(':new')) weapons.push(new Weapon(candidate.targetId as WeaponId, weapons.length));
+    if (candidate.id.endsWith(':new')) weapons.push(new Weapon(candidate.targetId as WeaponId, resolvePlacementSlot(candidate.placementSlot, weapons.map((item) => item.slot))));
     else if (weapon && candidate.id.includes(':focus')) weapon.precisionBonus += 1;
     else if (weapon) {
       const parts = candidate.id.split(':');
@@ -146,8 +146,13 @@ export function applyUpgradeCandidate(candidate: UpgradeCandidate, weapons: Weap
     return;
   }
   const support = supports.find((item) => item.id === candidate.targetId);
-  if (candidate.id.endsWith(':new')) supports.push(new SupportModule(candidate.targetId as SupportId, supports.length));
+  if (candidate.id.endsWith(':new')) supports.push(new SupportModule(candidate.targetId as SupportId, resolvePlacementSlot(candidate.placementSlot, supports.map((item) => item.slot))));
   else if (support) support.level = Math.min(support.definition.maxLevel, support.level + 1);
+}
+
+function resolvePlacementSlot(requestedSlot: number | undefined, occupiedSlots: number[]): number {
+  const availableSlots = [0, 1, 2].filter((slot) => !occupiedSlots.includes(slot));
+  return requestedSlot !== undefined && availableSlots.includes(requestedSlot) ? requestedSlot : availableSlots[0] ?? 0;
 }
 
 export function wouldStrandNewItems(

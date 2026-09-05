@@ -5,7 +5,7 @@ import { AudioService } from '../services/AudioService';
 import { ShareService } from '../services/ShareService';
 import { LifecycleService } from '../services/LifecycleService';
 import { GameHost } from '../game/GameHost';
-import type { BattleResult, BattleSnapshot, UpgradePayload } from '../types/game';
+import type { BattleResult, BattleSnapshot, UpgradeCandidate, UpgradePayload } from '../types/game';
 import { createDefaultSave, type SaveData } from '../types/save';
 import { button, element, isValidPlayerName } from '../ui/viewUtils';
 import { createNameView } from '../ui/NameView';
@@ -14,7 +14,6 @@ import { createStageSelectView } from '../ui/StageSelectView';
 import { createRulesView } from '../ui/RulesView';
 import { createSettingsView } from '../ui/SettingsView';
 import { createResultView } from '../ui/ResultView';
-import { getTopScores, submitScore, type OnlineRankingRow } from '../services/OnlineRankingService';
 import { createResearchView } from '../ui/ResearchView';
 import { getResearchEffects, purchaseResearch } from '../data/research';
 import { STAGES, stageIsUnlocked } from '../data/stages';
@@ -43,6 +42,7 @@ export class AppController {
   private lifecycleCleanup: (() => void) | null = null;
   private started = false;
   private battleUpgradeOpen = false;
+  private latestBattleSnapshot: BattleSnapshot | null = null;
 
   public constructor(private readonly root: HTMLElement) {}
 
@@ -211,6 +211,7 @@ export class AppController {
   }
 
   private renderBattle(): void {
+    this.latestBattleSnapshot = null;
     const shell = element('section', 'battle-shell');
     shell.dataset.testid = 'battle-screen';
     const header = element('header', 'battle-header');
@@ -267,7 +268,10 @@ export class AppController {
       testOutcome: testMode && (outcome === 'victory' || outcome === 'defeat') ? outcome : undefined,
       testUpgrade: testMode && query.get('upgrade') === '1',
       callbacks: {
-        onSnapshot: (snapshot) => this.updateBattleHud(snapshot, health, time, xp, score, aimState, buildList),
+        onSnapshot: (snapshot) => {
+          this.latestBattleSnapshot = snapshot;
+          this.updateBattleHud(snapshot, health, time, xp, score, aimState, buildList);
+        },
         onUpgrade: (payload) => this.showUpgrade(payload, shell),
         onFinish: (result) => { window.setTimeout(() => this.finishBattle(result), 0); },
         onStatus: (message) => { status.textContent = message; this.announce(message); this.audio.tone(message.includes('ダメージ') ? 'danger' : 'game', message.includes('ダメージ') ? 120 : 440); },
@@ -314,17 +318,41 @@ export class AppController {
     if (getResearchEffects(this.state.save).candidateDetails) dialog.append(element('p', 'modal-copy', '詳細解析: 数値の変化と得意な敵を表示しています。'));
     const list = element('div', 'upgrade-list');
     let locked = true;
-    const choiceButtons: HTMLButtonElement[] = [];
+    const candidateButtons: Array<{ button: HTMLButtonElement; candidate: UpgradeCandidate }> = [];
+    const selectionButtons: HTMLButtonElement[] = [];
     let selectedIndex = 0;
     for (const candidate of payload.candidates) {
       const card = element('article', 'upgrade-card');
       const choose = button(candidate.title, 'upgrade-choice');
       choose.dataset.testid = 'upgrade-candidate';
       choose.disabled = true;
-      choiceButtons.push(choose);
-      choose.addEventListener('focus', () => { selectedIndex = choiceButtons.indexOf(choose); });
-      choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate); });
+      candidateButtons.push({ button: choose, candidate });
       card.append(choose, element('p', 'upgrade-description', candidate.description), element('p', 'upgrade-change', `${candidate.before} → ${candidate.after}`), element('p', 'upgrade-role', `得意: ${candidate.role}`));
+      if (candidate.isExisting) {
+        selectionButtons.push(choose);
+        choose.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(choose); });
+        choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate); });
+      } else {
+        choose.setAttribute('aria-disabled', 'true');
+        choose.title = '装着する面を下から選んでください';
+        card.append(element('p', 'upgrade-details', '装着する面を選んで取得します。'));
+        const placementList = element('div', 'upgrade-placement-list');
+        for (const slot of candidate.placementSlots ?? [0, 1, 2]) {
+          const placement = button(`面${slot + 1}`, 'button button-small upgrade-placement');
+          placement.dataset.testid = 'upgrade-placement';
+          placement.setAttribute('aria-label', `${candidate.title}を面${slot + 1}へ装着`);
+          placement.disabled = true;
+          placement.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(placement); });
+          placement.addEventListener('click', () => {
+            if (locked) return;
+            locked = true;
+            this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot });
+          });
+          selectionButtons.push(placement);
+          placementList.append(placement);
+        }
+        card.append(placementList);
+      }
       if (candidate.requiresNewItemFirst) card.append(element('p', 'upgrade-details', '候補を3つ保つため、新しい装置を先に取得すると選べます。'));
       if (getResearchEffects(this.state.save).candidateDetails && candidate.details) card.append(element('p', 'upgrade-details', candidate.details));
       const ban = button('この候補を除外', 'button button-small');
@@ -345,9 +373,20 @@ export class AppController {
     window.setTimeout(() => {
       if (!layer.isConnected) return;
       locked = false;
-      choiceButtons.forEach((choice, index) => { choice.disabled = payload.candidates[index]?.requiresNewItemFirst === true; });
+      candidateButtons.forEach(({ button, candidate }) => { button.disabled = !candidate.isExisting || candidate.requiresNewItemFirst === true; });
+      selectionButtons.forEach((selection) => { if (selection.classList.contains('upgrade-placement')) selection.disabled = false; });
       list.querySelectorAll<HTMLButtonElement>('.button-small').forEach((ban) => { ban.disabled = payload.bansLeft <= 0; });
     }, 150);
+    const moveSelection = (direction: 1 | -1): void => {
+      for (let offset = 1; offset <= selectionButtons.length; offset += 1) {
+        const nextIndex = (selectedIndex + direction * offset + selectionButtons.length) % selectionButtons.length;
+        if (!selectionButtons[nextIndex]?.disabled) {
+          selectedIndex = nextIndex;
+          selectionButtons[selectedIndex]?.focus();
+          return;
+        }
+      }
+    };
     dialog.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         // Escape belongs to the upgrade dialog. Consume it here so a
@@ -356,8 +395,9 @@ export class AppController {
         event.stopPropagation();
         return;
       }
-      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); selectedIndex = (selectedIndex + 1) % choiceButtons.length; choiceButtons[selectedIndex]?.focus(); }
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); selectedIndex = (selectedIndex + choiceButtons.length - 1) % choiceButtons.length; choiceButtons[selectedIndex]?.focus(); }
+      if (selectionButtons.length === 0) return;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); moveSelection(1); }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); moveSelection(-1); }
     });
     dialog.append(list);
     const footer = element('div', 'modal-footer');
@@ -373,7 +413,7 @@ export class AppController {
     dialog.append(footer); layer.append(dialog); shell.append(layer);
     this.trapFocus(dialog);
     window.setTimeout(() => { if (layer.isConnected) reroll.disabled = payload.rerollsLeft <= 0; }, 150);
-    window.setTimeout(() => choiceButtons.find((choice) => !choice.disabled)?.focus(), 160);
+    window.setTimeout(() => selectionButtons.find((choice) => !choice.disabled)?.focus(), 160);
   }
 
   private openPause(fromVisibility: boolean, reason = ''): void {
@@ -414,16 +454,29 @@ export class AppController {
       }
     });
     const rules = button('遊び方'); rules.addEventListener('click', () => this.showPauseRules(dialog));
+    const loadout = button('装置を確認'); loadout.addEventListener('click', () => this.showPauseLoadout(dialog));
     const settings = button('音量と演出'); settings.addEventListener('click', () => this.showPauseSettings(dialog));
     const retire = button('リタイア', 'button button-danger'); retire.addEventListener('click', () => { if (window.confirm('このプレイを終了しますか？得点は確定しません。')) this.gameHost.retire(); });
     const home = button('ホームへ戻る'); home.addEventListener('click', () => { if (window.confirm('プレイを終了してホームへ戻りますか？')) { this.gameHost.stop(); this.runLifecycle.cancel(); this.render('home'); } });
-    dialog.append(resume, rules, settings, retire, home); layer.append(dialog); shell.append(layer);
+    dialog.append(resume, rules, loadout, settings, retire, home); layer.append(dialog); shell.append(layer);
     this.trapFocus(dialog);
     window.setTimeout(() => resume.focus(), 0);
   }
 
   private showPauseRules(dialog: HTMLElement): void {
     const copy = element('div', 'pause-rules'); copy.append(element('h3', '', '操作'), element('p', '', '戦場を1本指でドラッグすると、その方向を短時間優先します。強化候補は1回タップで選びます。'));
+    const close = button('一時停止へ戻る'); close.addEventListener('click', () => copy.remove()); copy.append(close); dialog.append(copy);
+  }
+
+  private showPauseLoadout(dialog: HTMLElement): void {
+    if (dialog.querySelector('.pause-loadout')) return;
+    const copy = element('div', 'pause-rules pause-loadout');
+    copy.append(element('h3', '', '現在の装置'));
+    const snapshot = this.latestBattleSnapshot;
+    const loadout = snapshot
+      ? [...snapshot.weapons.map((weapon) => `${this.weaponName(weapon.id)} Lv${weapon.level}`), ...snapshot.supports.map((support) => `${this.supportName(support.id)} Lv${support.level}`)]
+      : ['装置情報を読み込んでいます'];
+    copy.append(element('p', '', loadout.join(' / ')));
     const close = button('一時停止へ戻る'); close.addEventListener('click', () => copy.remove()); copy.append(close); dialog.append(copy);
   }
 
@@ -566,32 +619,7 @@ export class AppController {
       home: () => this.render('home'),
       share: () => { void this.shareResult(result); },
     });
-    void this.loadOnlineRanking(view, result);
     this.addNotice(view); return view;
-  }
-
-  private async loadOnlineRanking(view: HTMLElement, result: BattleResult): Promise<void> {
-    const list = view.querySelector<HTMLOListElement>('[data-online-ranking-list]');
-    const status = view.querySelector<HTMLElement>('[data-online-ranking-status]');
-    if (!list || !status) return;
-    if (result.retired) {
-      list.innerHTML = '<li>リタイア結果はランキング対象外です。</li>';
-      status.textContent = 'ランキングは通常プレイの結果を表示します。';
-      return;
-    }
-    status.textContent = 'ランキングを更新中…';
-    try { await submitScore(this.state.save.profile.name, result.score); }
-    catch { status.textContent = '今回のスコアを送信できませんでした。ランキングを表示します。'; }
-    try {
-      const rows = await getTopScores();
-      list.innerHTML = rows.length ? '' : '<li>まだランキングがありません。</li>';
-      rows.forEach((row: OnlineRankingRow, index) => {
-        const item = element('li');
-        item.textContent = `${row.rank_no ?? index + 1}位 / ${row.display_name ?? row.player_name ?? 'ななし'}: ${Number(row.score ?? row.best_score ?? 0).toLocaleString('ja-JP')}点`;
-        list.appendChild(item);
-      });
-      if (status.textContent === 'ランキングを更新中…') status.textContent = '上位10名を表示しています。';
-    } catch { list.innerHTML = '<li>ランキングを読み込めませんでした。</li>'; status.textContent = 'ランキングを読み込めませんでした。'; }
   }
 
   private researchView(): HTMLElement {

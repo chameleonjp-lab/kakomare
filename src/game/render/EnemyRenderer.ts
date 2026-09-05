@@ -13,12 +13,13 @@ export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySna
   else drawNormalEnemy(graphics, enemy, x, y, alpha);
   const ratio = Math.max(0, enemy.hp / enemy.maxHp);
   graphics.fillStyle(0x07131f, 0.85);
-  graphics.fillRect(x - 22, y - 31, 44, 4);
+  const barWidth = Math.max(36, enemy.hitRadius * 2.1);
+  graphics.fillRect(x - barWidth / 2, y - enemy.hitRadius - 12, barWidth, 4);
   graphics.fillStyle(enemy.isBoss ? bossColor(enemy.type as BossId) : enemyColor(enemy.type as EnemyId), 1);
-  graphics.fillRect(x - 22, y - 31, 44 * ratio, 4);
+  graphics.fillRect(x - barWidth / 2, y - enemy.hitRadius - 12, barWidth * ratio, 4);
   if (enemy.shieldHits > 0) {
     graphics.lineStyle(2, 0xa78bfa, 0.95);
-    graphics.strokeCircle(x, y, 25);
+    graphics.strokeCircle(x, y, enemy.hitRadius + 4);
   }
 }
 
@@ -26,7 +27,7 @@ function drawBoss(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x
   const id = enemy.type as BossId;
   const color = bossColor(id);
   graphics.lineStyle(4, color, alpha);
-  graphics.strokeCircle(x, y, id === 'echo' ? 48 : id === 'designer' ? 44 : 40);
+  graphics.strokeCircle(x, y, enemy.hitRadius);
   if (id === 'crown') {
     for (let index = 0; index < 3; index += 1) {
       const angle = (enemy.shieldRotation ?? 0) + index * Math.PI * 2 / 3;
@@ -52,34 +53,45 @@ function drawBoss(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x
 function drawNormalEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x: number, y: number, alpha: number): void {
   const id = enemy.type as EnemyId;
   const color = enemyColor(id);
-  if (id === 'runner') drawPolygon(graphics, polygonPoints(x, y, 15, 3, Math.atan2(enemy.y, enemy.x)), color, alpha, 0xfff1a8);
+  const radius = enemy.hitRadius;
+  if (id === 'runner') drawPolygon(graphics, polygonPoints(x, y, radius, 3, Math.atan2(enemy.y, enemy.x)), color, alpha, 0xfff1a8);
   else if (id === 'lattice') {
-    graphics.fillStyle(color, alpha); graphics.fillCircle(x, y, 17);
-    graphics.lineStyle(3, 0xf2f0e8, alpha); graphics.strokeCircle(x, y, 22);
-    graphics.lineBetween(x - 14, y - 14, x + 14, y + 14); graphics.lineBetween(x + 14, y - 14, x - 14, y + 14);
+    graphics.fillStyle(color, alpha); graphics.fillCircle(x, y, radius * 0.77);
+    graphics.lineStyle(3, 0xf2f0e8, alpha); graphics.strokeCircle(x, y, radius);
+    graphics.lineBetween(x - radius * 0.64, y - radius * 0.64, x + radius * 0.64, y + radius * 0.64); graphics.lineBetween(x + radius * 0.64, y - radius * 0.64, x - radius * 0.64, y + radius * 0.64);
   } else if (id === 'shell') {
-    graphics.fillStyle(color, alpha * 0.42); graphics.fillCircle(x, y, 17);
-    graphics.lineStyle(6, color, alpha); graphics.strokeCircle(x, y, 24);
-    graphics.lineStyle(2, 0xfff1a8, alpha); graphics.strokeCircle(x, y, 13);
+    graphics.fillStyle(color, alpha * 0.42); graphics.fillCircle(x, y, radius * 0.77);
+    graphics.lineStyle(6, color, alpha); graphics.strokeCircle(x, y, radius);
+    graphics.lineStyle(2, 0xfff1a8, alpha); graphics.strokeCircle(x, y, radius * 0.54);
   } else if (id === 'spore') {
-    drawHex(graphics, x, y, 18, color, alpha, 0xf2f0e8);
-    graphics.fillStyle(0x07131f, alpha); graphics.fillCircle(x - 6, y - 2, 3); graphics.fillCircle(x + 6, y + 3, 3);
+    drawHex(graphics, x, y, radius, color, alpha, 0xf2f0e8);
+    graphics.fillStyle(0x07131f, alpha); graphics.fillCircle(x - radius * 0.33, y - radius * 0.11, 3); graphics.fillCircle(x + radius * 0.33, y + radius * 0.17, 3);
   } else if (id === 'marker') {
-    drawPolygon(graphics, polygonPoints(x, y, 18, 4, Math.PI / 4), color, alpha * 0.75, 0xfff1a8);
-    graphics.lineStyle(2, 0xfff1a8, alpha); graphics.strokeCircle(x, y, 8);
+    drawPolygon(graphics, polygonPoints(x, y, radius, 4, Math.PI / 4), color, alpha * 0.75, 0xfff1a8);
+    graphics.lineStyle(2, 0xfff1a8, alpha); graphics.strokeCircle(x, y, radius * 0.42);
   } else if (id === 'dropper') {
-    graphics.fillStyle(color, alpha * 0.75); graphics.fillRect(x - 15, y - 15, 30, 30);
-    graphics.lineStyle(3, 0xfff1a8, alpha); graphics.strokeRect(x - 20, y - 20, 40, 40);
-    graphics.lineBetween(x - 10, y, x + 10, y);
+    graphics.fillStyle(color, alpha * 0.75); graphics.fillRect(x - radius * 0.75, y - radius * 0.75, radius * 1.5, radius * 1.5);
+    graphics.lineStyle(3, 0xfff1a8, alpha); graphics.strokeRect(x - radius, y - radius, radius * 2, radius * 2);
+    graphics.lineBetween(x - radius * 0.5, y, x + radius * 0.5, y);
   } else if (id === 'phase') {
-    graphics.lineStyle(3, color, alpha); graphics.strokeCircle(x, y, 19); graphics.strokeCircle(x, y, 11);
-    graphics.lineBetween(x - 13, y + 13, x + 13, y - 13);
+    graphics.lineStyle(3, color, alpha); graphics.strokeCircle(x, y, radius); graphics.strokeCircle(x, y, radius * 0.58);
+    graphics.lineBetween(x - radius * 0.68, y + radius * 0.68, x + radius * 0.68, y - radius * 0.68);
   } else {
-    drawHex(graphics, x, y, 15, color, alpha, 0xfff1a8);
-    graphics.lineStyle(2, 0x07131f, alpha); graphics.lineBetween(x - 9, y + 9, x + 9, y - 9);
+    drawHex(graphics, x, y, radius, color, alpha, 0xfff1a8);
+    graphics.lineStyle(2, 0x07131f, alpha); graphics.lineBetween(x - radius * 0.6, y + radius * 0.6, x + radius * 0.6, y - radius * 0.6);
   }
   if (id === 'marker') {
-    graphics.lineStyle(1, color, alpha * 0.65); graphics.strokeCircle(x, y, 46); graphics.strokeCircle(x, y, 52);
+    drawDashedCircle(graphics, x, y, 120, color, alpha * 0.78, 24);
+  }
+}
+
+function drawDashedCircle(graphics: Phaser.GameObjects.Graphics, x: number, y: number, radius: number, color: number, alpha: number, segments: number): void {
+  graphics.lineStyle(1, color, alpha);
+  const step = Math.PI * 2 / segments;
+  for (let index = 0; index < segments; index += 2) {
+    const start = index * step;
+    const end = start + step * 0.72;
+    graphics.lineBetween(x + Math.cos(start) * radius, y + Math.sin(start) * radius, x + Math.cos(end) * radius, y + Math.sin(end) * radius);
   }
 }
 

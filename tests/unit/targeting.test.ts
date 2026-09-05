@@ -14,4 +14,22 @@ describe('TargetingSystem', () => {
     const distant = new Enemy(1, 'shard', 0, 700);
     expect(selectTarget([distant], { x: 0, y: 0 }, { angle: 0, manual: false }, 560, 0)).toBeNull();
   });
+
+  it('keeps manual aim inside the sixty-degree fan when another enemy is more urgent', () => {
+    const aimed = new Enemy(1, 'shard', 0, 180);
+    const urgent = new Enemy(2, 'runner', Math.PI, 58);
+    expect(selectTarget([aimed, urgent], { x: 0, y: 0 }, { angle: 0, manual: true }, 600, 0, 'needle')?.id).toBe(aimed.id);
+  });
+
+  it('keeps a valid locked target until it leaves the eligible set', () => {
+    const locked = new Enemy(1, 'shard', 0, 180);
+    const urgent = new Enemy(2, 'runner', Math.PI, 60);
+    expect(selectTarget([locked, urgent], { x: 0, y: 0 }, { angle: 0, manual: false }, 600, 0, 'needle', locked.id)?.id).toBe(locked.id);
+  });
+
+  it('gives group weapons a bonus against enemies with nearby partners', () => {
+    const target = new Enemy(1, 'shard', 0, 180);
+    const partner = new Enemy(2, 'shard', 0.1, 190);
+    expect(selectTarget([target, partner], { x: 0, y: 0 }, { angle: 0, manual: false }, 600, 0, 'cluster')?.id).toBe(target.id);
+  });
 });

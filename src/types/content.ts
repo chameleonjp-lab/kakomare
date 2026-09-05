@@ -41,6 +41,7 @@ export interface WeaponStats {
   bounceCount?: number;
   orbitRadius?: number;
   orbitSpeed?: number;
+  bladeLength?: number;
   hitCooldown?: number;
   duration?: number;
   pullRadius?: number;
@@ -86,7 +87,7 @@ export interface EnemyDefinition {
   contactDamage: number;
   threatCost: number;
   color: number;
-  radius?: number;
+  hitRadius?: number;
 }
 
 export interface BossDefinition {
@@ -95,9 +96,15 @@ export interface BossDefinition {
   description: string;
   hp: number;
   speed: number;
-  contactDamage: number;
   color: number;
-  radius?: number;
+  hitRadius?: number;
+  pressure?: {
+    interval: number;
+    telegraph: number;
+    damage: number;
+    speed: number;
+    life: number;
+  };
 }
 
 export interface StageDefinition {

@@ -24,7 +24,7 @@ interface EnemyPosition {
   type: string;
   x: number;
   y: number;
-  radius: number;
+  distanceToCore: number;
 }
 
 function simulateHeadlessBattle(drawRate: number): HeadlessBattleMetrics {
@@ -71,7 +71,7 @@ function simulateHeadlessBattle(drawRate: number): HeadlessBattleMetrics {
     if (weapon.advance(seconds, 1)) {
       const target = boss ?? enemies
         .filter((enemy) => enemy.active && !enemy.isBoss)
-        .sort((left, right) => left.radius - right.radius || left.id - right.id)[0];
+        .sort((left, right) => left.distanceToCore - right.distanceToCore || left.id - right.id)[0];
       if (target) {
         const attackAngle = target.isBoss ? target.shieldRotation + 0.5 : Math.atan2(target.y, target.x);
         const result = applyDamage(target, target.isBoss ? 60 : weapon.stats.damage, elapsed, attackAngle);
@@ -128,7 +128,7 @@ function simulateEnemyPositions(drawRate: number): EnemyPosition[] {
   for (let frame = 0; frame < drawRate * 180; frame += 1) clock.advance(1 / drawRate, step);
   return enemies
     .filter((enemy) => enemy.active)
-    .map((enemy) => ({ id: enemy.id, type: enemy.type, x: enemy.x, y: enemy.y, radius: enemy.radius }))
+    .map((enemy) => ({ id: enemy.id, type: enemy.type, x: enemy.x, y: enemy.y, distanceToCore: enemy.distanceToCore }))
     .sort((left, right) => left.id - right.id);
 }
 

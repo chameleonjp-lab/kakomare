@@ -10,13 +10,15 @@ export interface EnemySnapshot {
   type: EnemyId | BossId;
   x: number;
   y: number;
-  radius: number;
+  distanceToCore: number;
+  hitRadius: number;
   hp: number;
   maxHp: number;
   shieldHits: number;
   isBoss: boolean;
   invulnerable: boolean;
   telegraph: boolean;
+  telegraphPhase?: number;
   slowFactor: number;
   shieldRotation?: number;
 }
@@ -84,6 +86,8 @@ export interface UpgradeCandidate {
   isExisting: boolean;
   details?: string;
   requiresNewItemFirst?: boolean;
+  placementSlots?: number[];
+  placementSlot?: number;
 }
 
 export interface UpgradePayload {

@@ -41,8 +41,8 @@ export interface BattleSceneOptions {
   callbacks: BattleCallbacks;
 }
 
-interface FlashEffect { x: number; y: number; color: number; life: number; maxLife: number; radius: number }
-interface LineEffect { angle: number; color: number; life: number; maxLife: number; width: number }
+interface FlashEffect { x: number; y: number; color: number; life: number; maxLife: number; radius: number; kind?: 'impact' | 'telegraph' }
+interface LineEffect { angle: number; color: number; life: number; maxLife: number; width: number; startX?: number; startY?: number; length?: number }
 interface GravityField { x: number; y: number; life: number; maxLife: number; radius: number; damage: number; pullStrength: number; safeDistance: number; damageTimer: number; collapse: boolean; slowDuration: number }
 interface SpecialTelegraph { angle: number; life: number; maxLife: number; color: number; width: number }
 
@@ -51,6 +51,9 @@ const MAX_FRIENDLY_PROJECTILES = 280;
 const MAX_ENEMY_PROJECTILES = 80;
 const MAX_GRAVITY_FIELDS = 24;
 const LOGICAL_RENDER_SIZE = 720;
+const ARENA_RADIUS = 325;
+const MANUAL_AIM_HALF_ANGLE = Math.PI / 6;
+const CLUSTER_TELEGRAPH_SECONDS = 0.45;
 
 export class BattleScene extends Phaser.Scene {
   private readonly options: BattleSceneOptions;
@@ -69,6 +72,7 @@ export class BattleScene extends Phaser.Scene {
   private readonly specialTelegraphs: SpecialTelegraph[] = [];
   private readonly orbitAngles = new Map<number, number>();
   private readonly orbitHits = new Map<string, number>();
+  private readonly targetLocks = new Map<number, number>();
   private readonly discTrailAt = new Map<number, number>();
   private readonly pendingSporeSplits: number[] = [];
   private readonly recorder: RunRecorder;
@@ -97,6 +101,7 @@ export class BattleScene extends Phaser.Scene {
   private bansLeft: number;
   private repairsUsed = 0;
   private lastCandidateSignature = '';
+  private upgradesExhausted = false;
   private bossDefeated = false;
   private testUpgradeOpened = false;
   private testOutcomeTimer: number | null = null;
@@ -105,6 +110,7 @@ export class BattleScene extends Phaser.Scene {
   private endlessMilestone = 0;
   private designerWave: { angle: number; life: number; maxLife: number } | null = null;
   private echoWave: { angle: number; life: number; maxLife: number } | null = null;
+  private crownPressure: { angle: number; life: number; maxLife: number } | null = null;
   private lastDesignerSector = -1;
   private crownWavesTriggered = 0;
   private renderPixelRatio = 1;
@@ -157,6 +163,11 @@ export class BattleScene extends Phaser.Scene {
     if (this.state !== 'upgrade' || !this.upgradePayload || !this.upgradePayload.candidates.some((item) => item.id === candidate.id)) return;
     if (candidate.requiresNewItemFirst) {
       this.options.callbacks.onStatus('候補を3つ保つため、先に新しい装置を取得してください');
+      this.options.callbacks.onUpgrade({ ...this.upgradePayload, candidates: [...this.upgradePayload.candidates] });
+      return;
+    }
+    if (!candidate.isExisting && !this.availablePlacementSlots(candidate.kind).includes(candidate.placementSlot ?? -1)) {
+      this.options.callbacks.onStatus('装置を置く空き面を選んでください');
       this.options.callbacks.onUpgrade({ ...this.upgradePayload, candidates: [...this.upgradePayload.candidates] });
       return;
     }
@@ -312,7 +323,12 @@ export class BattleScene extends Phaser.Scene {
   private fireWeapon(weapon: Weapon, allowBranch = true, powerFactor = 1): void {
     if (this.state === 'finished') return;
     const range = weapon.stats.range * (1 + this.supportEffect('focus', weapon.slot));
-    const target = selectTarget(this.enemies.filter((enemy) => enemy.active), { x: 0, y: 0 }, { angle: this.aimAngle, manual: this.manualAim }, range, this.elapsed);
+    const usesTarget = weapon.id !== 'repulse' && weapon.id !== 'orbit';
+    const target = usesTarget
+      ? selectTarget(this.enemies.filter((enemy) => enemy.active), { x: 0, y: 0 }, { angle: this.aimAngle, manual: this.manualAim }, range, this.elapsed, weapon.id, this.targetLocks.get(weapon.slot))
+      : null;
+    if (target) this.targetLocks.set(weapon.slot, target.id);
+    else if (usesTarget) this.targetLocks.delete(weapon.slot);
     const angle = target ? Math.atan2(target.y, target.x) : this.aimAngle;
     const damage = this.weaponPower(weapon, powerFactor);
     if (weapon.id === 'needle') this.fireNeedle(weapon, angle, damage);
@@ -329,12 +345,13 @@ export class BattleScene extends Phaser.Scene {
   private fireNeedle(weapon: Weapon, angle: number, damage: number): void {
     const spread = weapon.branch === 'spread' ? 3 : 1;
     const piercing = (weapon.stats.pierce ?? 0) + (weapon.branch === 'piercing' ? 2 : 0);
-    const speed = (weapon.stats.projectileSpeed ?? 480) * this.options.researchEffects.projectileSpeedMultiplier * (1 + this.supportEffect('focus', weapon.slot, 'secondary'));
+    const piercingDamage = weapon.branch === 'piercing' ? damage * 1.12 : damage;
+    const speed = (weapon.stats.projectileSpeed ?? 480) * this.options.researchEffects.projectileSpeedMultiplier * (1 + this.supportEffect('focus', weapon.slot, 'secondary')) * (weapon.branch === 'piercing' ? 1.18 : 1);
     for (let index = 0; index < spread; index += 1) {
       const offset = spread === 1 ? 0 : (index - 1) * 0.14;
       this.addProjectile({
         kind: 'needle', x: 0, y: 0, vx: Math.cos(angle + offset) * speed, vy: Math.sin(angle + offset) * speed,
-        radius: 6, damage, life: 1.4, piercing, sourceWeaponId: weapon.id,
+        radius: 6, damage: piercingDamage, life: 1.4, piercing, sourceWeaponId: weapon.id,
       });
     }
   }
@@ -342,23 +359,35 @@ export class BattleScene extends Phaser.Scene {
   private fireRay(weapon: Weapon, angle: number, damage: number): void {
     if ((this.state as string) === 'finished') return;
     const width = (weapon.stats.width ?? 18) + (weapon.branch === 'wide' ? 20 : 0);
-    this.addLine({ angle, color: WEAPONS.ray.color, life: weapon.branch === 'wide' ? 0.22 : 0.16, maxLife: weapon.branch === 'wide' ? 0.22 : 0.16, width });
-    this.hitRay(weapon, angle, width, damage);
+    const life = weapon.branch === 'wide' ? 0.22 : 0.16;
+    const primaryLength = weapon.branch === 'reflect' ? Math.min(ARENA_RADIUS, weapon.stats.range) : weapon.stats.range;
+    this.addLine({ angle, color: WEAPONS.ray.color, life, maxLife: life, width, length: primaryLength });
+    this.hitRaySegment(weapon, 0, 0, angle, primaryLength, width, damage);
     if (this.state === 'finished') return;
     if (weapon.branch === 'reflect') {
-      const reflected = angle + Math.PI * 0.72;
-      this.addLine({ angle: reflected, color: WEAPONS.ray.color, life: 0.14, maxLife: 0.14, width: width * 0.7 });
-      this.hitRay(weapon, reflected, width * 0.7, damage * 0.55);
+      // The ray hits the circular outer boundary and reflects back along the
+      // physically predictable opposite direction. Its second segment starts
+      // at the actual boundary point, so the visual and damage path agree.
+      const boundaryX = Math.cos(angle) * primaryLength;
+      const boundaryY = Math.sin(angle) * primaryLength;
+      const reflected = angle + Math.PI;
+      const reflectedLength = Math.min(ARENA_RADIUS * 2, weapon.stats.range);
+      this.addLine({ angle: reflected, color: WEAPONS.ray.color, life: 0.14, maxLife: 0.14, width: width * 0.7, startX: boundaryX, startY: boundaryY, length: reflectedLength });
+      this.hitRaySegment(weapon, boundaryX, boundaryY, reflected, reflectedLength, width * 0.7, damage * 0.55);
     }
   }
 
-  private hitRay(weapon: Weapon, angle: number, width: number, damage: number): void {
+  private hitRaySegment(weapon: Weapon, startX: number, startY: number, angle: number, length: number, width: number, damage: number): void {
     if (this.state === 'finished') return;
+    const directionX = Math.cos(angle);
+    const directionY = Math.sin(angle);
+    const segmentLength = Math.max(1, length);
     for (const enemy of this.enemies) {
-      if (!enemy.active || enemy.radius > weapon.stats.range) continue;
-      const enemyAngle = Math.atan2(enemy.y, enemy.x);
-      const difference = Math.abs(((enemyAngle - angle + Math.PI) % (Math.PI * 2)) - Math.PI);
-      if (difference > Math.atan2(width + 18, Math.max(30, enemy.radius))) continue;
+      if (!enemy.active) continue;
+      const projection = Math.max(0, Math.min(1, ((enemy.x - startX) * directionX + (enemy.y - startY) * directionY) / segmentLength));
+      const closestX = startX + directionX * length * projection;
+      const closestY = startY + directionY * length * projection;
+      if (Math.hypot(enemy.x - closestX, enemy.y - closestY) > width / 2 + enemy.hitRadius) continue;
       const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, angle);
       this.recordWeaponDamage(weapon.id, result.amount);
       if (result.destroyed) this.handleEnemyDestroyed(enemy);
@@ -369,17 +398,36 @@ export class BattleScene extends Phaser.Scene {
   private fireCluster(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
     const radius = weapon.stats.radius ?? 72;
     const targetPoint = target ? { x: target.x, y: target.y } : { x: Math.cos(angle) * 250, y: Math.sin(angle) * 250 };
-    this.addFlash({ x: targetPoint.x, y: targetPoint.y, color: WEAPONS.cluster.color, life: 0.45, maxLife: 0.45, radius });
-    this.hitArea(weapon, targetPoint.x, targetPoint.y, radius, damage, angle);
+    const speed = (weapon.stats.projectileSpeed ?? 330) * this.options.researchEffects.projectileSpeedMultiplier * (1 + this.supportEffect('focus', weapon.slot, 'secondary'));
+    const distance = Math.hypot(targetPoint.x, targetPoint.y);
+    const travelSeconds = Math.max(CLUSTER_TELEGRAPH_SECONDS, distance / Math.max(1, speed));
+    const velocity = distance / travelSeconds;
+    this.addProjectile({
+      kind: 'cluster', x: 0, y: 0, vx: Math.cos(angle) * velocity, vy: Math.sin(angle) * velocity,
+      radius: 10, damage, life: travelSeconds, piercing: 0, sourceWeaponId: weapon.id,
+      impactX: targetPoint.x, impactY: targetPoint.y, impactRadius: radius, impactAngle: angle,
+    });
+  }
+
+  private resolveClusterImpact(projectile: Projectile): void {
+    const weapon = this.weapons.find((item) => item.id === projectile.sourceWeaponId);
+    if (!weapon || projectile.impactX === null || projectile.impactY === null) return;
+    const x = projectile.impactX;
+    const y = projectile.impactY;
+    const radius = projectile.impactRadius;
+    const angle = projectile.impactAngle;
+    this.addFlash({ x, y, color: WEAPONS.cluster.color, life: CLUSTER_TELEGRAPH_SECONDS, maxLife: CLUSTER_TELEGRAPH_SECONDS, radius, kind: 'impact' });
+    const hitIds = new Set<number>();
+    this.hitArea(weapon, x, y, radius, projectile.damage, angle, hitIds);
     if (this.state === 'finished') return;
     if (weapon.branch === 'split') {
       for (let index = 0; index < 3; index += 1) {
         const splitAngle = angle + index * Math.PI * 2 / 3;
-        this.hitArea(weapon, targetPoint.x + Math.cos(splitAngle) * 58, targetPoint.y + Math.sin(splitAngle) * 58, radius * 0.45, damage * 0.3, splitAngle);
+        this.hitArea(weapon, x + Math.cos(splitAngle) * 58, y + Math.sin(splitAngle) * 58, radius * 0.45, projectile.damage * 0.3, splitAngle, hitIds);
         if ((this.state as string) === 'finished') return;
       }
     }
-    if (weapon.branch === 'residue') this.createGravityField(targetPoint.x, targetPoint.y, 1.8, radius * 0.75, 0, 0, 180, false, 0.55);
+    if (weapon.branch === 'residue') this.createGravityField(x, y, 1.8, radius * 0.75, 0, 0, 180, false, 0.55);
   }
 
   private fireRepulse(weapon: Weapon, damage: number): void {
@@ -390,8 +438,8 @@ export class BattleScene extends Phaser.Scene {
     const slowDuration = (weapon.branch === 'delayed' ? 1.4 : 0.4) * (1 + brakeEffect);
     this.addLine({ angle: 0, color: WEAPONS.repulse.color, life: 0.3, maxLife: 0.3, width: radius });
     for (const enemy of this.enemies) {
-      if (!enemy.active || enemy.radius > radius) continue;
-      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed);
+      if (!enemy.active || Math.hypot(enemy.x, enemy.y) > radius + enemy.hitRadius) continue;
+      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, Math.atan2(enemy.y, enemy.x));
       enemy.applyPush(push, this.elapsed);
       enemy.applySlow(this.elapsed, slowDuration);
       this.recorder.recordControl('pushed', slowDuration);
@@ -427,13 +475,17 @@ export class BattleScene extends Phaser.Scene {
     this.orbitAngles.set(weapon.slot, angle);
     const count = (weapon.stats.count ?? 2) + (weapon.branch === 'many' ? 1 : 0);
     const radius = (weapon.stats.orbitRadius ?? 108) + (weapon.branch === 'outer' ? 38 : 0);
+    const bladeLength = (weapon.stats.bladeLength ?? 32) + (weapon.branch === 'outer' ? 28 : 0);
     for (let index = 0; index < count; index += 1) {
       const bladeAngle = angle + index * Math.PI * 2 / count;
-      const x = Math.cos(bladeAngle) * radius;
-      const y = Math.sin(bladeAngle) * radius;
       for (const enemy of this.enemies) {
         const key = `${weapon.slot}:${enemy.id}`;
-        if (!enemy.active || Math.hypot(enemy.x - x, enemy.y - y) > 24) continue;
+        const halfLength = bladeLength / 2;
+        const startX = Math.cos(bladeAngle) * (radius - halfLength);
+        const startY = Math.sin(bladeAngle) * (radius - halfLength);
+        const endX = Math.cos(bladeAngle) * (radius + halfLength);
+        const endY = Math.sin(bladeAngle) * (radius + halfLength);
+        if (!enemy.active || distanceToSegment(enemy.x, enemy.y, startX, startY, endX, endY) > 8 + enemy.hitRadius) continue;
         if (this.elapsed - (this.orbitHits.get(key) ?? -Infinity) < (weapon.stats.hitCooldown ?? 0.45)) continue;
         this.orbitHits.set(key, this.elapsed);
         const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, bladeAngle);
@@ -465,11 +517,12 @@ export class BattleScene extends Phaser.Scene {
     this.addLine({ angle, color: WEAPONS.gravity.color, life: 0.38, maxLife: 0.38, width: stats.pullRadius ?? 125 });
   }
 
-  private hitArea(weapon: Weapon, x: number, y: number, radius: number, damage: number, attackAngle: number): void {
+  private hitArea(weapon: Weapon, x: number, y: number, radius: number, damage: number, attackAngle: number | null, hitIds?: Set<number>): void {
     if (this.state === 'finished') return;
     for (const enemy of this.enemies) {
-      if (!enemy.active || Math.hypot(enemy.x - x, enemy.y - y) > radius) continue;
-      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, attackAngle);
+      if (!enemy.active || hitIds?.has(enemy.id) || Math.hypot(enemy.x - x, enemy.y - y) > radius + enemy.hitRadius) continue;
+      hitIds?.add(enemy.id);
+      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, attackAngle ?? Math.atan2(enemy.y, enemy.x));
       this.recordWeaponDamage(weapon.id, result.amount);
       if (result.destroyed) this.handleEnemyDestroyed(enemy);
       if ((this.state as string) === 'finished') return;
@@ -486,7 +539,7 @@ export class BattleScene extends Phaser.Scene {
       field.life -= seconds;
       field.damageTimer -= seconds;
       for (const enemy of this.enemies) {
-        if (!enemy.active || Math.hypot(enemy.x - field.x, enemy.y - field.y) > field.radius) continue;
+        if (!enemy.active || Math.hypot(enemy.x - field.x, enemy.y - field.y) > field.radius + enemy.hitRadius) continue;
         if (field.pullStrength > 0) {
           enemy.applyPull(field.x, field.y, field.pullStrength * seconds, this.elapsed, field.safeDistance);
           this.recorder.recordControl('pulled', seconds);
@@ -496,7 +549,7 @@ export class BattleScene extends Phaser.Scene {
           this.recorder.recordControl('slowed', seconds);
         }
         if (field.damage > 0 && field.damageTimer <= 0) {
-          const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, field.damage, this.weapons.find((item) => item.id === 'gravity')?.slot ?? 0), this.elapsed);
+          const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, field.damage, this.weapons.find((item) => item.id === 'gravity')?.slot ?? 0), this.elapsed, Math.atan2(enemy.y, enemy.x));
           this.recordWeaponDamage('gravity', result.amount);
           if (result.destroyed) this.handleEnemyDestroyed(enemy);
           if (this.state === 'finished') return;
@@ -509,7 +562,7 @@ export class BattleScene extends Phaser.Scene {
       if (field && field.life <= 0) {
         if (field.collapse) {
           const weapon = this.weapons.find((item) => item.id === 'gravity');
-          if (weapon) this.hitArea(weapon, field.x, field.y, field.radius, weapon.stats.damage * 1.8, 0);
+          if (weapon) this.hitArea(weapon, field.x, field.y, field.radius, weapon.stats.damage * 1.8, null);
           if (this.state === 'finished') return;
         }
         this.gravityFields.splice(index, 1);
@@ -520,6 +573,17 @@ export class BattleScene extends Phaser.Scene {
   private updateProjectiles(seconds: number): void {
     for (const projectile of this.projectiles) {
       projectile.update(seconds);
+      if (projectile.kind === 'cluster') {
+        if (!projectile.impactWarningShown && (projectile.life <= CLUSTER_TELEGRAPH_SECONDS || !projectile.active) && projectile.impactX !== null && projectile.impactY !== null) {
+          projectile.impactWarningShown = true;
+          this.addFlash({ x: projectile.impactX, y: projectile.impactY, color: WEAPONS.cluster.color, life: CLUSTER_TELEGRAPH_SECONDS, maxLife: CLUSTER_TELEGRAPH_SECONDS, radius: projectile.impactRadius, kind: 'telegraph' });
+        }
+        // A long-range impact can cross the render guard at 700px before its
+        // lifetime reaches zero. The stored impact is still the promised
+        // destination, so resolve it whenever the travelling projectile ends.
+        if (!projectile.active) this.resolveClusterImpact(projectile);
+        continue;
+      }
       if (!projectile.active || projectile.kind !== 'disc') continue;
       const disc = this.weapons.find((weapon) => weapon.id === projectile.sourceWeaponId);
       if (disc?.branch === 'trail' && this.elapsed >= (this.discTrailAt.get(projectile.id) ?? 0)) {
@@ -529,15 +593,15 @@ export class BattleScene extends Phaser.Scene {
         if (this.state === 'finished') return;
       }
       const distance = Math.hypot(projectile.x, projectile.y);
-      if (distance < 325) continue;
+      if (distance < ARENA_RADIUS) continue;
       if (projectile.bounces <= 0) { projectile.active = false; continue; }
       const nx = projectile.x / Math.max(1, distance);
       const ny = projectile.y / Math.max(1, distance);
       const dot = projectile.vx * nx + projectile.vy * ny;
       projectile.vx -= 2 * dot * nx;
       projectile.vy -= 2 * dot * ny;
-      projectile.x = nx * 324;
-      projectile.y = ny * 324;
+      projectile.x = nx * (ARENA_RADIUS - 1);
+      projectile.y = ny * (ARENA_RADIUS - 1);
       projectile.bounces -= 1;
     }
   }
@@ -558,7 +622,7 @@ export class BattleScene extends Phaser.Scene {
 
   private updateDropperAttacks(): void {
     for (const enemy of this.enemies) {
-      if (!enemy.active || enemy.type !== 'dropper' || enemy.radius > 250 || enemy.shotCooldown > 0) continue;
+      if (!enemy.active || enemy.type !== 'dropper' || enemy.distanceToCore > 250 || enemy.shotCooldown > 0) continue;
       const angle = Math.atan2(enemy.y, enemy.x);
       const projectile = this.addProjectile({
         kind: 'enemy', x: enemy.x, y: enemy.y, vx: -Math.cos(angle) * 180, vy: -Math.sin(angle) * 180,
@@ -566,7 +630,7 @@ export class BattleScene extends Phaser.Scene {
       });
       if (!projectile) continue;
       enemy.shotCooldown = 1.1;
-      this.options.callbacks.onStatus('投下体が遠隔弾を準備しました');
+      this.options.callbacks.onStatus('投下体が遠隔弾を発射しました');
     }
   }
 
@@ -581,6 +645,27 @@ export class BattleScene extends Phaser.Scene {
         const angle = Math.floor(this.rng.next() * 6) * Math.PI / 3;
         for (let index = 0; index < 4; index += 1) this.spawnEnemy(index % 2 === 0 ? 'shard' : 'runner', angle + (index - 1.5) * 0.1, true);
         this.options.callbacks.onStatus('回転冠が耐久低下に反応し、一方向から増援を呼びました');
+      }
+      const pressure = BOSSES.crown.pressure;
+      if (pressure && boss.distanceToCore <= 200) {
+        boss.pressureCooldown -= seconds;
+        if (!this.crownPressure && boss.pressureCooldown <= 0) {
+          this.crownPressure = { angle: boss.angle, life: pressure.telegraph, maxLife: pressure.telegraph };
+          boss.pressureCooldown = pressure.interval;
+          this.options.callbacks.onStatus('回転冠がコア向け攻撃を予告しています');
+        }
+        if (this.crownPressure) {
+          this.crownPressure.life -= seconds;
+          if (this.crownPressure.life <= 0) {
+            const angle = this.crownPressure.angle;
+            const projectile = this.addProjectile({
+              kind: 'enemy', x: boss.x, y: boss.y, vx: -Math.cos(angle) * pressure.speed, vy: -Math.sin(angle) * pressure.speed,
+              radius: 10, damage: pressure.damage, life: pressure.life, piercing: 0, enemyProjectile: true,
+            });
+            this.crownPressure = null;
+            if (projectile) this.options.callbacks.onStatus('回転冠がコア向け攻撃を放ちました');
+          }
+        }
       }
     }
     if (boss.type === 'designer') {
@@ -615,7 +700,7 @@ export class BattleScene extends Phaser.Scene {
         if (this.echoWave.life <= 0) {
           const angle = this.echoWave.angle;
           const projectile = this.addProjectile({
-            kind: 'enemy', x: Math.cos(angle) * 325, y: Math.sin(angle) * 325, vx: -Math.cos(angle) * 210, vy: -Math.sin(angle) * 210,
+            kind: 'enemy', x: Math.cos(angle) * ARENA_RADIUS, y: Math.sin(angle) * ARENA_RADIUS, vx: -Math.cos(angle) * 210, vy: -Math.sin(angle) * 210,
             radius: 10, damage: 10, life: 2.3, piercing: 0, enemyProjectile: true,
           });
           if (projectile) {
@@ -673,6 +758,7 @@ export class BattleScene extends Phaser.Scene {
     if (enemy.isBoss) {
       this.designerWave = null;
       this.echoWave = null;
+      this.crownPressure = null;
       this.bossDefeated = true;
       this.recorder.bossDefeated = true;
       this.recorder.bossesDefeated += 1;
@@ -703,14 +789,18 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private openUpgrade(): void {
+    if (this.upgradesExhausted) return;
     const candidates = this.createCandidates(this.lastCandidateSignature);
+    if (candidates.length !== 3) {
+      // Keep both the threshold experience and level intact. A failed draw is
+      // not a level-up, and must never consume progress silently.
+      this.upgradesExhausted = true;
+      this.options.callbacks.onStatus('選べる強化候補がないため、経験値を保持して戦闘を続けます');
+      return;
+    }
     this.experience -= this.nextExperience;
     this.level += 1;
     this.nextExperience = 16 + this.level * 9;
-    if (candidates.length !== 3) {
-      this.options.callbacks.onStatus('装置は最大まで完成しています。戦闘を続けます');
-      return;
-    }
     this.upgradePayload = {
       candidates,
       rerollsLeft: this.rerollsLeft,
@@ -736,9 +826,10 @@ export class BattleScene extends Phaser.Scene {
       const annotated = candidates.map((candidate) => {
         const bansAfterChoice = new Set(bans);
         if (candidate.kind === 'repair' && this.repairsUsed >= 1) bansAfterChoice.add('repair:core');
-        return wouldStrandNewItems(candidate, this.weapons, this.supports, this.core.health, this.core.maxHealth, bansAfterChoice)
+        const withWarning = wouldStrandNewItems(candidate, this.weapons, this.supports, this.core.health, this.core.maxHealth, bansAfterChoice)
           ? { ...candidate, requiresNewItemFirst: true }
           : candidate;
+        return withWarning.isExisting ? withWarning : { ...withWarning, placementSlots: this.availablePlacementSlots(withWarning.kind) };
       });
       fallback = annotated;
       if (!avoidSignature || this.signature(annotated) !== avoidSignature) return annotated;
@@ -748,6 +839,12 @@ export class BattleScene extends Phaser.Scene {
 
   private signature(candidates: UpgradeCandidate[]): string {
     return candidates.map((candidate) => candidate.id).sort().join('|');
+  }
+
+  private availablePlacementSlots(kind: UpgradeCandidate['kind']): number[] {
+    if (kind === 'weapon') return [0, 1, 2].filter((slot) => !this.weapons.some((weapon) => weapon.slot === slot));
+    if (kind === 'support') return [0, 1, 2].filter((slot) => !this.supports.some((support) => support.slot === slot));
+    return [];
   }
 
   private finish(outcome: BattleResult['outcome'], cause: string, retired = false): void {
@@ -918,7 +1015,7 @@ export class BattleScene extends Phaser.Scene {
     const height = this.scale.height / this.renderPixelRatio;
     const cx = width / 2;
     const cy = height / 2;
-    const arena = Math.min(width, height) * 0.43;
+    const arena = Math.min(ARENA_RADIUS, Math.min(width, height) * 0.45);
     this.graphics.clear();
     this.graphics.fillStyle(0x07131f, 1); this.graphics.fillRect(0, 0, width, height);
     this.graphics.lineStyle(1, 0x163246, 0.65);
@@ -938,16 +1035,15 @@ export class BattleScene extends Phaser.Scene {
       if (line.life <= 0) continue;
       const alpha = Math.max(0, line.life / line.maxLife);
       if (line.width > 100) { this.graphics.lineStyle(6, line.color, alpha * 0.7); this.graphics.strokeCircle(cx, cy, Math.min(arena, line.width)); }
-      else { this.graphics.lineStyle(line.width, line.color, alpha * 0.8); this.graphics.lineBetween(cx, cy, cx + Math.cos(line.angle) * arena, cy + Math.sin(line.angle) * arena); }
+      else {
+        const startX = line.startX ?? 0;
+        const startY = line.startY ?? 0;
+        const length = line.length ?? arena;
+        this.graphics.lineStyle(line.width, line.color, alpha * 0.8);
+        this.graphics.lineBetween(cx + startX, cy + startY, cx + startX + Math.cos(line.angle) * length, cy + startY + Math.sin(line.angle) * length);
+      }
     }
-    if (this.designerWave) this.drawSpecialLine(cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, WEAPONS.chain.color, 5);
-    if (this.echoWave) this.drawSpecialLine(cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, WEAPONS.disc.color, 5);
-    for (const flash of this.flashes) {
-      if (flash.life <= 0) continue;
-      const alpha = Math.max(0, flash.life / flash.maxLife);
-      this.graphics.lineStyle(3, flash.color, alpha);
-      this.graphics.strokeCircle(cx + flash.x, cy + flash.y, flash.radius);
-    }
+    this.drawFlashes(cx, cy, false);
     const visibleEnemies = this.visibleEnemies();
     const visibleProjectiles = this.visibleProjectiles();
     for (const projectile of visibleProjectiles) if (!projectile.enemyProjectile) this.drawProjectile(projectile, cx, cy);
@@ -957,8 +1053,14 @@ export class BattleScene extends Phaser.Scene {
       this.graphics.fillCircle(cx + particle.x, cy + particle.y, 2 + alpha * 2);
     }
     drawDevice(this.graphics, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })), this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })));
+    this.drawOrbitBlades(cx, cy);
     for (const enemy of visibleEnemies) drawEnemy(this.graphics, enemy.snapshot({ x: 0, y: 0 }), cx, cy);
     drawTelegraphs(this.graphics, visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 })), cx, cy);
+    if (this.designerWave) this.drawSpecialLine(cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, WEAPONS.chain.color, 5);
+    if (this.echoWave) this.drawSpecialLine(cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, WEAPONS.disc.color, 5);
+    if (this.crownPressure) this.drawSpecialLine(cx, cy, arena, this.crownPressure.angle, this.crownPressure.life / this.crownPressure.maxLife, BOSSES.crown.color, 6, 42, Math.min(196, arena));
+    this.drawFlashes(cx, cy, true);
+    if (this.manualAim) this.drawManualAim(cx, cy, arena);
     if (this.manualAim) {
       this.graphics.lineStyle(2, 0xfff1a8, 0.7);
       this.graphics.lineBetween(cx, cy, cx + Math.cos(this.aimAngle) * arena, cy + Math.sin(this.aimAngle) * arena);
@@ -971,7 +1073,7 @@ export class BattleScene extends Phaser.Scene {
     return selectVisibleEntities(active, this.effectBudget.limits.enemies, (first, second) => {
       if (first.isBoss !== second.isBoss) return first.isBoss ? -1 : 1;
       if (first.telegraph !== second.telegraph) return first.telegraph ? -1 : 1;
-      return first.radius - second.radius || first.id - second.id;
+      return first.distanceToCore - second.distanceToCore || first.id - second.id;
     });
   }
 
@@ -1002,9 +1104,64 @@ export class BattleScene extends Phaser.Scene {
     this.cameras.main.setZoom(this.renderPixelRatio);
   }
 
-  private drawSpecialLine(cx: number, cy: number, arena: number, angle: number, alpha: number, color: number, width: number): void {
+  private drawSpecialLine(cx: number, cy: number, arena: number, angle: number, alpha: number, color: number, width: number, startDistance = 170, endDistance = arena): void {
     this.graphics.lineStyle(width, color, Math.max(0.2, alpha));
-    this.graphics.lineBetween(cx + Math.cos(angle) * 170, cy + Math.sin(angle) * 170, cx + Math.cos(angle) * arena, cy + Math.sin(angle) * arena);
+    this.graphics.lineBetween(cx + Math.cos(angle) * startDistance, cy + Math.sin(angle) * startDistance, cx + Math.cos(angle) * endDistance, cy + Math.sin(angle) * endDistance);
+  }
+
+  private drawFlashes(cx: number, cy: number, telegraphs: boolean): void {
+    for (const flash of this.flashes) {
+      if (flash.life <= 0 || (flash.kind === 'telegraph') !== telegraphs) continue;
+      const alpha = Math.max(0, flash.life / flash.maxLife);
+      if (flash.kind === 'telegraph') {
+        this.graphics.fillStyle(flash.color, alpha * 0.06);
+        this.graphics.fillCircle(cx + flash.x, cy + flash.y, flash.radius);
+        this.graphics.lineStyle(2, flash.color, alpha * 0.85);
+      } else {
+        this.graphics.fillStyle(flash.color, alpha * 0.12);
+        this.graphics.fillCircle(cx + flash.x, cy + flash.y, flash.radius * 0.7);
+        this.graphics.lineStyle(3, flash.color, alpha);
+      }
+      this.graphics.strokeCircle(cx + flash.x, cy + flash.y, flash.radius);
+    }
+  }
+
+  private drawManualAim(cx: number, cy: number, arena: number): void {
+    const points = [{ x: cx, y: cy }];
+    const steps = 10;
+    for (let index = 0; index <= steps; index += 1) {
+      const angle = this.aimAngle - MANUAL_AIM_HALF_ANGLE + (MANUAL_AIM_HALF_ANGLE * 2 * index) / steps;
+      points.push({ x: cx + Math.cos(angle) * arena, y: cy + Math.sin(angle) * arena });
+    }
+    this.graphics.fillStyle(0xfff1a8, 0.08);
+    this.graphics.lineStyle(1, 0xfff1a8, 0.45);
+    this.graphics.beginPath();
+    this.graphics.moveTo(points[0]?.x ?? cx, points[0]?.y ?? cy);
+    for (const point of points.slice(1)) this.graphics.lineTo(point.x, point.y);
+    this.graphics.closePath();
+    this.graphics.fillPath();
+    this.graphics.strokePath();
+  }
+
+  private drawOrbitBlades(cx: number, cy: number): void {
+    for (const weapon of this.weapons.filter((item) => item.id === 'orbit')) {
+      const angle = this.orbitAngles.get(weapon.slot) ?? 0;
+      const count = (weapon.stats.count ?? 2) + (weapon.branch === 'many' ? 1 : 0);
+      const radius = (weapon.stats.orbitRadius ?? 108) + (weapon.branch === 'outer' ? 38 : 0);
+      const bladeLength = (weapon.stats.bladeLength ?? 32) + (weapon.branch === 'outer' ? 28 : 0);
+      for (let index = 0; index < count; index += 1) {
+        const bladeAngle = angle + index * Math.PI * 2 / count;
+        const halfLength = bladeLength / 2;
+        const startX = cx + Math.cos(bladeAngle) * (radius - halfLength);
+        const startY = cy + Math.sin(bladeAngle) * (radius - halfLength);
+        const endX = cx + Math.cos(bladeAngle) * (radius + halfLength);
+        const endY = cy + Math.sin(bladeAngle) * (radius + halfLength);
+        this.graphics.lineStyle(7, WEAPONS.orbit.color, 0.9);
+        this.graphics.lineBetween(startX, startY, endX, endY);
+        this.graphics.fillStyle(0xfff1a8, 0.85);
+        this.graphics.fillCircle(endX, endY, 3);
+      }
+    }
   }
 
   private drawProjectile(projectile: Projectile, centerX: number, centerY: number): void {
@@ -1049,4 +1206,13 @@ export class BattleScene extends Phaser.Scene {
     this.manualAim = true;
     this.aimMoved = false;
   }
+}
+
+function distanceToSegment(pointX: number, pointY: number, startX: number, startY: number, endX: number, endY: number): number {
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 1e-6) return Math.hypot(pointX - startX, pointY - startY);
+  const projection = Math.max(0, Math.min(1, ((pointX - startX) * dx + (pointY - startY) * dy) / lengthSquared));
+  return Math.hypot(pointX - (startX + dx * projection), pointY - (startY + dy * projection));
 }

@@ -143,17 +143,21 @@
 .upgrade-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
 .upgrade-card { display: flex; min-width: 0; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #376a80; border-radius: 14px; background: #07131f; }
 .upgrade-choice { width: 100%; min-height: 56px; padding: 10px; border: 1px solid #63d7e6; border-radius: 10px; color: #f2f0e8; background: #123044; font-weight: 800; text-align: left; overflow-wrap: anywhere; }
+.upgrade-choice[aria-disabled="true"] { border-color: #376a80; color: #b3cbd5; background: #0b2130; cursor: default; }
 .upgrade-description, .upgrade-change, .upgrade-role, .upgrade-details { margin: 0; font-size: .875rem; overflow-wrap: anywhere; }
 .upgrade-description { color: #d8e7e9; }
 .upgrade-change { color: #63d7e6; font-weight: 750; }
 .upgrade-role { margin-top: auto; color: #9db9c7; }
 .upgrade-details { color: #fff1a8; }
+.upgrade-placement-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: auto; }
+.upgrade-placement { min-width: 0; min-height: 48px; padding: 8px 4px; }
 .modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .resume-countdown { color: #63d7e6; font-size: clamp(5rem, 24vw, 9rem); font-weight: 800; }
 .pause-dialog > .button { display: block; width: 100%; margin-top: 10px; text-align: center; }
 .pause-rules { margin-top: 14px; padding: 14px; border: 1px solid #376a80; border-radius: 12px; }
 .pause-rules h3 { margin-bottom: 8px; }
 .pause-rules p { color: #c3d7dc; }
+.pause-loadout .button { display: block; width: 100%; margin-top: 10px; text-align: center; }
 .share-dialog { width: min(100%, 620px); }
 .share-text { width: 100%; min-height: 140px; margin: 8px 0; padding: 12px; border: 1px solid #376a80; border-radius: 10px; color: #f2f0e8; background: #07131f; resize: vertical; overflow-wrap: anywhere; }
 .share-status { min-height: 1.6em; margin: 0; color: #76e6a7; }
@@ -163,18 +167,19 @@
   .battle-layout { display: flex; flex-direction: column; align-items: stretch; gap: 4px; justify-content: flex-start; }
   .arena-column { flex: 0 0 auto; overflow: visible; }
   .battle-canvas-shell { width: min(100%, max(140px, calc(var(--visual-viewport-height, 100dvh) - 16.5rem))); border-radius: 16px; }
-  .battle-panel { flex: 0 1 auto; min-height: 0; max-height: 100%; padding: 6px; overflow: auto; }
+  .battle-panel { flex: 0 1 auto; min-height: 0; max-height: 100%; padding: 4px 0 0; overflow: visible; border: 0; background: transparent; }
   .battle-hud { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
   .hud-item { min-height: 48px; padding: 3px 2px; }
   .hud-label { font-size: .875rem; line-height: 1.2; }
-  .hud-value { margin-top: 1px; font-size: 1rem; line-height: 1.2; letter-spacing: -.04em; white-space: nowrap; }
-  .build-panel { margin-top: 5px; padding-top: 5px; }
-  .build-panel h2 { display: block; margin: 0 0 3px; font-size: .875rem; }
-  .build-list { display: block; min-height: 0; font-size: .875rem; line-height: 1.3; }
+  .hud-value { margin-top: 1px; font-size: 1rem; line-height: 1.2; white-space: nowrap; }
+  .build-panel { display: none; }
   .battle-help { display: none; }
   .aim-state, .battle-status { min-height: 20px; margin-top: 2px; font-size: .875rem; line-height: 1.3; }
-  .upgrade-list { grid-template-columns: 1fr; }
-  .upgrade-card { min-height: 0; }
+  .upgrade-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .upgrade-card { min-height: 0; padding: 8px; gap: 6px; }
+  .upgrade-choice { min-height: 64px; padding: 7px 6px; font-size: .78rem; }
+  .upgrade-description, .upgrade-change, .upgrade-role, .upgrade-details { font-size: .75rem; line-height: 1.3; }
+  .upgrade-card .button-small { min-height: 48px; padding: 6px 4px; font-size: .75rem; }
 }
 
 @media (max-width: 760px) and (max-height: 600px) {

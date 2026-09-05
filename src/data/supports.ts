@@ -22,7 +22,7 @@ export const SUPPORTS: Record<SupportId, SupportDefinition> = {
     ],
   },
   observe: {
-    id: 'observe', name: '観測環', description: '特殊な性質を持つ敵へ与える威力を高めます。', role: '特殊敵への威力', color: 0xf4e285, maxLevel: 3,
+    id: 'observe', name: '観測環', description: '外殻・標識体・投下体・位相体へ与える威力を高めます。', role: '特殊敵への威力', color: 0xf4e285, maxLevel: 3,
     levels: [{ value: 0.1, label: '特殊敵への威力 +10%' }, { value: 0.18, label: '+18%' }, { value: 0.28, label: '+28%' }],
   },
   brake: {

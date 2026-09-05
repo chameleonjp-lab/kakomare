@@ -7,9 +7,9 @@ export const BOSSES: Record<BossId, BossDefinition> = {
     description: '三枚の盾が回転し、隙間からの攻撃だけが本体へ届きます。',
     hp: 900,
     speed: 12,
-    contactDamage: 18,
     color: 0xffbe5c,
-    radius: 40,
+    hitRadius: 40,
+    pressure: { interval: 6, telegraph: 0.9, damage: 12, speed: 180, life: 1.3 },
   },
   designer: {
     id: 'designer',
@@ -17,9 +17,8 @@ export const BOSSES: Record<BossId, BossDefinition> = {
     description: '一方向へ小型敵を集めて送り出すボスです。予告線を見て迎え撃ちます。',
     hp: 1_400,
     speed: 10,
-    contactDamage: 22,
     color: 0xff8bd8,
-    radius: 44,
+    hitRadius: 44,
   },
   echo: {
     id: 'echo',
@@ -27,8 +26,7 @@ export const BOSSES: Record<BossId, BossDefinition> = {
     description: '攻撃を受けると反射弾を準備します。弾の予告方向を確認します。',
     hp: 2_000,
     speed: 8,
-    contactDamage: 26,
     color: 0x78a8ff,
-    radius: 48,
+    hitRadius: 48,
   },
 };

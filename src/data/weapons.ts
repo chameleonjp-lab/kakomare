@@ -90,11 +90,11 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     id: 'orbit', name: '周回刃', shortName: '周回',
     description: 'コアの周囲を回る刃で、近づいた敵へ接触攻撃を行います。', role: '近距離・防衛', color: 0xf4e285, maxLevel: 5,
     levels: [
-      { damage: 20, cooldown: 0.1, range: 180, count: 2, orbitRadius: 108, orbitSpeed: 1.9, hitCooldown: 0.45 },
-      { damage: 25, cooldown: 0.1, range: 190, count: 2, orbitRadius: 110, orbitSpeed: 2.15, hitCooldown: 0.42 },
-      { damage: 31, cooldown: 0.1, range: 205, count: 3, orbitRadius: 112, orbitSpeed: 2.4, hitCooldown: 0.38 },
-      { damage: 38, cooldown: 0.1, range: 220, count: 3, orbitRadius: 118, orbitSpeed: 2.7, hitCooldown: 0.34 },
-      { damage: 46, cooldown: 0.1, range: 240, count: 4, orbitRadius: 125, orbitSpeed: 3.0, hitCooldown: 0.3 },
+      { damage: 20, cooldown: 0.1, range: 180, count: 2, orbitRadius: 108, orbitSpeed: 1.9, hitCooldown: 0.45, bladeLength: 34 },
+      { damage: 25, cooldown: 0.1, range: 190, count: 2, orbitRadius: 110, orbitSpeed: 2.15, hitCooldown: 0.42, bladeLength: 38 },
+      { damage: 31, cooldown: 0.1, range: 205, count: 3, orbitRadius: 112, orbitSpeed: 2.4, hitCooldown: 0.38, bladeLength: 42 },
+      { damage: 38, cooldown: 0.1, range: 220, count: 3, orbitRadius: 118, orbitSpeed: 2.7, hitCooldown: 0.34, bladeLength: 45 },
+      { damage: 46, cooldown: 0.1, range: 240, count: 4, orbitRadius: 125, orbitSpeed: 3.0, hitCooldown: 0.3, bladeLength: 48 },
     ],
     branches: [
       { id: 'many', name: '多刃型', description: '刃の数と回転速度を増やします。', atLevel: 3 },
