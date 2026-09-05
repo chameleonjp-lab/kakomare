@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Enemy } from '../../src/game/entities/Enemy';
-import { selectTarget } from '../../src/game/systems/TargetingSystem';
+import { selectTarget, targetPriority } from '../../src/game/systems/TargetingSystem';
 
 describe('TargetingSystem', () => {
   it('prefers an urgent enemy in the manual direction', () => {
@@ -31,5 +31,14 @@ describe('TargetingSystem', () => {
     const target = new Enemy(1, 'shard', 0, 180);
     const partner = new Enemy(2, 'shard', 0.1, 190);
     expect(selectTarget([target, partner], { x: 0, y: 0 }, { angle: 0, manual: false }, 600, 0, 'cluster')?.id).toBe(target.id);
+  });
+
+  it('includes a marker speed boost when estimating arrival danger', () => {
+    const marked = new Enemy(1, 'shard', 0, 160);
+    const unmarked = new Enemy(2, 'shard', Math.PI, 145);
+    const marker = new Enemy(3, 'marker', 0, 270);
+    const enemies = [marked, unmarked, marker];
+    expect(targetPriority(marked, { angle: 0, manual: false }, 0, 'needle', enemies))
+      .toBeGreaterThan(targetPriority(unmarked, { angle: 0, manual: false }, 0, 'needle', enemies));
   });
 });

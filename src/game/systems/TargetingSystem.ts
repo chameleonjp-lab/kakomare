@@ -13,7 +13,8 @@ function angularDistance(a: number, b: number): number {
 }
 
 export function targetPriority(enemy: Enemy, aim: AimState, _now: number, weaponId?: WeaponId, enemies: Enemy[] = []): number {
-  const timeToCore = Math.max(0, enemy.distanceToCore - 52) / Math.max(1, enemy.speed);
+  const markerBoost = enemy.type !== 'marker' && enemies.some((marker) => marker.active && marker.type === 'marker' && Math.hypot(marker.x - enemy.x, marker.y - enemy.y) <= 120) ? 1.2 : 1;
+  const timeToCore = Math.max(0, enemy.distanceToCore - 52) / Math.max(1, enemy.speed * markerBoost);
   const urgency = Math.max(0, 100 - timeToCore * 24);
   const role = enemy.type === 'lattice' ? 24
     : enemy.type === 'runner' ? 18
@@ -34,7 +35,7 @@ export function selectTarget(enemies: Enemy[], origin: Point, aim: AimState, ran
   const candidates = manualCandidates.length > 0 ? manualCandidates : eligible;
   const locked = lockedTargetId === undefined || lockedTargetId === null ? null : candidates.find((enemy) => enemy.id === lockedTargetId);
   if (locked) return locked;
-  return [...candidates].sort((a, b) => targetPriority(b, aim, now, weaponId, candidates) - targetPriority(a, aim, now, weaponId, candidates)
+  return [...candidates].sort((a, b) => targetPriority(b, aim, now, weaponId, eligible) - targetPriority(a, aim, now, weaponId, eligible)
     || Math.hypot(a.x - origin.x, a.y - origin.y) - Math.hypot(b.x - origin.x, b.y - origin.y)
     || a.id - b.id)[0] ?? null;
 }

@@ -7,6 +7,9 @@ function isBossId(type: EnemyId | BossId): type is BossId {
   return type === 'crown' || type === 'designer' || type === 'echo';
 }
 
+export const DROPPER_SHOT_INTERVAL_SECONDS = 1.1;
+export const DROPPER_TELEGRAPH_SECONDS = 0.6;
+
 export class Enemy {
   public id: number;
   public readonly type: EnemyId | BossId;
@@ -69,7 +72,7 @@ export class Enemy {
     this.slowUntil = 0;
     this.active = true;
     this.splitDone = false;
-    this.shotCooldown = this.type === 'dropper' ? 1.1 : 0;
+    this.shotCooldown = this.type === 'dropper' ? DROPPER_SHOT_INTERVAL_SECONDS : 0;
     this.specialCooldown = this.isBoss ? 1.2 : 0;
     this.pressureCooldown = this.isBoss ? (BOSSES[this.type as BossId].pressure?.interval ?? 0) : 0;
     this.lastHitAt = -Infinity;
@@ -88,7 +91,9 @@ export class Enemy {
     if (this.type === 'runner') this.y += Math.sin(elapsed * 8 + this.id) * 2;
     if (this.type === 'dropper') {
       if (this.distanceToCore <= 250) this.shotCooldown -= seconds;
-      this.telegraph = this.distanceToCore <= 250 && this.shotCooldown <= 1.1;
+      this.telegraph = this.distanceToCore <= 250
+        && this.shotCooldown > 0
+        && this.shotCooldown <= DROPPER_TELEGRAPH_SECONDS;
     }
     if (this.type === 'phase') {
       const cycle = this.age % 1.4;
@@ -181,10 +186,11 @@ export class Enemy {
 
   private isShielded(attackAngle: number): boolean {
     const rotation = this.shieldRotation;
+    const halfAngle = BOSSES.crown.shieldHalfAngle ?? 0.22;
     for (let index = 0; index < 3; index += 1) {
       const plate = rotation + index * Math.PI * 2 / 3;
       const difference = Math.abs(((attackAngle - plate + Math.PI) % (Math.PI * 2)) - Math.PI);
-      if (difference < 0.22) return true;
+      if (difference < halfAngle) return true;
     }
     return false;
   }

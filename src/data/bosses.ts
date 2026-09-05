@@ -9,6 +9,7 @@ export const BOSSES: Record<BossId, BossDefinition> = {
     speed: 12,
     color: 0xffbe5c,
     hitRadius: 40,
+    shieldHalfAngle: 0.22,
     pressure: { interval: 6, telegraph: 0.9, damage: 12, speed: 180, life: 1.3 },
   },
   designer: {

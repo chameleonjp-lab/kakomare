@@ -5,9 +5,11 @@ export function drawTelegraphs(graphics: Phaser.GameObjects.Graphics, enemies: E
   for (const enemy of enemies) {
     if (!enemy.telegraph) continue;
     const angle = Math.atan2(enemy.y, enemy.x);
-    const length = enemy.type === 'dropper' ? 370 : enemy.isBoss ? 420 : 315;
+    const isDropper = enemy.type === 'dropper';
+    const startDistance = isDropper ? 42 : 185;
+    const length = isDropper ? Math.max(58, enemy.distanceToCore) : enemy.isBoss ? 420 : 315;
     graphics.lineStyle(enemy.isBoss ? 4 : 2, 0xfff1a8, 0.9);
-    graphics.lineBetween(centerX + Math.cos(angle) * 185, centerY + Math.sin(angle) * 185, centerX + Math.cos(angle) * length, centerY + Math.sin(angle) * length);
+    graphics.lineBetween(centerX + Math.cos(angle) * startDistance, centerY + Math.sin(angle) * startDistance, centerX + Math.cos(angle) * length, centerY + Math.sin(angle) * length);
     if (!enemy.isBoss) {
       graphics.strokeCircle(centerX + enemy.x, centerY + enemy.y, enemy.hitRadius + 8);
     }
