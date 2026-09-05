@@ -153,7 +153,7 @@ export class Enemy {
     this.slowUntil = Math.max(this.slowUntil, elapsed + duration);
   }
 
-  public snapshot(core: Point): EnemySnapshot {
+  public snapshot(core: Point, elapsed = 0): EnemySnapshot {
     return {
       id: this.id,
       type: this.type,
@@ -168,7 +168,7 @@ export class Enemy {
       invulnerable: this.invulnerable,
       telegraph: this.telegraph,
       telegraphPhase: this.type === 'phase' ? this.telegraphPhase : undefined,
-      slowFactor: this.slowUntil > 0 ? 0.55 : 1,
+      slowFactor: this.slowUntil > elapsed ? 0.55 : 1,
       shieldRotation: this.isBoss ? this.shieldRotation : undefined,
     };
   }

@@ -24,6 +24,13 @@ describe('special enemy rules', () => {
     expect(Math.hypot(enemy.x, enemy.y)).toBeGreaterThanOrEqual(180);
   });
 
+  it('reports slow state only while the slow effect is active', () => {
+    const enemy = new Enemy(1, 'shard', 0, 220);
+    enemy.applySlow(1, 0.4);
+    expect(enemy.snapshot({ x: 0, y: 0 }, 1.2).slowFactor).toBe(0.55);
+    expect(enemy.snapshot({ x: 0, y: 0 }, 1.5).slowFactor).toBe(1);
+  });
+
   it('shows the dropper warning throughout its full 1.1-second firing delay', () => {
     const enemy = new Enemy(1, 'dropper', 0, 250);
     enemy.update(0.01, 0.01, { x: 0, y: 0 }, 1);

@@ -19,7 +19,7 @@ import { EffectBudget, selectVisibleEntities, type EffectsLevel } from '../syste
 import { FixedStepClock } from '../systems/FixedStepClock';
 import { RunRecorder } from '../systems/RunRecorder';
 import { collideEnemyProjectiles, collideProjectiles } from '../systems/CollisionSystem';
-import { createUpgradeCandidateList, applyUpgradeCandidate, wouldStrandNewItems } from '../systems/UpgradeSystem';
+import { createUpgradeCandidateList, applyUpgradeCandidate, shouldRetryUpgradeDraw, wouldStrandNewItems } from '../systems/UpgradeSystem';
 import { DeterministicRng, seedFromStage, SpawnDirector } from '../systems/SpawnDirector';
 import { selectTarget } from '../systems/TargetingSystem';
 import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
@@ -101,7 +101,7 @@ export class BattleScene extends Phaser.Scene {
   private bansLeft: number;
   private repairsUsed = 0;
   private lastCandidateSignature = '';
-  private upgradesExhausted = false;
+  private blockedUpgradeExperience: number | null = null;
   private bossDefeated = false;
   private testUpgradeOpened = false;
   private testOutcomeTimer: number | null = null;
@@ -457,7 +457,8 @@ export class BattleScene extends Phaser.Scene {
     for (let index = 0; index < count && current; index += 1) {
       hit.add(current.id);
       const currentPoint = { x: current.x, y: current.y };
-      this.addLine({ angle: Math.atan2(currentPoint.y - lastPoint.y, currentPoint.x - lastPoint.x), color: WEAPONS.chain.color, life: 0.22, maxLife: 0.22, width: 5 });
+      const linkAngle = Math.atan2(currentPoint.y - lastPoint.y, currentPoint.x - lastPoint.x);
+      this.addLine({ angle: linkAngle, color: WEAPONS.chain.color, life: 0.22, maxLife: 0.22, width: 5, startX: lastPoint.x, startY: lastPoint.y, length: Math.hypot(currentPoint.x - lastPoint.x, currentPoint.y - lastPoint.y) });
       const result = applyDamage(current, this.adjustForSpecialEnemy(current, damage * Math.pow(0.8, index), weapon.slot), this.elapsed, Math.atan2(current.y, current.x));
       this.recordWeaponDamage(weapon.id, result.amount);
       if (result.destroyed) this.handleEnemyDestroyed(current);
@@ -789,15 +790,17 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private openUpgrade(): void {
-    if (this.upgradesExhausted) return;
+    if (!shouldRetryUpgradeDraw(this.experience, this.blockedUpgradeExperience)) return;
     const candidates = this.createCandidates(this.lastCandidateSignature);
     if (candidates.length !== 3) {
       // Keep both the threshold experience and level intact. A failed draw is
-      // not a level-up, and must never consume progress silently.
-      this.upgradesExhausted = true;
+      // not a level-up, and must never consume progress silently. Retry once
+      // new experience arrives so a temporary empty draw cannot end growth.
+      this.blockedUpgradeExperience = this.experience;
       this.options.callbacks.onStatus('選べる強化候補がないため、経験値を保持して戦闘を続けます');
       return;
     }
+    this.blockedUpgradeExperience = null;
     this.experience -= this.nextExperience;
     this.level += 1;
     this.nextExperience = 16 + this.level * 9;
@@ -996,7 +999,7 @@ export class BattleScene extends Phaser.Scene {
       nextExperience: this.nextExperience,
       score: Math.round(this.recorder.score + this.elapsed * 5 + this.core.health * 20),
       kills: this.recorder.kills,
-      enemies: visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 })),
+      enemies: visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),
       projectiles: visibleProjectiles.map((projectile) => projectile.snapshot()),
       weapons: this.weapons.map((weapon) => ({ id: weapon.id, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })),
       supports: this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })),
@@ -1054,8 +1057,8 @@ export class BattleScene extends Phaser.Scene {
     }
     drawDevice(this.graphics, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })), this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })));
     this.drawOrbitBlades(cx, cy);
-    for (const enemy of visibleEnemies) drawEnemy(this.graphics, enemy.snapshot({ x: 0, y: 0 }), cx, cy);
-    drawTelegraphs(this.graphics, visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 })), cx, cy);
+    for (const enemy of visibleEnemies) drawEnemy(this.graphics, enemy.snapshot({ x: 0, y: 0 }, this.elapsed), cx, cy);
+    drawTelegraphs(this.graphics, visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)), cx, cy);
     if (this.designerWave) this.drawSpecialLine(cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, WEAPONS.chain.color, 5);
     if (this.echoWave) this.drawSpecialLine(cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, WEAPONS.disc.color, 5);
     if (this.crownPressure) this.drawSpecialLine(cx, cy, arena, this.crownPressure.angle, this.crownPressure.life / this.crownPressure.maxLife, BOSSES.crown.color, 6, 42, Math.min(196, arena));

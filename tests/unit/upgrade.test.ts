@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SupportModule, supportEffectsFor } from '../../src/game/entities/SupportModule';
 import { Weapon } from '../../src/game/entities/Weapon';
-import { applyUpgradeCandidate, createUpgradeCandidateList, wouldStrandNewItems } from '../../src/game/systems/UpgradeSystem';
+import { applyUpgradeCandidate, createUpgradeCandidateList, shouldRetryUpgradeDraw, wouldStrandNewItems } from '../../src/game/systems/UpgradeSystem';
 import { DeterministicRng } from '../../src/game/systems/SpawnDirector';
 
 describe('UpgradeSystem', () => {
@@ -166,5 +166,11 @@ describe('UpgradeSystem', () => {
     expect(newItem).toBeDefined();
     expect(wouldStrandNewItems(finalBranch!, [weapon], [], 100, 100, new Set())).toBe(true);
     expect(wouldStrandNewItems(newItem!, [weapon], [], 100, 100, new Set())).toBe(false);
+  });
+
+  it('retries a blocked candidate draw only after experience increases', () => {
+    expect(shouldRetryUpgradeDraw(25, null)).toBe(true);
+    expect(shouldRetryUpgradeDraw(25, 25)).toBe(false);
+    expect(shouldRetryUpgradeDraw(29, 25)).toBe(true);
   });
 });

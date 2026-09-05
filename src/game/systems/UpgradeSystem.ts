@@ -184,3 +184,7 @@ export function wouldStrandNewItems(
   if (!hasAvailableNewItem) return false;
   return createUpgradeCandidateList(weaponCopies, supportCopies, healthAfterChoice, new DeterministicRng(0x51a7), bannedAfterChoice, coreMaxHealth).length !== 3;
 }
+
+export function shouldRetryUpgradeDraw(experience: number, blockedAtExperience: number | null): boolean {
+  return blockedAtExperience === null || experience > blockedAtExperience;
+}

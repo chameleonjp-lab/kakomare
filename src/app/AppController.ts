@@ -476,7 +476,9 @@ export class AppController {
     const loadout = snapshot
       ? [...snapshot.weapons.map((weapon) => `${this.weaponName(weapon.id)} Lv${weapon.level}`), ...snapshot.supports.map((support) => `${this.supportName(support.id)} Lv${support.level}`)]
       : ['装置情報を読み込んでいます'];
-    copy.append(element('p', '', loadout.join(' / ')));
+    const list = element('ul', 'loadout-list');
+    for (const item of loadout) list.append(element('li', '', item));
+    copy.append(list);
     const close = button('一時停止へ戻る'); close.addEventListener('click', () => copy.remove()); copy.append(close); dialog.append(copy);
   }
 
