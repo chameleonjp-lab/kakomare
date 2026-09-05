@@ -98,6 +98,7 @@ export interface BossDefinition {
   speed: number;
   color: number;
   hitRadius?: number;
+  shieldHalfAngle?: number;
   pressure?: {
     interval: number;
     telegraph: number;

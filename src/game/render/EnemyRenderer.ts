@@ -31,8 +31,7 @@ function drawBoss(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x
   if (id === 'crown') {
     for (let index = 0; index < 3; index += 1) {
       const angle = (enemy.shieldRotation ?? 0) + index * Math.PI * 2 / 3;
-      graphics.lineStyle(7, color, alpha * 0.9);
-      graphics.lineBetween(x + Math.cos(angle) * 28, y + Math.sin(angle) * 28, x + Math.cos(angle) * 60, y + Math.sin(angle) * 60);
+      drawCrownPlate(graphics, x, y, angle, enemy.hitRadius, color, alpha);
     }
   } else if (id === 'designer') {
     drawPolygon(graphics, polygonPoints(x, y, 34, 6, enemy.shieldRotation ?? 0), color, alpha * 0.22, color);
@@ -48,6 +47,29 @@ function drawBoss(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x
   }
   graphics.fillStyle(color, alpha * 0.55);
   graphics.fillCircle(x, y, 22);
+}
+
+function drawCrownPlate(graphics: Phaser.GameObjects.Graphics, x: number, y: number, angle: number, hitRadius: number, color: number, alpha: number): void {
+  const halfAngle = BOSSES.crown.shieldHalfAngle ?? 0.22;
+  const innerRadius = hitRadius * 0.65;
+  const outerRadius = hitRadius * 1.5;
+  const segments = 4;
+  graphics.fillStyle(color, alpha * 0.32);
+  graphics.beginPath();
+  graphics.moveTo(x + Math.cos(angle - halfAngle) * innerRadius, y + Math.sin(angle - halfAngle) * innerRadius);
+  graphics.lineTo(x + Math.cos(angle - halfAngle) * outerRadius, y + Math.sin(angle - halfAngle) * outerRadius);
+  for (let index = 1; index <= segments; index += 1) {
+    const edgeAngle = angle - halfAngle + (halfAngle * 2 * index) / segments;
+    graphics.lineTo(x + Math.cos(edgeAngle) * outerRadius, y + Math.sin(edgeAngle) * outerRadius);
+  }
+  for (let index = segments - 1; index >= 0; index -= 1) {
+    const edgeAngle = angle - halfAngle + (halfAngle * 2 * index) / segments;
+    graphics.lineTo(x + Math.cos(edgeAngle) * innerRadius, y + Math.sin(edgeAngle) * innerRadius);
+  }
+  graphics.closePath();
+  graphics.fillPath();
+  graphics.lineStyle(2, color, alpha * 0.95);
+  graphics.strokePath();
 }
 
 function drawNormalEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x: number, y: number, alpha: number): void {

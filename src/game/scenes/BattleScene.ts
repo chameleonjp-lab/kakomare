@@ -4,7 +4,7 @@ import { ENEMIES } from '../../data/enemies';
 import { STAGES, nextStageId } from '../../data/stages';
 import { WEAPONS } from '../../data/weapons';
 import { Core } from '../entities/Core';
-import { Enemy } from '../entities/Enemy';
+import { DROPPER_SHOT_INTERVAL_SECONDS, Enemy } from '../entities/Enemy';
 import { Projectile } from '../entities/Projectile';
 import { SupportModule, supportEffectsFor } from '../entities/SupportModule';
 import { Weapon } from '../entities/Weapon';
@@ -44,8 +44,6 @@ export interface BattleSceneOptions {
 interface FlashEffect { x: number; y: number; color: number; life: number; maxLife: number; radius: number; kind?: 'impact' | 'telegraph' }
 interface LineEffect { angle: number; color: number; life: number; maxLife: number; width: number; startX?: number; startY?: number; length?: number }
 interface GravityField { x: number; y: number; life: number; maxLife: number; radius: number; damage: number; pullStrength: number; safeDistance: number; damageTimer: number; collapse: boolean; slowDuration: number }
-interface SpecialTelegraph { angle: number; life: number; maxLife: number; color: number; width: number }
-
 const MAX_ACTIVE_ENEMIES = 180;
 const MAX_FRIENDLY_PROJECTILES = 280;
 const MAX_ENEMY_PROJECTILES = 80;
@@ -69,7 +67,6 @@ export class BattleScene extends Phaser.Scene {
   private readonly flashes: FlashEffect[] = [];
   private readonly lines: LineEffect[] = [];
   private readonly gravityFields: GravityField[] = [];
-  private readonly specialTelegraphs: SpecialTelegraph[] = [];
   private readonly orbitAngles = new Map<number, number>();
   private readonly orbitHits = new Map<string, number>();
   private readonly targetLocks = new Map<number, number>();
@@ -264,7 +261,11 @@ export class BattleScene extends Phaser.Scene {
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
       const markerBoost = this.markerBoostFor(enemy);
+      const wasTelegraph = enemy.telegraph;
       const reached = enemy.update(seconds, this.elapsed, { x: 0, y: 0 }, 1, markerBoost);
+      if (enemy.type === 'dropper' && !wasTelegraph && enemy.telegraph) {
+        this.options.callbacks.onStatus('投下体が遠隔弾を準備しています');
+      }
       if (enemy.slowUntil > this.elapsed) this.recorder.recordControl('slowed', seconds);
       if (reached) {
         const damage = applyContactDamage(this.core, enemy);
@@ -630,7 +631,7 @@ export class BattleScene extends Phaser.Scene {
         radius: 9, damage: 10, life: 2.2, piercing: 0, enemyProjectile: true,
       });
       if (!projectile) continue;
-      enemy.shotCooldown = 1.1;
+      enemy.shotCooldown = DROPPER_SHOT_INTERVAL_SECONDS;
       this.options.callbacks.onStatus('投下体が遠隔弾を発射しました');
     }
   }
@@ -981,9 +982,7 @@ export class BattleScene extends Phaser.Scene {
   private updateEffects(seconds: number): void {
     for (const flash of this.flashes) { flash.life -= seconds; if (!this.options.reducedMotion) flash.radius += seconds * 80; }
     for (const line of this.lines) line.life -= seconds;
-    for (const telegraph of this.specialTelegraphs) telegraph.life -= seconds;
     this.particles.update(seconds);
-    while (this.specialTelegraphs[0]?.life <= 0) this.specialTelegraphs.shift();
   }
 
   private emitSnapshot(force: boolean): void {

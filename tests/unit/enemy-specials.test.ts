@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BOSSES } from '../../src/data/bosses';
-import { Enemy } from '../../src/game/entities/Enemy';
+import { DROPPER_SHOT_INTERVAL_SECONDS, DROPPER_TELEGRAPH_SECONDS, Enemy } from '../../src/game/entities/Enemy';
 
 describe('special enemy rules', () => {
   it('limits the outer shell to 24 damage per hit', () => {
@@ -31,14 +31,21 @@ describe('special enemy rules', () => {
     expect(enemy.snapshot({ x: 0, y: 0 }, 1.5).slowFactor).toBe(1);
   });
 
-  it('shows the dropper warning throughout its full 1.1-second firing delay', () => {
+  it('shows the dropper warning only during the final firing window', () => {
     const enemy = new Enemy(1, 'dropper', 0, 250);
-    enemy.update(0.01, 0.01, { x: 0, y: 0 }, 1);
+    enemy.update(DROPPER_SHOT_INTERVAL_SECONDS - DROPPER_TELEGRAPH_SECONDS - 0.01, 0.49, { x: 0, y: 0 }, 1);
+    expect(enemy.telegraph).toBe(false);
+    enemy.update(0.02, 0.51, { x: 0, y: 0 }, 1);
     expect(enemy.telegraph).toBe(true);
-    enemy.update(0.89, 0.9, { x: 0, y: 0 }, 1);
-    expect(enemy.telegraph).toBe(true);
-    enemy.update(0.21, 1.11, { x: 0, y: 0 }, 1);
+    enemy.update(DROPPER_TELEGRAPH_SECONDS, 1.11, { x: 0, y: 0 }, 1);
+    expect(enemy.telegraph).toBe(false);
     expect(enemy.shotCooldown).toBeLessThanOrEqual(0);
+  });
+
+  it('uses the same angular opening for the crown shield and damage blocking', () => {
+    const enemy = new Enemy(1, 'crown', 0, 196);
+    expect(enemy.damage(10, 0, 0).blocked).toBe(true);
+    expect(enemy.damage(10, 0, Math.PI / 3).blocked).toBe(false);
   });
 
   it('keeps the stopped crown on its inner ring and exposes a readable pressure window', () => {
