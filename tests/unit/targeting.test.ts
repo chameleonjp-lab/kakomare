@@ -21,6 +21,12 @@ describe('TargetingSystem', () => {
     expect(selectTarget([aimed, urgent], { x: 0, y: 0 }, { angle: 0, manual: true }, 600, 0, 'needle')?.id).toBe(aimed.id);
   });
 
+  it('does not treat an enemy outside the visible sixty-degree fan as manual aim', () => {
+    const inside = new Enemy(1, 'shard', Math.PI / 9, 180);
+    const outside = new Enemy(2, 'shard', Math.PI * 2 / 9, 60);
+    expect(selectTarget([inside, outside], { x: 0, y: 0 }, { angle: 0, manual: true }, 600, 0, 'needle')?.id).toBe(inside.id);
+  });
+
   it('keeps a valid locked target until it leaves the eligible set', () => {
     const locked = new Enemy(1, 'shard', 0, 180);
     const urgent = new Enemy(2, 'runner', Math.PI, 60);

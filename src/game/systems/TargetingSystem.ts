@@ -2,6 +2,8 @@ import type { Enemy } from '../entities/Enemy';
 import type { Point } from '../../types/game';
 import type { WeaponId } from '../../types/content';
 
+export const MANUAL_AIM_HALF_ANGLE = Math.PI / 6;
+
 export interface AimState {
   angle: number;
   manual: boolean;
@@ -22,7 +24,7 @@ export function targetPriority(enemy: Enemy, aim: AimState, _now: number, weapon
         : enemy.type === 'marker' ? 35
           : enemy.type === 'phase' ? 18
             : enemy.isBoss ? 30 : 0;
-  const manual = aim.manual && angularDistance(Math.atan2(enemy.y, enemy.x), aim.angle) <= Math.PI / 3 ? 80 : 0;
+  const manual = aim.manual && angularDistance(Math.atan2(enemy.y, enemy.x), aim.angle) <= MANUAL_AIM_HALF_ANGLE ? 80 : 0;
   const telegraph = enemy.telegraph ? 45 : 0;
   return urgency + role + manual + telegraph + weaponCompatibility(enemy, weaponId, enemies);
 }
@@ -30,7 +32,7 @@ export function targetPriority(enemy: Enemy, aim: AimState, _now: number, weapon
 export function selectTarget(enemies: Enemy[], origin: Point, aim: AimState, range: number, now: number, weaponId?: WeaponId, lockedTargetId?: number | null): Enemy | null {
   const eligible = enemies.filter((enemy) => enemy.active && Math.hypot(enemy.x - origin.x, enemy.y - origin.y) <= range + enemy.hitRadius);
   const manualCandidates = aim.manual
-    ? eligible.filter((enemy) => angularDistance(Math.atan2(enemy.y - origin.y, enemy.x - origin.x), aim.angle) <= Math.PI / 3)
+    ? eligible.filter((enemy) => angularDistance(Math.atan2(enemy.y - origin.y, enemy.x - origin.x), aim.angle) <= MANUAL_AIM_HALF_ANGLE)
     : [];
   const candidates = manualCandidates.length > 0 ? manualCandidates : eligible;
   const locked = lockedTargetId === undefined || lockedTargetId === null ? null : candidates.find((enemy) => enemy.id === lockedTargetId);
