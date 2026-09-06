@@ -86,11 +86,29 @@ describe('UpgradeSystem', () => {
   });
 
   it('caps additive support effects at their documented limits', () => {
+    const outputA = new SupportModule('output', 0);
+    const outputB = new SupportModule('output', 1);
+    outputA.level = 3;
+    outputB.level = 3;
+    expect(supportEffectsFor([outputA, outputB], 'output', 1).primary).toBe(0.4);
+
+    const rhythmA = new SupportModule('rhythm', 0);
+    const rhythmB = new SupportModule('rhythm', 1);
+    rhythmA.level = 3;
+    rhythmB.level = 3;
+    expect(supportEffectsFor([rhythmA, rhythmB], 'rhythm', 1).primary).toBe(0.3);
+
     const observeA = new SupportModule('observe', 0);
     const observeB = new SupportModule('observe', 1);
     observeA.level = 3;
     observeB.level = 3;
     expect(supportEffectsFor([observeA, observeB], 'observe', 1).primary).toBe(0.45);
+
+    const brakeA = new SupportModule('brake', 0);
+    const brakeB = new SupportModule('brake', 1);
+    brakeA.level = 3;
+    brakeB.level = 3;
+    expect(supportEffectsFor([brakeA, brakeB], 'brake', 1).primary).toBe(0.45);
 
     const focusA = new SupportModule('focus', 0);
     const focusB = new SupportModule('focus', 1);

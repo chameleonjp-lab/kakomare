@@ -1,10 +1,10 @@
 # カコマレ 検査チェックリスト
 
-## #3マージ後の是正PR実行記録
+## main追随後の品質検査記録
 
-対象ブランチ: `fix/post-release-completion`
+対象ブランチ: `main`
 
-ローカル実施日: 2026-08-31（UTC）
+ローカル実施日: 2026-09-05（UTC）
 
 この文書はコマンドと画面経路を確認するための記録です。公開前の最終確認項目は [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) に分けています。
 
@@ -13,7 +13,7 @@
 - [x] `npm ci`
 - [x] `npm run lint`
 - [x] `npm run typecheck`
-- [x] `npm run test`（14ファイル、89件）
+- [x] `npm run test`（15ファイル、108件）
 - [x] `npm run test:e2e:chromium`（24件）
 - [x] `npm run test:e2e`相当（ActionsでChromium、WebKitを順番に実施）
 - [x] `npm run build`
@@ -59,10 +59,19 @@
 - [ ] 危険予告と敵弾が通常の演出より前面に表示される
 - [x] 敵、弾、粒子、演出の上限を超えて増え続けない
 
+## ロジック回帰
+
+- [x] 群集弾が指定位置まで飛び、着弾前の0.45秒だけ予告してから範囲攻撃する
+- [x] 敵ごとの衝突半径を使い、敵の見た目サイズに応じて判定する
+- [x] 手動照準の表示扇形と対象選択を同じ60度で扱う
+- [x] 周回刃の回転速度が発射間隔短縮の影響を受けない
+- [x] 候補が3枚揃わない強化抽選で経験値を消費しない
+- [x] 補助効果を文書化した上限で止める
+
 ## 共有と公開
 
 - [x] ホーム共有と結果共有で文章が異なる
 - [x] ネイティブ共有またはクリップボードが使えない場合に画面内コピー欄が出る
 - [x] 破損保存から初期画面へ復帰し、退避データを確認できる
 - [x] favicon、OGP、canonical、GitHub Pagesサブパスが `npm run verify:dist` で確認できる
-- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #11](https://github.com/chameleonjp-lab/kakomare/actions/runs/33353475007)）
+- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #19](https://github.com/chameleonjp-lab/kakomare/actions/runs/33996758933)）
