@@ -471,6 +471,7 @@ export class AppController {
   private showPauseLoadout(dialog: HTMLElement): void {
     if (dialog.querySelector('.pause-loadout')) return;
     const copy = element('div', 'pause-rules pause-loadout');
+    copy.dataset.testid = 'pause-loadout';
     copy.append(element('h3', '', '現在の装置'));
     const snapshot = this.latestBattleSnapshot;
     const loadout = snapshot

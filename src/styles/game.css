@@ -193,6 +193,16 @@
   .build-panel h2 { margin-bottom: 1px; }
 }
 
+/* Portrait battle screens reserve the field for aiming. The full loadout is
+   still available from the existing pause dialog's "装置を確認" action. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .battle-canvas-shell { width: min(100%, max(140px, calc(var(--visual-viewport-height, 100dvh) - 9rem))); }
+  .battle-panel { flex: 0 0 auto; padding-top: 4px; }
+  .battle-panel > .build-panel,
+  .battle-panel > .battle-help,
+  .battle-panel > .battle-controls { display: none; }
+}
+
 @media (orientation: landscape) and (max-height: 620px) {
   .battle-layout { grid-template-columns: minmax(0, 1fr) 250px; grid-template-rows: none; gap: 10px; }
   .battle-canvas-shell { width: min(100%, max(120px, calc(var(--visual-viewport-height, 100dvh) - max(132px, 7.5rem)))); }

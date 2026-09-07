@@ -294,8 +294,6 @@ test('縦横とデスクトップの戦闘画面が表示領域に収まり、�
       '.battle-status',
       '.battle-panel',
       '.battle-hud',
-      '.build-panel',
-      '.build-list',
     ];
     for (const selector of requiredSelectors) {
       await expect(page.locator(selector), `${viewport.width}x${viewport.height}: ${selector} が1件存在する`).toHaveCount(1);
@@ -382,21 +380,24 @@ test('縦横とデスクトップの戦闘画面が表示領域に収まり、�
     for (const size of metrics.importantFontSizes) expect(size).toBeGreaterThanOrEqual(16);
     if (viewport.portrait) {
       expect(metrics.panel.top).toBeGreaterThanOrEqual(metrics.arena.bottom - 1);
+      await expect(page.locator('.build-panel')).toBeHidden();
+      await expect(page.locator('.battle-controls')).toBeHidden();
+      expect(metrics.canvas.width).toBeGreaterThanOrEqual(viewport.width - 18);
     } else {
       expect(metrics.panel.left).toBeGreaterThanOrEqual(metrics.arena.right - 1);
+      await expect(page.locator('.build-panel')).toBeVisible();
+      await expect(page.locator('.build-list')).toBeVisible();
     }
   }
 });
 
-test('320x480で装置が6件になっても戦闘パネルを画面外へ出さない', async ({ page }) => {
+test('320x480でも戦場を優先し、装置一覧は一時停止から確認できる', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 480 });
   await enterBattle(page);
-  const build = page.locator('.build-list');
-  await expect(build).toBeVisible();
-  await build.evaluate((node) => {
-    node.textContent = '遠隔重力点 Lv5 / 残響円盤 Lv5 / 連鎖導体 Lv5 / 出力環 Lv3 / 観測環 Lv3 / 制動環 Lv3';
-  });
-  await expect(build).toContainText('制動環 Lv3');
+  await expect(page.locator('.build-panel')).toBeHidden();
+  await page.getByTestId('pause-button').click();
+  await page.getByRole('button', { name: '装置を確認' }).click();
+  await expect(page.getByTestId('pause-loadout')).toContainText('連針砲 Lv1');
   const metrics = await page.evaluate(() => {
     const measure = (selector: string): { top: number; bottom: number; height: number } => {
       const node = document.querySelector<HTMLElement>(selector);
@@ -406,12 +407,14 @@ test('320x480で装置が6件になっても戦闘パネルを画面外へ出さ
     };
     const panel = document.querySelector<HTMLElement>('.battle-panel');
     if (!panel) throw new Error('.battle-panel が見つかりません。');
+    const canvas = document.querySelector<HTMLElement>('.battle-canvas-shell');
+    if (!canvas) throw new Error('.battle-canvas-shell が見つかりません。');
     return {
       shell: measure('.battle-shell'),
       layout: measure('.battle-layout'),
       arena: measure('.arena-column'),
       panel: measure('.battle-panel'),
-      build: measure('.build-list'),
+      canvasWidth: canvas.getBoundingClientRect().width,
       panelScrollHeight: panel.scrollHeight,
       panelClientHeight: panel.clientHeight,
     };
@@ -420,7 +423,7 @@ test('320x480で装置が6件になっても戦闘パネルを画面外へ出さ
   expect(metrics.panel.top).toBeGreaterThanOrEqual(metrics.arena.bottom - 1);
   expect(metrics.panel.bottom).toBeLessThanOrEqual(metrics.layout.bottom + 1);
   expect(metrics.panel.bottom).toBeLessThanOrEqual(metrics.shell.bottom + 1);
-  expect(metrics.build.bottom).toBeLessThanOrEqual(metrics.panel.bottom + 1);
+  expect(metrics.canvasWidth).toBeGreaterThanOrEqual(280);
   expect(metrics.panelScrollHeight).toBeLessThanOrEqual(metrics.panelClientHeight + 1);
 });
 
@@ -451,14 +454,14 @@ test('320x568で文字を200%相当に拡大しても戦闘操作を画面内に
       canvasShellScrollHeight: canvasShell.scrollHeight,
       panel: rect('.battle-panel').toJSON(),
       panelClientHeight: panel.clientHeight,
-      buildText: panel.querySelector('.build-list')?.textContent ?? '',
+      buildVisible: Boolean(panel.querySelector('.build-panel')?.getBoundingClientRect().width),
     };
   });
   expect(metrics.documentHeight).toBeLessThanOrEqual(metrics.viewportHeight + 1);
   expect(metrics.pause.top).toBeGreaterThanOrEqual(metrics.header.top - 1);
   expect(metrics.pause.bottom).toBeLessThanOrEqual(metrics.header.bottom + 1);
   expect(metrics.pause.bottom).toBeLessThanOrEqual(metrics.canvas.top + 1);
-  expect(metrics.canvas.width).toBeGreaterThanOrEqual(120);
+  expect(metrics.canvas.width).toBeGreaterThanOrEqual(280);
   expect(metrics.innerCanvas.top).toBeGreaterThanOrEqual(metrics.canvas.top - 1);
   expect(metrics.innerCanvas.right).toBeLessThanOrEqual(metrics.canvas.right + 1);
   expect(metrics.innerCanvas.bottom).toBeLessThanOrEqual(metrics.canvas.bottom + 1);
@@ -467,7 +470,7 @@ test('320x568で文字を200%相当に拡大しても戦闘操作を画面内に
   expect(metrics.canvasShellScrollHeight).toBeLessThanOrEqual(metrics.canvasShellClientHeight + 1);
   expect(metrics.panel.bottom).toBeLessThanOrEqual(metrics.viewportHeight + 1);
   expect(metrics.panelClientHeight).toBeGreaterThan(0);
-  expect(metrics.buildText).toContain('連針砲');
+  expect(metrics.buildVisible).toBe(false);
 });
 
 test('タップ、二重タップ、長押しでは照準を勝手に切り替えない', async ({ page }) => {
