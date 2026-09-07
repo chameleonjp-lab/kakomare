@@ -4,6 +4,7 @@
  * Phaser draws a single Graphics object in command order, but that makes a
  * later refactor easy to get wrong.  The battle scene uses one Graphics object
  * per layer and these depths are the single source of truth for their order.
+ * `feedback` is reserved for hit feedback between enemies and danger warnings.
  * `hud` is reserved for DOM HUD elements, which are outside the canvas.
  */
 export const RENDER_LAYERS = {
@@ -11,6 +12,7 @@ export const RENDER_LAYERS = {
   device: 20,
   friendly: 30,
   enemies: 40,
+  feedback: 45,
   telegraphs: 50,
   hostileProjectiles: 60,
   hud: 70,
