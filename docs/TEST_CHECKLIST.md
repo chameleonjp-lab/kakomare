@@ -80,4 +80,4 @@
 - [x] ネイティブ共有またはクリップボードが使えない場合に画面内コピー欄が出る
 - [x] 破損保存から初期画面へ復帰し、退避データを確認できる
 - [x] favicon、OGP、canonical、GitHub Pagesサブパスが `npm run verify:dist` で確認できる
-- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #27](https://github.com/chameleonjp-lab/kakomare/actions/runs/34119746458)）
+- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #29](https://github.com/chameleonjp-lab/kakomare/actions/runs/34133730037)）
