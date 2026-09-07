@@ -4,7 +4,7 @@
 
 対象ブランチ: `main`
 
-ローカル実施日: 2026-09-05（UTC）
+ローカル実施日: 2026-09-07（UTC）
 
 この文書はコマンドと画面経路を確認するための記録です。公開前の最終確認項目は [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) に分けています。
 
@@ -13,7 +13,7 @@
 - [x] `npm ci`
 - [x] `npm run lint`
 - [x] `npm run typecheck`
-- [x] `npm run test`（15ファイル、108件）
+- [x] `npm run test`（16ファイル、110件）
 - [x] `npm run test:e2e:chromium`（24件）
 - [x] `npm run test:e2e`相当（ActionsでChromium、WebKitを順番に実施）
 - [x] `npm run build`
@@ -57,6 +57,7 @@
 - [x] 長押し、二重タップ、指を戦場外へ出して離す操作が破綻しない
 - [x] 演出量の自動調整が標準、少ない、最小の順で制限を強める
 - [ ] 危険予告と敵弾が通常の演出より前面に表示される
+  - キャンバス内の深度は `src/game/render/RenderLayer.ts` で固定済み。iPhone実機での目視確認は公開前に実施する。
 - [x] 敵、弾、粒子、演出の上限を超えて増え続けない
 
 ## ロジック回帰
@@ -67,6 +68,7 @@
 - [x] 周回刃の回転速度が発射間隔短縮の影響を受けない
 - [x] 候補が3枚揃わない強化抽選で経験値を消費しない
 - [x] 補助効果を文書化した上限で止める
+- [x] 背景、装置、味方演出、敵、危険予告、敵弾の描画深度を後ろから前へ固定する
 
 ## 共有と公開
 
@@ -74,4 +76,4 @@
 - [x] ネイティブ共有またはクリップボードが使えない場合に画面内コピー欄が出る
 - [x] 破損保存から初期画面へ復帰し、退避データを確認できる
 - [x] favicon、OGP、canonical、GitHub Pagesサブパスが `npm run verify:dist` で確認できる
-- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #19](https://github.com/chameleonjp-lab/kakomare/actions/runs/33996758933)）
+- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #21](https://github.com/chameleonjp-lab/kakomare/actions/runs/34084596578)）
