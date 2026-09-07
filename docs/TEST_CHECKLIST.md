@@ -31,6 +31,7 @@
 - [x] 開始直後に一時停止にならない
 - [x] 強化候補を1回タップで選べる
 - [x] 一時停止、再開、リタイアが動く
+- [x] 縦画面の戦闘中は装置一覧を一時停止内の「装置を確認」から開ける
 - [x] 勝利と敗北の両方が結果画面へ進む
 - [x] 結果画面は最上部から表示される
 - [x] ステージ1、2、3を順に勝利して無限モードを解放できる
@@ -78,4 +79,4 @@
 - [x] ネイティブ共有またはクリップボードが使えない場合に画面内コピー欄が出る
 - [x] 破損保存から初期画面へ復帰し、退避データを確認できる
 - [x] favicon、OGP、canonical、GitHub Pagesサブパスが `npm run verify:dist` で確認できる
-- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #24](https://github.com/chameleonjp-lab/kakomare/actions/runs/34108653058)）
+- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #27](https://github.com/chameleonjp-lab/kakomare/actions/runs/34119746458)）
