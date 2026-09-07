@@ -3,6 +3,7 @@ import { BOSSES } from '../../data/bosses';
 import { ENEMIES } from '../../data/enemies';
 import type { BossId, EnemyId } from '../../types/content';
 import type { EnemySnapshot } from '../../types/game';
+import { shouldDrawHealthBar } from './EnemyHealthBarPolicy';
 import { drawHex, drawPolygon, polygonPoints } from './ShapeFactory';
 
 export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, centerX: number, centerY: number): void {
@@ -11,12 +12,14 @@ export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySna
   const alpha = enemy.invulnerable ? 0.32 : 1;
   if (enemy.isBoss) drawBoss(graphics, enemy, x, y, alpha);
   else drawNormalEnemy(graphics, enemy, x, y, alpha);
-  const ratio = Math.max(0, enemy.hp / enemy.maxHp);
-  graphics.fillStyle(0x07131f, 0.85);
-  const barWidth = Math.max(36, enemy.hitRadius * 2.1);
-  graphics.fillRect(x - barWidth / 2, y - enemy.hitRadius - 12, barWidth, 4);
-  graphics.fillStyle(enemy.isBoss ? bossColor(enemy.type as BossId) : enemyColor(enemy.type as EnemyId), 1);
-  graphics.fillRect(x - barWidth / 2, y - enemy.hitRadius - 12, barWidth * ratio, 4);
+  if (shouldDrawHealthBar(enemy)) {
+    const ratio = Math.max(0, enemy.hp / enemy.maxHp);
+    graphics.fillStyle(0x07131f, 0.85);
+    const barWidth = Math.max(36, enemy.hitRadius * 2.1);
+    graphics.fillRect(x - barWidth / 2, y - enemy.hitRadius - 12, barWidth, 4);
+    graphics.fillStyle(enemy.isBoss ? bossColor(enemy.type as BossId) : enemyColor(enemy.type as EnemyId), 1);
+    graphics.fillRect(x - barWidth / 2, y - enemy.hitRadius - 12, barWidth * ratio, 4);
+  }
   if (enemy.shieldHits > 0) {
     graphics.lineStyle(2, 0xa78bfa, 0.95);
     graphics.strokeCircle(x, y, enemy.hitRadius + 4);

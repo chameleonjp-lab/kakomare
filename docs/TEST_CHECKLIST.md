@@ -13,7 +13,7 @@
 - [x] `npm ci`
 - [x] `npm run lint`
 - [x] `npm run typecheck`
-- [x] `npm run test`（16ファイル、110件）
+- [x] `npm run test`（17ファイル、114件）
 - [x] `npm run test:e2e:chromium`（24件）
 - [x] `npm run test:e2e`相当（ActionsでChromium、WebKitを順番に実施）
 - [x] `npm run build`
@@ -69,6 +69,7 @@
 - [x] 候補が3枚揃わない強化抽選で経験値を消費しない
 - [x] 補助効果を文書化した上限で止める
 - [x] 背景、装置、味方演出、敵、危険予告、敵弾の描画深度を後ろから前へ固定する
+- [x] 通常の小型敵は満タン時の体力バーを省略し、特殊敵・ボス・被害敵は表示する
 
 ## 共有と公開
 
@@ -76,4 +77,4 @@
 - [x] ネイティブ共有またはクリップボードが使えない場合に画面内コピー欄が出る
 - [x] 破損保存から初期画面へ復帰し、退避データを確認できる
 - [x] favicon、OGP、canonical、GitHub Pagesサブパスが `npm run verify:dist` で確認できる
-- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #21](https://github.com/chameleonjp-lab/kakomare/actions/runs/34084596578)）
+- [x] GitHub ActionsのChromiumとWebKitが成功する（[Quality run #22](https://github.com/chameleonjp-lab/kakomare/actions/runs/34084904188)）
