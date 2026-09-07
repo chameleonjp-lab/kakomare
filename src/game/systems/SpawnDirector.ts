@@ -25,9 +25,28 @@ export function seedFromStage(stageId: StageId, startTime: number, serial: numbe
   return hash >>> 0;
 }
 
+export const SPECIAL_WAVE_FIRST_AT_SECONDS = 50;
+export const SPECIAL_WAVE_INTERVAL_SECONDS = 45;
+export const SPECIAL_WAVE_LEAD_SECONDS = 1.2;
+const SPECIAL_WAVE_SIZE = 3;
+const COMMON_ENEMY_TYPES: ReadonlySet<EnemyId> = new Set(['shard', 'runner']);
+
+export interface SpawnWaveWarning {
+  angle: number;
+  leadTime: number;
+  types: EnemyId[];
+}
+
 export interface SpawnRequest {
   type: EnemyId;
   angle: number;
+  specialWave?: boolean;
+}
+
+interface PendingSpecialWave {
+  angle: number;
+  life: number;
+  types: EnemyId[];
 }
 
 export class SpawnDirector {
@@ -43,6 +62,9 @@ export class SpawnDirector {
   private updateAccumulator = 0;
   private simulatedElapsed = 0;
   private pendingEnemy: EnemyId | null = null;
+  private pendingSpecialWave: PendingSpecialWave | null = null;
+  private nextSpecialWaveAt = SPECIAL_WAVE_FIRST_AT_SECONDS;
+  private specialWaveCount = 0;
 
   public constructor(private readonly stageId: StageId, seed: number, private readonly testMode = false) {
     this.rng = new DeterministicRng(seed);
@@ -61,7 +83,18 @@ export class SpawnDirector {
     return this.testMode ? 40 : STAGES[this.stageId].enemyLimit;
   }
 
-  public update(seconds: number, _elapsed: number, activeEnemyCount: number, emit: (request: SpawnRequest) => void, reservedSlots = 0): void {
+  public get pendingSpecialWaveSlots(): number {
+    return this.pendingSpecialWave?.types.length ?? 0;
+  }
+
+  public update(
+    seconds: number,
+    _elapsed: number,
+    activeEnemyCount: number,
+    emit: (request: SpawnRequest) => void,
+    reservedSlots = 0,
+    onSpecialWaveWarning?: (warning: SpawnWaveWarning) => void,
+  ): void {
     this.updateAccumulator += Math.max(0, seconds);
     let count = activeEnemyCount;
     const spawnLimit = Math.max(0, this.enemyLimit - Math.max(0, Math.floor(reservedSlots)));
@@ -69,18 +102,47 @@ export class SpawnDirector {
       this.updateAccumulator -= SpawnDirector.UPDATE_STEP;
       if (this.updateAccumulator < 0 && this.updateAccumulator > -SpawnDirector.STEP_EPSILON) this.updateAccumulator = 0;
       this.simulatedElapsed += SpawnDirector.UPDATE_STEP;
-      count = this.updateSpawnStep(SpawnDirector.UPDATE_STEP, this.simulatedElapsed, count, spawnLimit, emit);
+      count = this.updateSpawnStep(SpawnDirector.UPDATE_STEP, this.simulatedElapsed, count, spawnLimit, emit, onSpecialWaveWarning);
     }
   }
 
-  private updateSpawnStep(seconds: number, elapsed: number, activeEnemyCount: number, spawnLimit: number, emit: (request: SpawnRequest) => void): number {
+  private updateSpawnStep(
+    seconds: number,
+    elapsed: number,
+    activeEnemyCount: number,
+    spawnLimit: number,
+    emit: (request: SpawnRequest) => void,
+    onSpecialWaveWarning?: (warning: SpawnWaveWarning) => void,
+  ): number {
     const stage = STAGES[this.stageId];
     const endlessScale = stage.isEndless ? Math.pow(1.12, Math.floor(elapsed / 300)) : 1;
     const base = this.testMode ? 3.8 : stage.budgetBase * endlessScale;
     const rise = this.testMode ? 0.09 : stage.budgetRise * endlessScale;
     this.budget += (base + elapsed * rise) * seconds;
     let count = activeEnemyCount;
-    while (count < spawnLimit) {
+
+    const hadPendingSpecialWave = this.pendingSpecialWave !== null;
+    this.startSpecialWaveIfDue(elapsed, count, spawnLimit, onSpecialWaveWarning);
+    const specialWave = this.pendingSpecialWave;
+    if (specialWave && hadPendingSpecialWave) {
+      specialWave.life -= seconds;
+      if (specialWave.life <= 0 && count + specialWave.types.length <= spawnLimit) {
+        const types = specialWave.types;
+        const angle = specialWave.angle;
+        // Clear the reservation before calling the scene callback. The callback
+        // creates the actual enemies and must see the reserved slots as free.
+        this.pendingSpecialWave = null;
+        for (let index = 0; index < types.length; index += 1) {
+          emit({ type: types[index] ?? 'shard', angle: angle + (index - 1) * 0.1, specialWave: true });
+          count += 1;
+        }
+      }
+    }
+
+    const regularSpawnLimit = this.pendingSpecialWave
+      ? Math.max(0, spawnLimit - this.pendingSpecialWave.types.length)
+      : spawnLimit;
+    while (count < regularSpawnLimit) {
       const type = this.pendingEnemy ?? this.rng.pick(this.availableEnemies(elapsed));
       this.pendingEnemy = type;
       if (this.budget + SpawnDirector.STEP_EPSILON < ENEMIES[type].threatCost) break;
@@ -91,6 +153,31 @@ export class SpawnDirector {
       count += 1;
     }
     return count;
+  }
+
+  private startSpecialWaveIfDue(elapsed: number, activeEnemyCount: number, spawnLimit: number, onWarning?: (warning: SpawnWaveWarning) => void): void {
+    if (this.pendingSpecialWave || elapsed + SpawnDirector.STEP_EPSILON < this.nextSpecialWaveAt - SPECIAL_WAVE_LEAD_SECONDS) return;
+    const types = this.specialWaveTypes(elapsed);
+    const cost = types.reduce((total, type) => total + ENEMIES[type].threatCost, 0);
+    if (activeEnemyCount + types.length > spawnLimit) return;
+
+    const sector = this.chooseSector();
+    const angle = sector * Math.PI / 3;
+    this.budget -= cost;
+    this.pendingSpecialWave = { angle, life: SPECIAL_WAVE_LEAD_SECONDS, types };
+    this.nextSpecialWaveAt += SPECIAL_WAVE_INTERVAL_SECONDS;
+    this.specialWaveCount += 1;
+    onWarning?.({ angle, leadTime: SPECIAL_WAVE_LEAD_SECONDS, types: [...types] });
+  }
+
+  private specialWaveTypes(elapsed: number): EnemyId[] {
+    const available = this.availableEnemies(elapsed);
+    const common = available.filter((type) => COMMON_ENEMY_TYPES.has(type));
+    const special = available.filter((type) => !COMMON_ENEMY_TYPES.has(type));
+    const first = common[0] ?? available[0] ?? 'shard';
+    const second = common.find((type) => type !== first) ?? available[1] ?? first;
+    const third = special.length > 0 ? special[this.specialWaveCount % special.length] ?? second : second;
+    return [first, second, third].slice(0, SPECIAL_WAVE_SIZE);
   }
 
   public requestBossSpawn(elapsed: number): boolean {
