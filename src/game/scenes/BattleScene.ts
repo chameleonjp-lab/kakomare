@@ -16,6 +16,7 @@ import { RENDER_LAYERS } from '../render/RenderLayer';
 import { drawTelegraphs } from '../render/TelegraphRenderer';
 import { drawDevice } from '../render/WeaponRenderer';
 import { applyContactDamage, applyDamage } from '../systems/DamageSystem';
+import { DamageNumberPool } from '../systems/DamageNumberPool';
 import { EffectBudget, selectVisibleEntities, type EffectsLevel } from '../systems/EffectBudget';
 import { FixedStepClock } from '../systems/FixedStepClock';
 import { RunRecorder } from '../systems/RunRecorder';
@@ -77,6 +78,8 @@ export class BattleScene extends Phaser.Scene {
   private readonly spawnDirector: SpawnDirector;
   private readonly rng: DeterministicRng;
   private readonly effectBudget: EffectBudget;
+  private readonly damageNumbers = new DamageNumberPool();
+  private readonly damageNumberTexts: Phaser.GameObjects.Text[] = [];
   private readonly runLifecycle = new RunLifecycleGuard(true);
   private readonly runSeed: number;
   private created = false;
@@ -324,7 +327,7 @@ export class BattleScene extends Phaser.Scene {
     for (const collision of collisions) {
       if (collision.damage > 0) {
         const weaponId = collision.projectile.sourceWeaponId ?? 'needle';
-        this.recordWeaponDamage(weaponId, collision.damage);
+        this.recordHitDamage(weaponId, collision.damage, collision.enemy.x, collision.enemy.y);
       }
       if (collision.destroyed) this.handleEnemyDestroyed(collision.enemy);
       if ((this.state as string) === 'finished') break;
@@ -411,7 +414,7 @@ export class BattleScene extends Phaser.Scene {
       const closestY = startY + directionY * length * projection;
       if (Math.hypot(enemy.x - closestX, enemy.y - closestY) > width / 2 + enemy.hitRadius) continue;
       const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, angle);
-      this.recordWeaponDamage(weapon.id, result.amount);
+      this.recordHitDamage(weapon.id, result.amount, enemy.x, enemy.y);
       if (result.destroyed) this.handleEnemyDestroyed(enemy);
       if ((this.state as string) === 'finished') return;
     }
@@ -465,7 +468,7 @@ export class BattleScene extends Phaser.Scene {
       enemy.applyPush(push, this.elapsed);
       enemy.applySlow(this.elapsed, slowDuration);
       this.recorder.recordControl('pushed', slowDuration);
-      this.recordWeaponDamage(weapon.id, result.amount);
+      this.recordHitDamage(weapon.id, result.amount, enemy.x, enemy.y);
       if (result.destroyed) this.handleEnemyDestroyed(enemy);
       if ((this.state as string) === 'finished') return;
     }
@@ -482,7 +485,7 @@ export class BattleScene extends Phaser.Scene {
       const linkAngle = Math.atan2(currentPoint.y - lastPoint.y, currentPoint.x - lastPoint.x);
       this.addLine({ angle: linkAngle, color: WEAPONS.chain.color, life: 0.22, maxLife: 0.22, width: 5, startX: lastPoint.x, startY: lastPoint.y, length: Math.hypot(currentPoint.x - lastPoint.x, currentPoint.y - lastPoint.y) });
       const result = applyDamage(current, this.adjustForSpecialEnemy(current, damage * Math.pow(0.8, index), weapon.slot), this.elapsed, Math.atan2(current.y, current.x));
-      this.recordWeaponDamage(weapon.id, result.amount);
+      this.recordHitDamage(weapon.id, result.amount, current.x, current.y);
       if (result.destroyed) this.handleEnemyDestroyed(current);
       if ((this.state as string) === 'finished') return;
       lastPoint = currentPoint;
@@ -509,7 +512,7 @@ export class BattleScene extends Phaser.Scene {
         if (this.elapsed - (this.orbitHits.get(key) ?? -Infinity) < (weapon.stats.hitCooldown ?? 0.45)) continue;
         this.orbitHits.set(key, this.elapsed);
         const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, bladeAngle);
-        this.recordWeaponDamage(weapon.id, result.amount);
+        this.recordHitDamage(weapon.id, result.amount, enemy.x, enemy.y);
         if (result.destroyed) this.handleEnemyDestroyed(enemy);
         if (this.state === 'finished') return;
       }
@@ -552,7 +555,7 @@ export class BattleScene extends Phaser.Scene {
       if (!enemy.active || hitIds?.has(enemy.id) || Math.hypot(enemy.x - x, enemy.y - y) > radius + enemy.hitRadius) continue;
       hitIds?.add(enemy.id);
       const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, attackAngle ?? Math.atan2(enemy.y, enemy.x));
-      this.recordWeaponDamage(weapon.id, result.amount);
+      this.recordHitDamage(weapon.id, result.amount, enemy.x, enemy.y);
       if (result.destroyed) this.handleEnemyDestroyed(enemy);
       if ((this.state as string) === 'finished') return;
     }
@@ -579,7 +582,7 @@ export class BattleScene extends Phaser.Scene {
         }
         if (field.damage > 0 && field.damageTimer <= 0) {
           const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, field.damage, this.weapons.find((item) => item.id === 'gravity')?.slot ?? 0), this.elapsed, Math.atan2(enemy.y, enemy.x));
-          this.recordWeaponDamage('gravity', result.amount);
+          this.recordHitDamage('gravity', result.amount, enemy.x, enemy.y);
           if (result.destroyed) this.handleEnemyDestroyed(enemy);
           if (this.state === 'finished') return;
         }
@@ -973,6 +976,47 @@ export class BattleScene extends Phaser.Scene {
     if (weapon) weapon.damageDealt += amount;
   }
 
+  private recordHitDamage(id: WeaponId, amount: number, x: number, y: number): void {
+    this.recordWeaponDamage(id, amount);
+    this.damageNumbers.emit(x, y, amount, WEAPONS[id].color, this.effectBudget.limits.damageNumbers);
+  }
+
+  private syncDamageNumberTexts(centerX: number, centerY: number): void {
+    const active = this.damageNumbers.active().slice(0, this.effectBudget.limits.damageNumbers);
+    for (let index = 0; index < active.length; index += 1) {
+      const item = active[index];
+      if (!item) continue;
+      const text = this.damageNumberTexts[index] ?? this.createDamageNumberText(index);
+      text.setText(String(Math.max(1, Math.round(item.amount))));
+      text.setPosition(centerX + item.x, centerY + item.y);
+      text.setColor(this.colorToCss(item.color));
+      text.setAlpha(Math.min(1, item.life / 0.18));
+      text.setScale(0.88 + Math.min(0.12, item.life / item.maxLife * 0.12));
+      text.setVisible(true);
+    }
+    for (let index = active.length; index < this.damageNumberTexts.length; index += 1) this.damageNumberTexts[index]?.setVisible(false);
+  }
+
+  private createDamageNumberText(index: number): Phaser.GameObjects.Text {
+    const text = this.add.text(0, 0, '', {
+      color: '#fff1a8',
+      fontFamily: 'sans-serif',
+      fontSize: '18px',
+      fontStyle: 'bold',
+      stroke: '#07131f',
+      strokeThickness: 4,
+    });
+    text.setOrigin(0.5);
+    text.setDepth(RENDER_LAYERS.feedback);
+    text.setVisible(false);
+    this.damageNumberTexts[index] = text;
+    return text;
+  }
+
+  private colorToCss(color: number): string {
+    return `#${Math.max(0, color).toString(16).padStart(6, '0').slice(-6)}`;
+  }
+
   private weaponPower(weapon: Weapon, factor = 1): number {
     return weapon.stats.damage * weapon.damageMultiplier * (1 + this.supportEffect('output', weapon.slot)) * this.options.researchEffects.powerMultiplier * factor;
   }
@@ -1021,6 +1065,7 @@ export class BattleScene extends Phaser.Scene {
   private updateEffects(seconds: number): void {
     for (const flash of this.flashes) { flash.life -= seconds; if (!this.options.reducedMotion) flash.radius += seconds * 80; }
     for (const line of this.lines) line.life -= seconds;
+    this.damageNumbers.update(seconds, this.options.reducedMotion);
     this.particles.update(seconds);
   }
 
@@ -1106,6 +1151,7 @@ export class BattleScene extends Phaser.Scene {
     }
     this.drawOrbitBlades(friendlyLayer, cx, cy);
     for (const enemy of visibleEnemies) drawEnemy(enemyLayer, enemy.snapshot({ x: 0, y: 0 }, this.elapsed), cx, cy);
+    this.syncDamageNumberTexts(cx, cy);
     drawTelegraphs(telegraphLayer, visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)), cx, cy);
     if (this.designerWave) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, WEAPONS.chain.color, 5);
     if (this.echoWave) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, WEAPONS.disc.color, 5);

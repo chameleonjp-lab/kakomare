@@ -14,11 +14,17 @@ describe('battle render layers', () => {
       RENDER_LAYERS.device,
       RENDER_LAYERS.friendly,
       RENDER_LAYERS.enemies,
+      RENDER_LAYERS.feedback,
       RENDER_LAYERS.telegraphs,
       RENDER_LAYERS.hostileProjectiles,
       RENDER_LAYERS.hud,
     ];
     expect(order).toEqual([...order].sort((first, second) => first - second));
     expect(new Set(order).size).toBe(order.length);
+  });
+
+  it('keeps hit feedback below danger warnings', () => {
+    expect(isRenderLayerAbove('telegraphs', 'feedback')).toBe(true);
+    expect(isRenderLayerAbove('hostileProjectiles', 'feedback')).toBe(true);
   });
 });
