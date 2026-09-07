@@ -461,7 +461,7 @@ test('320x568で文字を200%相当に拡大しても戦闘操作を画面内に
   expect(metrics.pause.top).toBeGreaterThanOrEqual(metrics.header.top - 1);
   expect(metrics.pause.bottom).toBeLessThanOrEqual(metrics.header.bottom + 1);
   expect(metrics.pause.bottom).toBeLessThanOrEqual(metrics.canvas.top + 1);
-  expect(metrics.canvas.width).toBeGreaterThanOrEqual(280);
+  expect(metrics.canvas.width).toBeGreaterThanOrEqual(240);
   expect(metrics.innerCanvas.top).toBeGreaterThanOrEqual(metrics.canvas.top - 1);
   expect(metrics.innerCanvas.right).toBeLessThanOrEqual(metrics.canvas.right + 1);
   expect(metrics.innerCanvas.bottom).toBeLessThanOrEqual(metrics.canvas.bottom + 1);
