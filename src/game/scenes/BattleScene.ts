@@ -21,7 +21,7 @@ import { FixedStepClock } from '../systems/FixedStepClock';
 import { RunRecorder } from '../systems/RunRecorder';
 import { collideEnemyProjectiles, collideProjectiles } from '../systems/CollisionSystem';
 import { createUpgradeCandidateList, applyUpgradeCandidate, shouldRetryUpgradeDraw, wouldStrandNewItems } from '../systems/UpgradeSystem';
-import { DeterministicRng, seedFromStage, SpawnDirector } from '../systems/SpawnDirector';
+import { DeterministicRng, seedFromStage, SpawnDirector, type SpawnWaveWarning } from '../systems/SpawnDirector';
 import { MANUAL_AIM_HALF_ANGLE, selectTarget } from '../systems/TargetingSystem';
 import { advanceOrbitAngle } from '../systems/OrbitSystem';
 import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
@@ -114,6 +114,7 @@ export class BattleScene extends Phaser.Scene {
   private designerWave: { angle: number; life: number; maxLife: number } | null = null;
   private echoWave: { angle: number; life: number; maxLife: number } | null = null;
   private crownPressure: { angle: number; life: number; maxLife: number } | null = null;
+  private specialWaveWarning: { angle: number; life: number; maxLife: number } | null = null;
   private lastDesignerSector = -1;
   private crownWavesTriggered = 0;
   private renderPixelRatio = 1;
@@ -255,6 +256,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.state !== 'playing' && this.state !== 'upgrade') return;
     if (this.state === 'upgrade') seconds *= 0.1;
     this.elapsed += seconds;
+    this.updateSpecialWaveWarning(seconds);
     if (this.manualAim && this.aimPointerId === null && this.elapsed >= this.aimReleaseAt) this.manualAim = false;
     if (this.state === 'playing' && this.options.testMode && this.options.testUpgrade && !this.testUpgradeOpened && this.elapsed >= 0.7) { this.testUpgradeOpened = true; this.openUpgrade(); return; }
     const stage = STAGES[this.options.stageId];
@@ -267,7 +269,14 @@ export class BattleScene extends Phaser.Scene {
     const activeEnemies = this.enemies.filter((enemy) => enemy.active).length;
     const reservedBossSlots = stage.isEndless && !this.enemies.some((enemy) => enemy.active && enemy.isBoss) ? 1 : 0;
     const reservedArenaSlots = Math.max(reservedBossSlots, this.pendingBossEnemySlots());
-    this.spawnDirector.update(seconds, this.elapsed, activeEnemies, (request) => { this.spawnEnemy(request.type, request.angle); }, reservedArenaSlots);
+    this.spawnDirector.update(
+      seconds,
+      this.elapsed,
+      activeEnemies,
+      (request) => { this.spawnEnemy(request.type, request.angle); },
+      reservedArenaSlots,
+      (warning) => this.showSpecialWaveWarning(warning),
+    );
 
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
@@ -744,11 +753,22 @@ export class BattleScene extends Phaser.Scene {
     return true;
   }
 
+  private showSpecialWaveWarning(warning: SpawnWaveWarning): void {
+    this.specialWaveWarning = { angle: warning.angle, life: warning.leadTime, maxLife: warning.leadTime };
+    this.options.callbacks.onStatus('一方向から敵の集中波が来ます');
+  }
+
+  private updateSpecialWaveWarning(seconds: number): void {
+    if (!this.specialWaveWarning) return;
+    this.specialWaveWarning.life -= seconds;
+    if (this.specialWaveWarning.life <= 0) this.specialWaveWarning = null;
+  }
+
   private availableEnemySlots(): number {
     const baseLimit = Math.min(MAX_ACTIVE_ENEMIES, this.spawnDirector.enemyLimit);
     const reserveBossSlot = STAGES[this.options.stageId].isEndless && !this.enemies.some((enemy) => enemy.active && enemy.isBoss) ? 1 : 0;
     const active = this.enemies.filter((enemy) => enemy.active).length;
-    return Math.max(0, baseLimit - reserveBossSlot - active);
+    return Math.max(0, baseLimit - reserveBossSlot - active - this.spawnDirector.pendingSpecialWaveSlots);
   }
 
   private pendingBossEnemySlots(): number {
@@ -779,6 +799,7 @@ export class BattleScene extends Phaser.Scene {
       this.designerWave = null;
       this.echoWave = null;
       this.crownPressure = null;
+      this.specialWaveWarning = null;
       this.bossDefeated = true;
       this.recorder.bossDefeated = true;
       this.recorder.bossesDefeated += 1;
@@ -1089,6 +1110,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.designerWave) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, WEAPONS.chain.color, 5);
     if (this.echoWave) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, WEAPONS.disc.color, 5);
     if (this.crownPressure) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.crownPressure.angle, this.crownPressure.life / this.crownPressure.maxLife, BOSSES.crown.color, 6, 42, Math.min(196, arena));
+    if (this.specialWaveWarning) this.drawSpecialWaveWarning(telegraphLayer, cx, cy, arena, this.specialWaveWarning.angle, this.specialWaveWarning.life / this.specialWaveWarning.maxLife);
     this.drawFlashes(telegraphLayer, cx, cy, true);
     if (this.manualAim) this.drawManualAim(telegraphLayer, cx, cy, arena);
     if (this.manualAim) {
@@ -1143,6 +1165,32 @@ export class BattleScene extends Phaser.Scene {
   private drawSpecialLine(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number, arena: number, angle: number, alpha: number, color: number, width: number, startDistance = 170, endDistance = arena): void {
     graphics.lineStyle(width, color, Math.max(0.2, alpha));
     graphics.lineBetween(cx + Math.cos(angle) * startDistance, cy + Math.sin(angle) * startDistance, cx + Math.cos(angle) * endDistance, cy + Math.sin(angle) * endDistance);
+  }
+
+  private drawSpecialWaveWarning(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number, arena: number, angle: number, progress: number): void {
+    const alpha = Math.max(0.25, Math.min(1, progress));
+    const sweep = Math.PI / 9;
+    const radius = Math.max(1, arena - 8);
+    const steps = 8;
+    graphics.lineStyle(7, 0xfff1a8, alpha * 0.9);
+    graphics.beginPath();
+    for (let index = 0; index <= steps; index += 1) {
+      const pointAngle = angle - sweep + (sweep * 2 * index) / steps;
+      const x = cx + Math.cos(pointAngle) * radius;
+      const y = cy + Math.sin(pointAngle) * radius;
+      if (index === 0) graphics.moveTo(x, y);
+      else graphics.lineTo(x, y);
+    }
+    graphics.strokePath();
+    graphics.lineStyle(2, 0xfff1a8, alpha);
+    for (const edge of [-sweep, sweep]) {
+      graphics.lineBetween(
+        cx + Math.cos(angle + edge) * (arena - 38),
+        cy + Math.sin(angle + edge) * (arena - 38),
+        cx + Math.cos(angle + edge) * (arena - 8),
+        cy + Math.sin(angle + edge) * (arena - 8),
+      );
+    }
   }
 
   private drawFlashes(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number, telegraphs: boolean): void {

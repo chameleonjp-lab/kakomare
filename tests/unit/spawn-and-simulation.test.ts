@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { ENEMIES } from '../../src/data/enemies';
 import { STAGES } from '../../src/data/stages';
 import { Enemy } from '../../src/game/entities/Enemy';
-import { DeterministicRng, SpawnDirector, seedFromStage, type SpawnRequest } from '../../src/game/systems/SpawnDirector';
+import {
+  DeterministicRng,
+  SPECIAL_WAVE_FIRST_AT_SECONDS,
+  SPECIAL_WAVE_LEAD_SECONDS,
+  SpawnDirector,
+  seedFromStage,
+  type SpawnRequest,
+} from '../../src/game/systems/SpawnDirector';
 import type { EnemyId, StageId } from '../../src/types/content';
 
 function runSpawnSimulation(stageId: StageId, run: number): { emitted: number; maxActive: number; types: Set<EnemyId> } {
@@ -99,6 +106,51 @@ describe('spawn director and long simulations', () => {
     expect(spawnSequence('stage-3', 1 / 120, STAGES['stage-3'].timeLimit)).toEqual(expected);
     expect(spawnSequence('stage-3', 1 / 30, STAGES['stage-3'].timeLimit)).toEqual(expected);
     expect(spawnSequence('stage-3', 0.5, STAGES['stage-3'].timeLimit)).toEqual(expected);
+  });
+
+  it('warns before a directional wave and emits its three enemies together', () => {
+    const director = new SpawnDirector('stage-1', 12_345);
+    const warnings: Array<{ elapsed: number; types: EnemyId[] }> = [];
+    const wave: Array<SpawnRequest & { elapsed: number }> = [];
+    let elapsed = 0;
+    const frame = 1 / 60;
+    for (let index = 0; index < 52 * 60; index += 1) {
+      elapsed += frame;
+      director.update(frame, elapsed, 0, (request) => {
+        if (request.specialWave) wave.push({ ...request, elapsed });
+      }, 0, (warning) => warnings.push({ elapsed, types: warning.types }));
+    }
+
+    expect(warnings).toHaveLength(1);
+    expect(wave).toHaveLength(3);
+    expect(wave[0]!.elapsed - warnings[0]!.elapsed).toBeGreaterThanOrEqual(SPECIAL_WAVE_LEAD_SECONDS - frame / 2);
+    expect(warnings[0]!.elapsed).toBeGreaterThanOrEqual(SPECIAL_WAVE_FIRST_AT_SECONDS - SPECIAL_WAVE_LEAD_SECONDS - frame);
+    expect(warnings[0]!.types).toEqual(wave.map((request) => request.type));
+    const firstAngle = wave[0]!.angle;
+    expect(wave.every((request) => Math.abs(request.angle - firstAngle) <= 0.201)).toBe(true);
+  });
+
+  it('reserves the directional wave slots while its warning is active', () => {
+    const director = new SpawnDirector('stage-1', 54_321);
+    let elapsed = 0;
+    let warningSlots = 0;
+    const frame = 1 / 60;
+    for (let index = 0; index < Math.ceil((SPECIAL_WAVE_FIRST_AT_SECONDS - SPECIAL_WAVE_LEAD_SECONDS) / frame); index += 1) {
+      elapsed += frame;
+      director.update(frame, elapsed, 0, () => undefined, 0, () => { warningSlots = director.pendingSpecialWaveSlots; });
+    }
+    expect(warningSlots).toBe(3);
+    expect(director.pendingSpecialWaveSlots).toBe(3);
+
+    const delayed: SpawnRequest[] = [];
+    director.update(SPECIAL_WAVE_LEAD_SECONDS + frame, elapsed + SPECIAL_WAVE_LEAD_SECONDS + frame, STAGES['stage-1'].enemyLimit - 2, (request) => delayed.push(request));
+    expect(delayed.filter((request) => request.specialWave)).toHaveLength(0);
+    expect(director.pendingSpecialWaveSlots).toBe(3);
+
+    const released: SpawnRequest[] = [];
+    director.update(frame, elapsed + SPECIAL_WAVE_LEAD_SECONDS + frame * 2, STAGES['stage-1'].enemyLimit - 3, (request) => released.push(request));
+    expect(released.filter((request) => request.specialWave)).toHaveLength(3);
+    expect(director.pendingSpecialWaveSlots).toBe(0);
   });
 
   it('keeps every normal stage stable for 100 deterministic runs', () => {
