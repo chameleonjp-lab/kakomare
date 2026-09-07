@@ -12,6 +12,7 @@ import { EnemyPool } from '../pools/EnemyPool';
 import { ParticlePool } from '../pools/ParticlePool';
 import { ProjectilePool } from '../pools/ProjectilePool';
 import { drawEnemy } from '../render/EnemyRenderer';
+import { RENDER_LAYERS } from '../render/RenderLayer';
 import { drawTelegraphs } from '../render/TelegraphRenderer';
 import { drawDevice } from '../render/WeaponRenderer';
 import { applyContactDamage, applyDamage } from '../systems/DamageSystem';
@@ -79,7 +80,12 @@ export class BattleScene extends Phaser.Scene {
   private readonly runLifecycle = new RunLifecycleGuard(true);
   private readonly runSeed: number;
   private created = false;
-  private graphics!: Phaser.GameObjects.Graphics;
+  private backgroundGraphics!: Phaser.GameObjects.Graphics;
+  private deviceGraphics!: Phaser.GameObjects.Graphics;
+  private friendlyGraphics!: Phaser.GameObjects.Graphics;
+  private enemyGraphics!: Phaser.GameObjects.Graphics;
+  private telegraphGraphics!: Phaser.GameObjects.Graphics;
+  private hostileGraphics!: Phaser.GameObjects.Graphics;
   private elapsed = 0;
   private experience = 0;
   private level = 1;
@@ -128,7 +134,12 @@ export class BattleScene extends Phaser.Scene {
 
   public create(): void {
     this.created = true;
-    this.graphics = this.add.graphics();
+    this.backgroundGraphics = this.createRenderLayer(RENDER_LAYERS.background);
+    this.deviceGraphics = this.createRenderLayer(RENDER_LAYERS.device);
+    this.friendlyGraphics = this.createRenderLayer(RENDER_LAYERS.friendly);
+    this.enemyGraphics = this.createRenderLayer(RENDER_LAYERS.enemies);
+    this.telegraphGraphics = this.createRenderLayer(RENDER_LAYERS.telegraphs);
+    this.hostileGraphics = this.createRenderLayer(RENDER_LAYERS.hostileProjectiles);
     this.applyRenderResolution();
     this.input.on('pointerdown', this.handlePointerDown, this);
     this.input.on('pointermove', this.handlePointerMove, this);
@@ -1025,56 +1036,72 @@ export class BattleScene extends Phaser.Scene {
     const cx = width / 2;
     const cy = height / 2;
     const arena = Math.min(ARENA_RADIUS, Math.min(width, height) * 0.45);
-    this.graphics.clear();
-    this.graphics.fillStyle(0x07131f, 1); this.graphics.fillRect(0, 0, width, height);
-    this.graphics.lineStyle(1, 0x163246, 0.65);
+    const backgroundLayer = this.backgroundGraphics;
+    const deviceLayer = this.deviceGraphics;
+    const friendlyLayer = this.friendlyGraphics;
+    const enemyLayer = this.enemyGraphics;
+    const telegraphLayer = this.telegraphGraphics;
+    const hostileLayer = this.hostileGraphics;
+    for (const layer of [backgroundLayer, deviceLayer, friendlyLayer, enemyLayer, telegraphLayer, hostileLayer]) layer.clear();
+
+    // Keep these groups separate so danger warnings and hostile projectiles
+    // cannot be hidden by ordinary attack effects during a later refactor.
+    backgroundLayer.fillStyle(0x07131f, 1); backgroundLayer.fillRect(0, 0, width, height);
+    backgroundLayer.lineStyle(1, 0x163246, 0.65);
     for (let index = 0; index < 6; index += 1) {
       const angle = index * Math.PI / 3;
-      this.graphics.lineBetween(cx, cy, cx + Math.cos(angle) * arena, cy + Math.sin(angle) * arena);
+      backgroundLayer.lineBetween(cx, cy, cx + Math.cos(angle) * arena, cy + Math.sin(angle) * arena);
     }
-    this.graphics.strokeCircle(cx, cy, arena);
-    this.graphics.strokeCircle(cx, cy, arena * 0.65);
+    backgroundLayer.strokeCircle(cx, cy, arena);
+    backgroundLayer.strokeCircle(cx, cy, arena * 0.65);
     for (const field of this.gravityFields) {
       const alpha = Math.max(0.08, field.life / field.maxLife) * 0.45;
-      this.graphics.fillStyle(WEAPONS.gravity.color, alpha); this.graphics.fillCircle(cx + field.x, cy + field.y, field.radius);
-      this.graphics.lineStyle(2, WEAPONS.gravity.color, alpha + 0.2); this.graphics.strokeCircle(cx + field.x, cy + field.y, field.radius);
-      this.graphics.lineStyle(1, 0xfff1a8, alpha); this.graphics.strokeCircle(cx + field.x, cy + field.y, Math.max(12, field.radius * 0.35));
+      backgroundLayer.fillStyle(WEAPONS.gravity.color, alpha); backgroundLayer.fillCircle(cx + field.x, cy + field.y, field.radius);
+      backgroundLayer.lineStyle(2, WEAPONS.gravity.color, alpha + 0.2); backgroundLayer.strokeCircle(cx + field.x, cy + field.y, field.radius);
+      backgroundLayer.lineStyle(1, 0xfff1a8, alpha); backgroundLayer.strokeCircle(cx + field.x, cy + field.y, Math.max(12, field.radius * 0.35));
     }
     for (const line of this.lines) {
       if (line.life <= 0) continue;
       const alpha = Math.max(0, line.life / line.maxLife);
-      if (line.width > 100) { this.graphics.lineStyle(6, line.color, alpha * 0.7); this.graphics.strokeCircle(cx, cy, Math.min(arena, line.width)); }
+      if (line.width > 100) { backgroundLayer.lineStyle(6, line.color, alpha * 0.7); backgroundLayer.strokeCircle(cx, cy, Math.min(arena, line.width)); }
       else {
         const startX = line.startX ?? 0;
         const startY = line.startY ?? 0;
         const length = line.length ?? arena;
-        this.graphics.lineStyle(line.width, line.color, alpha * 0.8);
-        this.graphics.lineBetween(cx + startX, cy + startY, cx + startX + Math.cos(line.angle) * length, cy + startY + Math.sin(line.angle) * length);
+        backgroundLayer.lineStyle(line.width, line.color, alpha * 0.8);
+        backgroundLayer.lineBetween(cx + startX, cy + startY, cx + startX + Math.cos(line.angle) * length, cy + startY + Math.sin(line.angle) * length);
       }
     }
-    this.drawFlashes(cx, cy, false);
+    this.drawFlashes(backgroundLayer, cx, cy, false);
     const visibleEnemies = this.visibleEnemies();
     const visibleProjectiles = this.visibleProjectiles();
-    for (const projectile of visibleProjectiles) if (!projectile.enemyProjectile) this.drawProjectile(projectile, cx, cy);
+
+    drawDevice(deviceLayer, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })), this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })));
+    for (const projectile of visibleProjectiles) if (!projectile.enemyProjectile) this.drawProjectile(friendlyLayer, projectile, cx, cy);
     for (const particle of this.particles.active()) {
       const alpha = Math.max(0, particle.life / particle.maxLife);
-      this.graphics.fillStyle(particle.color, alpha * 0.8);
-      this.graphics.fillCircle(cx + particle.x, cy + particle.y, 2 + alpha * 2);
+      friendlyLayer.fillStyle(particle.color, alpha * 0.8);
+      friendlyLayer.fillCircle(cx + particle.x, cy + particle.y, 2 + alpha * 2);
     }
-    drawDevice(this.graphics, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })), this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })));
-    this.drawOrbitBlades(cx, cy);
-    for (const enemy of visibleEnemies) drawEnemy(this.graphics, enemy.snapshot({ x: 0, y: 0 }, this.elapsed), cx, cy);
-    drawTelegraphs(this.graphics, visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)), cx, cy);
-    if (this.designerWave) this.drawSpecialLine(cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, WEAPONS.chain.color, 5);
-    if (this.echoWave) this.drawSpecialLine(cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, WEAPONS.disc.color, 5);
-    if (this.crownPressure) this.drawSpecialLine(cx, cy, arena, this.crownPressure.angle, this.crownPressure.life / this.crownPressure.maxLife, BOSSES.crown.color, 6, 42, Math.min(196, arena));
-    this.drawFlashes(cx, cy, true);
-    if (this.manualAim) this.drawManualAim(cx, cy, arena);
+    this.drawOrbitBlades(friendlyLayer, cx, cy);
+    for (const enemy of visibleEnemies) drawEnemy(enemyLayer, enemy.snapshot({ x: 0, y: 0 }, this.elapsed), cx, cy);
+    drawTelegraphs(telegraphLayer, visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)), cx, cy);
+    if (this.designerWave) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, WEAPONS.chain.color, 5);
+    if (this.echoWave) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, WEAPONS.disc.color, 5);
+    if (this.crownPressure) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.crownPressure.angle, this.crownPressure.life / this.crownPressure.maxLife, BOSSES.crown.color, 6, 42, Math.min(196, arena));
+    this.drawFlashes(telegraphLayer, cx, cy, true);
+    if (this.manualAim) this.drawManualAim(telegraphLayer, cx, cy, arena);
     if (this.manualAim) {
-      this.graphics.lineStyle(2, 0xfff1a8, 0.7);
-      this.graphics.lineBetween(cx, cy, cx + Math.cos(this.aimAngle) * arena, cy + Math.sin(this.aimAngle) * arena);
+      telegraphLayer.lineStyle(2, 0xfff1a8, 0.7);
+      telegraphLayer.lineBetween(cx, cy, cx + Math.cos(this.aimAngle) * arena, cy + Math.sin(this.aimAngle) * arena);
     }
-    for (const projectile of visibleProjectiles) if (projectile.enemyProjectile) this.drawProjectile(projectile, cx, cy);
+    for (const projectile of visibleProjectiles) if (projectile.enemyProjectile) this.drawProjectile(hostileLayer, projectile, cx, cy);
+  }
+
+  private createRenderLayer(depth: number): Phaser.GameObjects.Graphics {
+    const layer = this.add.graphics();
+    layer.setDepth(depth);
+    return layer;
   }
 
   private visibleEnemies(): Enemy[] {
@@ -1113,46 +1140,46 @@ export class BattleScene extends Phaser.Scene {
     this.cameras.main.setZoom(this.renderPixelRatio);
   }
 
-  private drawSpecialLine(cx: number, cy: number, arena: number, angle: number, alpha: number, color: number, width: number, startDistance = 170, endDistance = arena): void {
-    this.graphics.lineStyle(width, color, Math.max(0.2, alpha));
-    this.graphics.lineBetween(cx + Math.cos(angle) * startDistance, cy + Math.sin(angle) * startDistance, cx + Math.cos(angle) * endDistance, cy + Math.sin(angle) * endDistance);
+  private drawSpecialLine(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number, arena: number, angle: number, alpha: number, color: number, width: number, startDistance = 170, endDistance = arena): void {
+    graphics.lineStyle(width, color, Math.max(0.2, alpha));
+    graphics.lineBetween(cx + Math.cos(angle) * startDistance, cy + Math.sin(angle) * startDistance, cx + Math.cos(angle) * endDistance, cy + Math.sin(angle) * endDistance);
   }
 
-  private drawFlashes(cx: number, cy: number, telegraphs: boolean): void {
+  private drawFlashes(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number, telegraphs: boolean): void {
     for (const flash of this.flashes) {
       if (flash.life <= 0 || (flash.kind === 'telegraph') !== telegraphs) continue;
       const alpha = Math.max(0, flash.life / flash.maxLife);
       if (flash.kind === 'telegraph') {
-        this.graphics.fillStyle(flash.color, alpha * 0.06);
-        this.graphics.fillCircle(cx + flash.x, cy + flash.y, flash.radius);
-        this.graphics.lineStyle(2, flash.color, alpha * 0.85);
+        graphics.fillStyle(flash.color, alpha * 0.06);
+        graphics.fillCircle(cx + flash.x, cy + flash.y, flash.radius);
+        graphics.lineStyle(2, flash.color, alpha * 0.85);
       } else {
-        this.graphics.fillStyle(flash.color, alpha * 0.12);
-        this.graphics.fillCircle(cx + flash.x, cy + flash.y, flash.radius * 0.7);
-        this.graphics.lineStyle(3, flash.color, alpha);
+        graphics.fillStyle(flash.color, alpha * 0.12);
+        graphics.fillCircle(cx + flash.x, cy + flash.y, flash.radius * 0.7);
+        graphics.lineStyle(3, flash.color, alpha);
       }
-      this.graphics.strokeCircle(cx + flash.x, cy + flash.y, flash.radius);
+      graphics.strokeCircle(cx + flash.x, cy + flash.y, flash.radius);
     }
   }
 
-  private drawManualAim(cx: number, cy: number, arena: number): void {
+  private drawManualAim(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number, arena: number): void {
     const points = [{ x: cx, y: cy }];
     const steps = 10;
     for (let index = 0; index <= steps; index += 1) {
       const angle = this.aimAngle - MANUAL_AIM_HALF_ANGLE + (MANUAL_AIM_HALF_ANGLE * 2 * index) / steps;
       points.push({ x: cx + Math.cos(angle) * arena, y: cy + Math.sin(angle) * arena });
     }
-    this.graphics.fillStyle(0xfff1a8, 0.08);
-    this.graphics.lineStyle(1, 0xfff1a8, 0.45);
-    this.graphics.beginPath();
-    this.graphics.moveTo(points[0]?.x ?? cx, points[0]?.y ?? cy);
-    for (const point of points.slice(1)) this.graphics.lineTo(point.x, point.y);
-    this.graphics.closePath();
-    this.graphics.fillPath();
-    this.graphics.strokePath();
+    graphics.fillStyle(0xfff1a8, 0.08);
+    graphics.lineStyle(1, 0xfff1a8, 0.45);
+    graphics.beginPath();
+    graphics.moveTo(points[0]?.x ?? cx, points[0]?.y ?? cy);
+    for (const point of points.slice(1)) graphics.lineTo(point.x, point.y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.strokePath();
   }
 
-  private drawOrbitBlades(cx: number, cy: number): void {
+  private drawOrbitBlades(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number): void {
     for (const weapon of this.weapons.filter((item) => item.id === 'orbit')) {
       const angle = this.orbitAngles.get(weapon.slot) ?? 0;
       const count = (weapon.stats.count ?? 2) + (weapon.branch === 'many' ? 1 : 0);
@@ -1165,25 +1192,25 @@ export class BattleScene extends Phaser.Scene {
         const startY = cy + Math.sin(bladeAngle) * (radius - halfLength);
         const endX = cx + Math.cos(bladeAngle) * (radius + halfLength);
         const endY = cy + Math.sin(bladeAngle) * (radius + halfLength);
-        this.graphics.lineStyle(7, WEAPONS.orbit.color, 0.9);
-        this.graphics.lineBetween(startX, startY, endX, endY);
-        this.graphics.fillStyle(0xfff1a8, 0.85);
-        this.graphics.fillCircle(endX, endY, 3);
+        graphics.lineStyle(7, WEAPONS.orbit.color, 0.9);
+        graphics.lineBetween(startX, startY, endX, endY);
+        graphics.fillStyle(0xfff1a8, 0.85);
+        graphics.fillCircle(endX, endY, 3);
       }
     }
   }
 
-  private drawProjectile(projectile: Projectile, centerX: number, centerY: number): void {
+  private drawProjectile(graphics: Phaser.GameObjects.Graphics, projectile: Projectile, centerX: number, centerY: number): void {
     const color = projectile.enemyProjectile ? 0xfff1a8 : projectile.kind === 'disc' ? WEAPONS.disc.color : projectile.sourceWeaponId ? WEAPONS[projectile.sourceWeaponId].color : 0x63d7e6;
     const x = centerX + projectile.x;
     const y = centerY + projectile.y;
-    this.graphics.fillStyle(color, 1);
-    this.graphics.fillCircle(x, y, projectile.radius);
-    this.graphics.lineStyle(projectile.enemyProjectile ? 3 : 2, projectile.enemyProjectile ? 0xff706a : color, 0.9);
-    this.graphics.lineBetween(x - projectile.vx * 0.025, y - projectile.vy * 0.025, x, y);
+    graphics.fillStyle(color, 1);
+    graphics.fillCircle(x, y, projectile.radius);
+    graphics.lineStyle(projectile.enemyProjectile ? 3 : 2, projectile.enemyProjectile ? 0xff706a : color, 0.9);
+    graphics.lineBetween(x - projectile.vx * 0.025, y - projectile.vy * 0.025, x, y);
     if (projectile.enemyProjectile) {
-      this.graphics.lineStyle(2, 0xfff1a8, 0.95);
-      this.graphics.strokeCircle(x, y, projectile.radius + 5);
+      graphics.lineStyle(2, 0xfff1a8, 0.95);
+      graphics.strokeCircle(x, y, projectile.radius + 5);
     }
   }
 
