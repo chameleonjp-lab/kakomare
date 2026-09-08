@@ -1,17 +1,15 @@
 import type { Enemy } from '../entities/Enemy';
 import type { Point } from '../../types/game';
 import type { WeaponId } from '../../types/content';
+import { angularDistance } from './Angle';
+
+export { angularDistance } from './Angle';
 
 export const MANUAL_AIM_HALF_ANGLE = Math.PI / 6;
 
 export interface AimState {
   angle: number;
   manual: boolean;
-}
-
-function angularDistance(a: number, b: number): number {
-  const diff = Math.abs(((a - b + Math.PI) % (Math.PI * 2)) - Math.PI);
-  return diff;
 }
 
 export function targetPriority(enemy: Enemy, aim: AimState, _now: number, weaponId?: WeaponId, enemies: Enemy[] = []): number {

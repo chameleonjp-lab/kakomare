@@ -42,6 +42,8 @@ export interface ProjectileSnapshot {
 
 export interface WeaponSnapshot {
   id: WeaponId;
+  /** Persisted face number; acquisition order is not a placement contract. */
+  slot: number;
   level: number;
   damageDealt: number;
   branch: WeaponBranch | null;

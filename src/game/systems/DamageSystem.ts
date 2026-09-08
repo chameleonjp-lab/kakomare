@@ -1,5 +1,6 @@
 import { Core } from '../entities/Core';
 import { Enemy } from '../entities/Enemy';
+import type { ImpactAngle } from './ImpactDirection';
 
 export interface DamageResult {
   amount: number;
@@ -7,7 +8,7 @@ export interface DamageResult {
   destroyed: boolean;
 }
 
-export function applyDamage(enemy: Enemy, amount: number, elapsed: number, attackAngle = 0): DamageResult {
+export function applyDamage(enemy: Enemy, amount: number, elapsed: number, attackAngle: ImpactAngle = 0): DamageResult {
   const result = enemy.damage(amount, elapsed, attackAngle);
   return { amount: result.dealt, blocked: result.blocked, destroyed: result.destroyed };
 }

@@ -1,5 +1,6 @@
 import { SUPPORTS } from '../../data/supports';
 import type { SupportId } from '../../types/content';
+import { adjacentWeaponSlots } from '../deviceLayout';
 
 export const SUPPORT_EFFECT_CAPS: Record<SupportId, { primary: number; secondary: number }> = {
   output: { primary: 0.4, secondary: 0.4 },
@@ -33,7 +34,7 @@ export class SupportModule {
   }
 
   public affectsWeaponSlot(weaponSlot: number): boolean {
-    return this.slot === weaponSlot || (this.slot + 1) % 3 === weaponSlot;
+    return adjacentWeaponSlots(this.slot).includes(weaponSlot as 0 | 1 | 2);
   }
 }
 

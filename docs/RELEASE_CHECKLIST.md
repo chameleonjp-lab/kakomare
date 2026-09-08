@@ -1,20 +1,19 @@
 # カコマレ 公開確認チェックリスト
 
-#3マージ後の是正PRについて、自動検査と公開後のiPhone Safari確認を同じ順番で記録します。問題が一つでもある場合は、是正PRをマージせず `fix/post-release-completion` で修正します。
+PR-Aの公開確認です。コードと自動検査の結果は [QUALITY_A_REPORT.md](QUALITY_A_REPORT.md) を参照します。以前のPRの検査数やActions実行URLは現在の合格根拠に使いません。
 
-## 自動検査
+対象ブランチ: `codex/quality-a-20260908`
+開始時のmain: `e6ca4229156819ccce8b47ef4273b2e0451d4d75`
 
-- [x] `npm ci`
-- [x] `npm run lint`
-- [x] `npm run typecheck`
-- [x] `npm run test`（14ファイル、89件）
-- [x] `npm run test:e2e:chromium`（24件）
-- [x] `npm run test:e2e`相当（Actionsで順次実行）
-- [x] `npm run build`
-- [x] `npm run verify:dist`
-- [x] `npm run verify:originality`
-- [x] `npm run check`相当（Actionsで各検査を順次実行）
-- [x] GitHub ActionsのChromiumとWebKit
+## 自動検査とレビュー
+
+- [ ] 最新コミットのGitHub Actionsが成功する
+- [ ] 依存導入、lint、型検査、単体・結合検査が成功する
+- [ ] ChromiumとWebKitのブラウザ検査が成功する
+- [ ] 本番ビルド、配信ファイル、独自名称の検査が成功する
+- [x] Sol・Highの独立レビューで修正必須の指摘が残らない
+
+公開URLはmainへのマージ後に更新されます。作業ブランチの検査成功を公開版の確認成功として扱いません。問題が見つかった場合は、このPRのブランチで修正します。
 
 ## 静的公開
 
@@ -56,5 +55,16 @@
 - 公開URL: https://chameleonjp-lab.github.io/kakomare/
 - 確認端末 / iOS / Safari:
 - 実施日時:
-- 自動検査のActions URL: https://github.com/chameleonjp-lab/kakomare/actions/runs/33353475007
+- 対象コミット / 自動検査のActions URL: [QUALITY_A_REPORT.md](QUALITY_A_REPORT.md) を参照
 - 未確認事項: マージ後の静的公開、iPhone Safari実機
+
+## PR-Aの実機追加確認
+
+- [ ] 最後の除外後に出た新しい武器と補助を、面ボタン1回で取得する
+- [ ] 武器面1→3→2、補助面3→1→2で、戦場と装置一覧が一致する
+- [ ] 左向きの照準でも、扇形内の敵を狙える
+- [ ] 回転冠の盾の板と、攻撃を防ぐ側が一致して見える
+- [ ] 重力に近い敵が逆向きに飛ばない
+- [ ] 演出最小でも接近中の敵と敵弾を見失わない
+
+この欄はiPhone実機で確認した日時・OS・Safari・対象コミットとともに記録します。未実施の項目へチェックを入れません。
