@@ -22,6 +22,11 @@
 .research-level { grid-column: 1; color: #63d7e6; }
 .research-card .button { grid-column: 2; grid-row: 1 / span 3; min-width: 148px; }
 .records-area { margin: 14px 0; }
+.record-entry { padding: 10px 0; border-top: 1px solid rgba(55, 106, 128, .45); }
+.record-entry h3, .record-entry p { margin: 0; }
+.record-entry h3 { font-size: 1rem; }
+.record-description { color: #c3d7dc; font-size: .9rem; overflow-wrap: anywhere; }
+.record-entry .summary-line { margin-top: 2px; }
 .action-grid, .result-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
 .experiment-link { display: inline-flex; min-height: 48px; align-items: center; margin-top: 8px; font-weight: 700; }
 .button { min-height: 48px; padding: 11px 16px; border: 1px solid #376a80; border-radius: 12px; color: #f2f0e8; background: #123044; font-weight: 700; text-align: center; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
@@ -53,6 +58,12 @@
 .result-score-card { padding: 26px 20px; text-align: center; }
 .result-score-card h2 { margin-bottom: 10px; color: #63d7e6; font-size: clamp(2rem, 10vw, 4rem); }
 .result-highlight { margin: 0; color: #d7e8e9; font-size: 1.05rem; }
+.result-details > h3 { margin: 18px 0 8px; font-size: 1.05rem; color: #d8e7e9; }
+.result-device-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 0; border-top: 1px solid rgba(55, 106, 128, .45); }
+.result-device-entry h4, .result-device-entry p { margin: 0; }
+.result-device-entry h4 { grid-column: 1; font-size: .98rem; }
+.result-device-role { grid-column: 1; color: #9db9c7; font-size: .86rem; overflow-wrap: anywhere; }
+.result-device-value { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #63d7e6; text-align: right; white-space: nowrap; }
 .result-row { display: flex; min-height: 44px; justify-content: space-between; gap: 14px; align-items: center; border-bottom: 1px solid rgba(55, 106, 128, .45); }
 .result-row:last-child { border-bottom: 0; }
 .result-label { color: #9db9c7; }
@@ -67,4 +78,6 @@
   .setting-row { grid-template-columns: 74px minmax(0, 1fr) 40px; }
   .research-card { grid-template-columns: 1fr; }
   .research-card .button { grid-column: 1; grid-row: auto; min-width: 0; width: 100%; }
+  .result-device-entry { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .result-device-value { grid-column: 1; grid-row: auto; text-align: left; }
 }

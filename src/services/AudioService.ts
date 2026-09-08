@@ -1,3 +1,55 @@
+export type AudioCue =
+  | 'button'
+  | 'countdown'
+  | 'shot'
+  | 'heavy'
+  | 'defeat'
+  | 'upgrade'
+  | 'damage'
+  | 'warning'
+  | 'boss'
+  | 'victory'
+  | 'start'
+  | 'pause'
+  | 'resume';
+
+interface CueProfile {
+  frequency: number;
+  duration: number;
+  wave: OscillatorType;
+}
+
+const CUE_PROFILES: Record<AudioCue, CueProfile> = {
+  button: { frequency: 520, duration: 0.045, wave: 'sine' },
+  countdown: { frequency: 330, duration: 0.09, wave: 'triangle' },
+  shot: { frequency: 620, duration: 0.035, wave: 'square' },
+  heavy: { frequency: 170, duration: 0.14, wave: 'sawtooth' },
+  defeat: { frequency: 110, duration: 0.3, wave: 'sawtooth' },
+  upgrade: { frequency: 740, duration: 0.14, wave: 'triangle' },
+  damage: { frequency: 120, duration: 0.16, wave: 'sawtooth' },
+  warning: { frequency: 260, duration: 0.12, wave: 'square' },
+  boss: { frequency: 95, duration: 0.28, wave: 'sawtooth' },
+  victory: { frequency: 880, duration: 0.24, wave: 'triangle' },
+  start: { frequency: 440, duration: 0.12, wave: 'triangle' },
+  pause: { frequency: 200, duration: 0.08, wave: 'sine' },
+  resume: { frequency: 500, duration: 0.08, wave: 'triangle' },
+};
+
+/** Map the short status messages used by the battle scene to distinct cues. */
+export function audioCueForStatus(message: string): AudioCue {
+  if (message.includes('ダメージ') || message.includes('被害')) return 'damage';
+  if (message.includes('強化') || message.includes('取得しました')) return 'upgrade';
+  if (message.includes('撃破')) return 'defeat';
+  if (message.includes('出現')) return 'boss';
+  if (message.includes('予告') || message.includes('集中波') || message.includes('準備')) return 'warning';
+  if (message.includes('発射') || message.includes('着弾')) return 'shot';
+  if (message.includes('ボス') || message.includes('回転冠') || message.includes('設計者') || message.includes('反響核')) return 'boss';
+  if (message.includes('戦闘開始')) return 'start';
+  if (message.includes('一時停止')) return 'pause';
+  if (message.includes('戦闘再開')) return 'resume';
+  return 'button';
+}
+
 export class AudioService {
   private context: AudioContext | null = null;
   private lastPlayed = new Map<string, number>();
@@ -50,14 +102,23 @@ export class AudioService {
   }
 
   public tone(kind: string, frequency: number, duration = 0.08): void {
+    this.playTone(kind, frequency, duration, kind === 'danger' ? 'sawtooth' : 'sine');
+  }
+
+  public cue(cue: AudioCue): void {
+    const profile = CUE_PROFILES[cue];
+    this.playTone(cue, profile.frequency, profile.duration, profile.wave);
+  }
+
+  private playTone(key: string, frequency: number, duration: number, wave: OscillatorType): void {
     const now = performance.now();
-    const previous = this.lastPlayed.get(kind) ?? -Infinity;
+    const previous = this.lastPlayed.get(key) ?? -Infinity;
     if (now - previous < 65 || !this.context || this.volume <= 0) return;
-    this.lastPlayed.set(kind, now);
+    this.lastPlayed.set(key, now);
     try {
       const oscillator = this.context.createOscillator();
       const gain = this.context.createGain();
-      oscillator.type = kind === 'danger' ? 'sawtooth' : 'sine';
+      oscillator.type = wave;
       oscillator.frequency.value = frequency;
       gain.gain.setValueAtTime(0.0001, this.context.currentTime);
       gain.gain.exponentialRampToValueAtTime(Math.max(0.001, this.volume * 0.08), this.context.currentTime + 0.008);

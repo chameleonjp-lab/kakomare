@@ -71,6 +71,10 @@ const LOGICAL_RENDER_SIZE = 720;
 const ARENA_RADIUS = 325;
 const CLUSTER_TELEGRAPH_SECONDS = 0.45;
 export const GRAVITY_COLLAPSE_DAMAGE_MULTIPLIER = 1.8;
+export const REPULSE_STRONG_PUSH_DAMAGE_MULTIPLIER = 1.25;
+const CLUSTER_SPLIT_DAMAGE_MULTIPLIER = 0.3;
+const CLUSTER_SPLIT_DISTANCE = 58;
+const CLUSTER_SPLIT_SPEED = 240;
 
 export class BattleScene extends Phaser.Scene {
   private readonly options: BattleSceneOptions;
@@ -385,6 +389,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fireNeedle(weapon: Weapon, angle: number, damage: number): void {
+    this.options.callbacks.onAudioCue?.('shot');
     const spread = weapon.branch === 'spread' ? 3 : 1;
     const piercing = (weapon.stats.pierce ?? 0) + (weapon.branch === 'piercing' ? 2 : 0);
     const piercingDamage = weapon.branch === 'piercing' ? damage * 1.12 : damage;
@@ -400,6 +405,7 @@ export class BattleScene extends Phaser.Scene {
 
   private fireRay(weapon: Weapon, angle: number, damage: number): void {
     if ((this.state as string) === 'finished') return;
+    this.options.callbacks.onAudioCue?.('heavy');
     const width = (weapon.stats.width ?? 18) + (weapon.branch === 'wide' ? 20 : 0);
     const life = weapon.branch === 'wide' ? 0.22 : 0.16;
     const primaryLength = weapon.branch === 'reflect' ? Math.min(ARENA_RADIUS, weapon.stats.range) : weapon.stats.range;
@@ -441,6 +447,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fireCluster(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
+    this.options.callbacks.onAudioCue?.('heavy');
     const radius = weapon.stats.radius ?? 72;
     const targetPoint = target ? { x: target.x, y: target.y } : { x: Math.cos(angle) * 250, y: Math.sin(angle) * 250 };
     const speed = (weapon.stats.projectileSpeed ?? 330) * this.options.researchEffects.projectileSpeedMultiplier * (1 + this.supportEffect('focus', weapon.slot, 'secondary'));
@@ -468,26 +475,47 @@ export class BattleScene extends Phaser.Scene {
     // omnidirectional hit and has no arbitrary shield plate selected.
     this.hitArea(weapon, x, y, radius, projectile.damage, null, hitIds);
     if (this.state === 'finished') return;
-    if (weapon.branch === 'split') {
+    if (weapon.branch === 'split' && !projectile.clusterSplitChild) {
       for (let index = 0; index < 3; index += 1) {
         const splitAngle = angle + index * Math.PI * 2 / 3;
-        this.hitArea(weapon, x + Math.cos(splitAngle) * 58, y + Math.sin(splitAngle) * 58, radius * 0.45, projectile.damage * 0.3, null, hitIds);
-        if ((this.state as string) === 'finished') return;
+        const impactX = x + Math.cos(splitAngle) * CLUSTER_SPLIT_DISTANCE;
+        const impactY = y + Math.sin(splitAngle) * CLUSTER_SPLIT_DISTANCE;
+        const travelSeconds = CLUSTER_SPLIT_DISTANCE / CLUSTER_SPLIT_SPEED;
+        // The split branch is a real post-impact projectile, not an instant
+        // damage fan. This keeps its three directions visible and gives
+        // shields / phase timing a chance to interact with the child shots.
+        this.addProjectile({
+          kind: 'cluster', x, y,
+          vx: Math.cos(splitAngle) * CLUSTER_SPLIT_SPEED,
+          vy: Math.sin(splitAngle) * CLUSTER_SPLIT_SPEED,
+          radius: 6,
+          damage: projectile.damage * CLUSTER_SPLIT_DAMAGE_MULTIPLIER,
+          life: travelSeconds,
+          piercing: 0,
+          sourceWeaponId: weapon.id,
+          impactX,
+          impactY,
+          impactRadius: radius * 0.45,
+          impactAngle: splitAngle,
+          clusterSplitChild: true,
+        });
       }
     }
-    if (weapon.branch === 'residue') this.createGravityField(x, y, 1.8, radius * 0.75, 0, 0, 180, false, 0.55);
+    if (weapon.branch === 'residue') this.createGravityField(x, y, 1.8, radius * 0.75, 0, 0, 180, false, 0.55 * (1 + this.supportEffect('brake', weapon.slot)));
   }
 
   private fireRepulse(weapon: Weapon, damage: number): void {
+    this.options.callbacks.onAudioCue?.('heavy');
     const radius = weapon.stats.radius ?? 165;
     const pushBonus = weapon.branch === 'strong-push' ? 1.5 : 1;
     const brakeEffect = this.supportEffect('brake', weapon.slot);
     const push = (weapon.stats.pushDistance ?? 58) * (1 + brakeEffect) * pushBonus;
     const slowDuration = (weapon.branch === 'delayed' ? 1.4 : 0.4) * (1 + brakeEffect);
+    const damageMultiplier = weapon.branch === 'strong-push' ? (weapon.branchDefinition?.damageMultiplier ?? REPULSE_STRONG_PUSH_DAMAGE_MULTIPLIER) : 1;
     this.addLine({ angle: 0, color: WEAPONS.repulse.color, life: 0.3, maxLife: 0.3, width: radius });
     for (const enemy of this.enemies) {
       if (!enemy.active || Math.hypot(enemy.x, enemy.y) > radius + enemy.hitRadius) continue;
-      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, impactAngleFromSource(0, 0, enemy.x, enemy.y));
+      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage * damageMultiplier, weapon.slot), this.elapsed, impactAngleFromSource(0, 0, enemy.x, enemy.y));
       enemy.applyPush(push, this.elapsed);
       enemy.applySlow(this.elapsed, slowDuration);
       this.recorder.recordControl('pushed', slowDuration);
@@ -498,6 +526,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fireChain(weapon: Weapon, target: Enemy | null, _angle: number, damage: number): void {
+    this.options.callbacks.onAudioCue?.('heavy');
     let current = target;
     const hit = new Set<number>();
     let lastPoint = { x: 0, y: 0 };
@@ -527,6 +556,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fireOrbit(weapon: Weapon, damage: number): void {
+    this.options.callbacks.onAudioCue?.('heavy');
     const angle = this.orbitAngles.get(weapon.slot) ?? 0;
     const count = (weapon.stats.count ?? 2) + (weapon.branch === 'many' ? 1 : 0);
     const radius = (weapon.stats.orbitRadius ?? 108) + (weapon.branch === 'outer' ? 38 : 0);
@@ -565,6 +595,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fireDisc(weapon: Weapon, angle: number, damage: number): void {
+    this.options.callbacks.onAudioCue?.('heavy');
     const speed = (weapon.stats.projectileSpeed ?? 290) * this.options.researchEffects.projectileSpeedMultiplier * (1 + this.supportEffect('focus', weapon.slot, 'secondary')) * (weapon.branch === 'echo' ? 1.2 : 1);
     this.addProjectile({
       kind: 'disc', x: 0, y: 0, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
@@ -573,6 +604,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fireGravity(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
+    this.options.callbacks.onAudioCue?.('heavy');
     const stats = weapon.stats;
     const safeDistance = stats.safeDistance ?? 180;
     const targetDistance = target ? Math.hypot(target.x, target.y) : 260;
@@ -581,7 +613,8 @@ export class BattleScene extends Phaser.Scene {
     const y = Math.sin(angle) * distance;
     const duration = (stats.duration ?? 2.2) * (weapon.branch === 'long' ? 1.4 : 1);
     const radius = (stats.pullRadius ?? 125) * (weapon.branch === 'long' ? 1.2 : 1);
-    this.createGravityField(x, y, duration, radius, damage, stats.pullStrength ?? 34, safeDistance, weapon.branch === 'collapse');
+    const brakeEffect = this.supportEffect('brake', weapon.slot);
+    this.createGravityField(x, y, duration, radius, damage, stats.pullStrength ?? 34, safeDistance, weapon.branch === 'collapse', 0.4 * (1 + brakeEffect));
     this.addLine({ angle, color: WEAPONS.gravity.color, life: 0.38, maxLife: 0.38, width: stats.pullRadius ?? 125 });
   }
 
@@ -658,7 +691,7 @@ export class BattleScene extends Phaser.Scene {
     for (const projectile of this.projectiles) {
       projectile.update(seconds);
       if (projectile.kind === 'cluster') {
-        if (!projectile.impactWarningShown && (projectile.life <= CLUSTER_TELEGRAPH_SECONDS || !projectile.active) && projectile.impactX !== null && projectile.impactY !== null) {
+        if (!projectile.clusterSplitChild && !projectile.impactWarningShown && (projectile.life <= CLUSTER_TELEGRAPH_SECONDS || !projectile.active) && projectile.impactX !== null && projectile.impactY !== null) {
           projectile.impactWarningShown = true;
           this.addFlash({ x: projectile.impactX, y: projectile.impactY, color: WEAPONS.cluster.color, life: CLUSTER_TELEGRAPH_SECONDS, maxLife: CLUSTER_TELEGRAPH_SECONDS, radius: projectile.impactRadius, kind: 'telegraph' });
         }
@@ -854,6 +887,7 @@ export class BattleScene extends Phaser.Scene {
   private handleEnemyDestroyed(enemy: Enemy): void {
     if (this.state === 'finished') return;
     if (enemy.isBoss) {
+      this.options.callbacks.onAudioCue?.('defeat');
       this.designerWave = null;
       this.echoWave = null;
       this.crownPressure = null;
@@ -867,6 +901,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     const enemyId = enemy.type as EnemyId;
+    this.options.callbacks.onAudioCue?.('defeat');
     this.recorder.kills += 1;
     this.recorder.recordEnemyKill(enemyId);
     this.addScore(10 * (1 + ENEMIES[enemyId].threatCost));
@@ -1132,6 +1167,8 @@ export class BattleScene extends Phaser.Scene {
     const visibleProjectiles = this.visibleProjectiles();
     const snapshot: BattleSnapshot = {
       elapsed: this.elapsed,
+      timeLimit: STAGES[this.options.stageId].timeLimit,
+      isEndless: STAGES[this.options.stageId].isEndless === true,
       core: this.core.health,
       maxCore: this.core.maxHealth,
       experience: this.experience,

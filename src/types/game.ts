@@ -58,6 +58,10 @@ export interface SupportSnapshot {
 
 export interface BattleSnapshot {
   elapsed: number;
+  /** Stage timing is carried with the snapshot so the HUD cannot drift from
+   * the active stage when a run is restarted or resumed. */
+  timeLimit: number;
+  isEndless: boolean;
   core: number;
   maxCore: number;
   experience: number;
@@ -127,5 +131,7 @@ export interface BattleCallbacks {
   onUpgrade: (payload: UpgradePayload) => void;
   onFinish: (result: BattleResult) => void;
   onStatus: (message: string) => void;
+  /** Optional low-volume cues emitted by actual weapon/kill events. */
+  onAudioCue?: (cue: 'shot' | 'heavy' | 'defeat') => void;
   onPauseRequest: () => void;
 }

@@ -20,6 +20,8 @@ export interface ProjectileOptions {
   impactY?: number;
   impactRadius?: number;
   impactAngle?: number;
+  /** True for the three child shots created by the cluster split branch. */
+  clusterSplitChild?: boolean;
 }
 
 export class Projectile {
@@ -44,6 +46,7 @@ export class Projectile {
   public impactY: number | null;
   public impactRadius: number;
   public impactAngle: number;
+  public clusterSplitChild = false;
   public impactWarningShown = false;
   public readonly hitAt = new Map<number, number>();
 
@@ -67,6 +70,7 @@ export class Projectile {
     this.impactY = null;
     this.impactRadius = 0;
     this.impactAngle = 0;
+    this.clusterSplitChild = false;
     this.reset(options);
   }
 
@@ -89,6 +93,7 @@ export class Projectile {
     this.impactY = options.impactY ?? null;
     this.impactRadius = options.impactRadius ?? 0;
     this.impactAngle = options.impactAngle ?? 0;
+    this.clusterSplitChild = options.clusterSplitChild ?? false;
     this.impactWarningShown = false;
     this.active = true;
     this.targetId = null;

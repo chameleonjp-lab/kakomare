@@ -51,17 +51,20 @@ function recordCards(save: SaveData): HTMLElement {
   const effects = getResearchEffects(save);
   const wrapper = element('div', 'records-area');
   const enemyCard = card('records-card');
+  enemyCard.dataset.testid = 'enemy-records';
   enemyCard.append(heading('敵図鑑', 2));
   enemyCard.append(element('p', 'record-lock', effects.enemyRecords ? '出会った敵の撃破数を表示しています。' : '研究「敵図鑑」を取得すると詳細を表示します。'));
-  for (const id of ENEMY_ORDER) enemyCard.append(element('p', 'summary-line', `${ENEMIES[id].name}: ${effects.enemyRecords ? save.records.enemyKills[id] ?? 0 : '—'}`));
-  for (const id of ['crown', 'designer', 'echo'] as const) enemyCard.append(element('p', 'summary-line', `${BOSSES[id].name}: ${effects.enemyRecords ? save.records.enemyKills[id] ?? 0 : '—'}`));
+  for (const id of ENEMY_ORDER) enemyCard.append(recordEntry(ENEMIES[id].name, ENEMIES[id].description, effects.enemyRecords ? `${save.records.enemyKills[id] ?? 0}体撃破` : '詳細は未解放'));
+  for (const id of ['crown', 'designer', 'echo'] as const) enemyCard.append(recordEntry(BOSSES[id].name, BOSSES[id].description, effects.enemyRecords ? `${save.records.enemyKills[id] ?? 0}体撃破` : '詳細は未解放'));
 
   const weaponCard = card('records-card');
+  weaponCard.dataset.testid = 'weapon-records';
   weaponCard.append(heading('武器記録', 2));
   weaponCard.append(element('p', 'record-lock', effects.weaponRecords ? '1プレイ中の最高攻撃量です。' : '研究「武器記録」を取得すると詳細を表示します。'));
-  for (const id of WEAPON_ORDER) weaponCard.append(element('p', 'summary-line', `${WEAPONS[id].name}: ${effects.weaponRecords ? Math.round(save.records.weaponBestDamage[id] ?? 0) : '—'}`));
+  for (const id of WEAPON_ORDER) weaponCard.append(recordEntry(WEAPONS[id].name, `${WEAPONS[id].role}。`, effects.weaponRecords ? `${Math.round(save.records.weaponBestDamage[id] ?? 0)}ダメージ` : '詳細は未解放'));
 
   const sectorCard = card('records-card');
+  sectorCard.dataset.testid = 'sector-records';
   sectorCard.append(heading('方向別被害履歴', 2));
   sectorCard.append(element('p', 'record-lock', effects.sectorRecords ? '各ステージの合計被害です。' : '研究「方向解析」を取得すると詳細を表示します。'));
   for (const stageId of ['stage-1', 'stage-2', 'stage-3'] as const) {
@@ -70,4 +73,10 @@ function recordCards(save: SaveData): HTMLElement {
   }
   wrapper.append(enemyCard, weaponCard, sectorCard);
   return wrapper;
+}
+
+function recordEntry(name: string, description: string, value: string): HTMLElement {
+  const entry = element('article', 'record-entry');
+  entry.append(element('h3', '', name), element('p', 'record-description', description), element('p', 'summary-line', value));
+  return entry;
 }

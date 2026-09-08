@@ -1,6 +1,7 @@
 import { BOSSES } from '../data/bosses';
 import { STAGES } from '../data/stages';
-import { WEAPONS } from '../data/weapons';
+import { SUPPORTS, SUPPORT_ORDER } from '../data/supports';
+import { WEAPONS, WEAPON_ORDER } from '../data/weapons';
 import type { BattleResult } from '../types/game';
 import { button, card, element, heading, pageShell } from './viewUtils';
 
@@ -36,8 +37,26 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
   shell.append(details);
 
   const weaponCard = card('result-details');
+  weaponCard.dataset.testid = 'result-device-records';
   weaponCard.append(heading('装置の働き', 2));
-  for (const [id, amount] of Object.entries(result.weaponDamage)) weaponCard.append(element('p', 'summary-line', `${WEAPONS[id as keyof typeof WEAPONS].name}: ${Math.round(amount ?? 0)}`));
+  weaponCard.append(element('h3', '', '武器ごとの総与ダメージ'));
+  for (const id of WEAPON_ORDER) {
+    const amount = result.weaponDamage[id] ?? 0;
+    const entry = element('article', 'result-device-entry');
+    entry.append(element('h4', '', WEAPONS[id].name));
+    entry.append(element('p', 'result-device-role', WEAPONS[id].role));
+    entry.append(element('strong', 'result-device-value', `${Math.round(amount)}ダメージ`));
+    weaponCard.append(entry);
+  }
+  weaponCard.append(element('h3', '', '補助装置の接続'));
+  for (const id of SUPPORT_ORDER) {
+    const count = result.supportUsage[id] ?? 0;
+    const entry = element('article', 'result-device-entry');
+    entry.append(element('h4', '', SUPPORTS[id].name));
+    entry.append(element('p', 'result-device-role', SUPPORTS[id].role));
+    entry.append(element('strong', 'result-device-value', count > 0 ? `${count}面で採用` : '未採用'));
+    weaponCard.append(entry);
+  }
   if (result.upgrades.length > 0) weaponCard.append(element('p', 'summary-line', `強化順: ${result.upgrades.join(' → ')}`));
   if (result.branches.length > 0) weaponCard.append(element('p', 'summary-line', `発展分岐: ${result.branches.join(' / ')}`));
   shell.append(weaponCard);
