@@ -1,6 +1,7 @@
 import { Enemy } from '../entities/Enemy';
 import { Projectile } from '../entities/Projectile';
 import { applyDamage } from './DamageSystem';
+import { impactAngleFromVelocity } from './ImpactDirection';
 
 export interface CollisionEvent {
   projectile: Projectile;
@@ -50,7 +51,10 @@ export function collideProjectiles(
       if (projectile.kind !== 'disc' && projectile.hitAt.has(enemy.id)) continue;
       const distance = Math.hypot(projectile.x - enemy.x, projectile.y - enemy.y);
       if (distance > projectile.radius + enemy.hitRadius) continue;
-      const result = applyDamage(enemy, damageForEnemy(projectile, enemy), elapsed, Math.atan2(projectile.vy, projectile.vx));
+      // Shields are drawn around the victim, so compare the face the shot
+      // enters (opposite the projectile's travel vector), not its travel
+      // direction itself.
+      const result = applyDamage(enemy, damageForEnemy(projectile, enemy), elapsed, impactAngleFromVelocity(projectile.vx, projectile.vy));
       projectile.targetId = enemy.id;
       projectile.hitAt.set(enemy.id, elapsed);
       if (projectile.kind === 'disc') {

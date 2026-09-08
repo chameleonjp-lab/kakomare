@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { SupportSnapshot, WeaponSnapshot } from '../../types/game';
+import { adjacentWeaponSlots, itemAtSlot, DEVICE_SLOT_COUNT } from '../deviceLayout';
 import { drawHex, drawPolygon, polygonPoints } from './ShapeFactory';
 
 const WEAPON_COLORS: Record<WeaponSnapshot['id'], number> = {
@@ -23,8 +24,8 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
   graphics.closePath(); graphics.strokePath();
   graphics.lineStyle(2, 0x63d7e6, 0.3);
   for (let index = 0; index < 6; index += 1) graphics.lineBetween(centerX, centerY, points[index]?.x ?? centerX, points[index]?.y ?? centerY);
-  for (let index = 0; index < 3; index += 1) {
-    const weapon = weapons[index];
+  for (let index = 0; index < DEVICE_SLOT_COUNT; index += 1) {
+    const weapon = itemAtSlot(weapons, index);
     const point = points[index * 2];
     if (point && weapon) {
       const color = WEAPON_COLORS[weapon.id];
@@ -36,8 +37,8 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
       if (weapon.finalBranch) { graphics.lineStyle(2, color, 0.95); graphics.strokeCircle(point.x, point.y, 37); }
     } else if (point) drawHex(graphics, point.x, point.y, 28, 0x07131f, 0.4, 0x163246);
   }
-  for (let index = 0; index < 3; index += 1) {
-    const support = supports[index];
+  for (let index = 0; index < DEVICE_SLOT_COUNT; index += 1) {
+    const support = itemAtSlot(supports, index);
     const point = points[index * 2 + 1];
     if (point && support) {
       const color = SUPPORT_COLORS[support.id];
@@ -46,10 +47,10 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
       graphics.lineBetween(centerX, centerY, point.x, point.y);
       graphics.lineStyle(1, color, 0.9);
       graphics.strokeCircle(point.x, point.y, 15 + support.level * 2);
-      const connectedWeaponSlots = [support.slot, (support.slot + 1) % 3];
+      const connectedWeaponSlots = adjacentWeaponSlots(support.slot);
       for (const weaponSlot of connectedWeaponSlots) {
         const weaponPoint = points[weaponSlot * 2];
-        if (!weaponPoint || !weapons[weaponSlot]) continue;
+        if (!weaponPoint || !itemAtSlot(weapons, weaponSlot)) continue;
         graphics.lineStyle(3, color, Math.min(1, 0.35 + support.level * 0.18));
         graphics.lineBetween(point.x, point.y, weaponPoint.x, weaponPoint.y);
       }

@@ -35,6 +35,7 @@ export class GameHost {
     testMode?: boolean;
     testOutcome?: 'victory' | 'defeat';
     testUpgrade?: boolean;
+    seed?: number;
     callbacks: BattleCallbacks;
   }): void {
     this.stop();

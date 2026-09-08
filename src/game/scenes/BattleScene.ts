@@ -24,11 +24,13 @@ import { collideEnemyProjectiles, collideProjectiles } from '../systems/Collisio
 import { createUpgradeCandidateList, applyUpgradeCandidate, shouldRetryUpgradeDraw, wouldStrandNewItems } from '../systems/UpgradeSystem';
 import { DeterministicRng, seedFromStage, SpawnDirector, type SpawnWaveWarning } from '../systems/SpawnDirector';
 import { MANUAL_AIM_HALF_ANGLE, selectTarget } from '../systems/TargetingSystem';
+import { impactAngleFromSource, impactAngleFromVelocity } from '../systems/ImpactDirection';
 import { advanceOrbitAngle } from '../systems/OrbitSystem';
 import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
 import type { BattleCallbacks, BattleResult, BattleSnapshot, Point, UpgradeCandidate, UpgradePayload } from '../../types/game';
 import type { ResearchEffects } from '../../data/research';
 import { RunLifecycleGuard } from '../../app/RunLifecycleGuard';
+import { DEVICE_SLOT_COUNT } from '../deviceLayout';
 
 export interface BattleSceneOptions {
   stageId: StageId;
@@ -46,7 +48,21 @@ export interface BattleSceneOptions {
 
 interface FlashEffect { x: number; y: number; color: number; life: number; maxLife: number; radius: number; kind?: 'impact' | 'telegraph' }
 interface LineEffect { angle: number; color: number; life: number; maxLife: number; width: number; startX?: number; startY?: number; length?: number }
-interface GravityField { x: number; y: number; life: number; maxLife: number; radius: number; damage: number; pullStrength: number; safeDistance: number; damageTimer: number; collapse: boolean; slowDuration: number }
+interface GravityField {
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  radius: number;
+  damage: number;
+  pullStrength: number;
+  safeDistance: number;
+  damageTimer: number;
+  collapse: boolean;
+  /** Collapse damage is locked when the field is created. */
+  collapseDamage: number;
+  slowDuration: number;
+}
 const MAX_ACTIVE_ENEMIES = 180;
 const MAX_FRIENDLY_PROJECTILES = 280;
 const MAX_ENEMY_PROJECTILES = 80;
@@ -54,6 +70,7 @@ const MAX_GRAVITY_FIELDS = 24;
 const LOGICAL_RENDER_SIZE = 720;
 const ARENA_RADIUS = 325;
 const CLUSTER_TELEGRAPH_SECONDS = 0.45;
+export const GRAVITY_COLLAPSE_DAMAGE_MULTIPLIER = 1.8;
 
 export class BattleScene extends Phaser.Scene {
   private readonly options: BattleSceneOptions;
@@ -413,7 +430,10 @@ export class BattleScene extends Phaser.Scene {
       const closestX = startX + directionX * length * projection;
       const closestY = startY + directionY * length * projection;
       if (Math.hypot(enemy.x - closestX, enemy.y - closestY) > width / 2 + enemy.hitRadius) continue;
-      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, angle);
+      // A ray is a travelling line, so every victim along that line sees the
+      // same incoming side even when it is hit near the edge of the width.
+      const impactAngle = impactAngleFromVelocity(directionX, directionY);
+      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, impactAngle);
       this.recordHitDamage(weapon.id, result.amount, enemy.x, enemy.y);
       if (result.destroyed) this.handleEnemyDestroyed(enemy);
       if ((this.state as string) === 'finished') return;
@@ -443,12 +463,15 @@ export class BattleScene extends Phaser.Scene {
     const angle = projectile.impactAngle;
     this.addFlash({ x, y, color: WEAPONS.cluster.color, life: CLUSTER_TELEGRAPH_SECONDS, maxLife: CLUSTER_TELEGRAPH_SECONDS, radius, kind: 'impact' });
     const hitIds = new Set<number>();
-    this.hitArea(weapon, x, y, radius, projectile.damage, angle, hitIds);
+    // The burst originates at the impact center.  Each victim therefore gets
+    // the face-facing-center direction; a victim exactly at the center is an
+    // omnidirectional hit and has no arbitrary shield plate selected.
+    this.hitArea(weapon, x, y, radius, projectile.damage, null, hitIds);
     if (this.state === 'finished') return;
     if (weapon.branch === 'split') {
       for (let index = 0; index < 3; index += 1) {
         const splitAngle = angle + index * Math.PI * 2 / 3;
-        this.hitArea(weapon, x + Math.cos(splitAngle) * 58, y + Math.sin(splitAngle) * 58, radius * 0.45, projectile.damage * 0.3, splitAngle, hitIds);
+        this.hitArea(weapon, x + Math.cos(splitAngle) * 58, y + Math.sin(splitAngle) * 58, radius * 0.45, projectile.damage * 0.3, null, hitIds);
         if ((this.state as string) === 'finished') return;
       }
     }
@@ -464,7 +487,7 @@ export class BattleScene extends Phaser.Scene {
     this.addLine({ angle: 0, color: WEAPONS.repulse.color, life: 0.3, maxLife: 0.3, width: radius });
     for (const enemy of this.enemies) {
       if (!enemy.active || Math.hypot(enemy.x, enemy.y) > radius + enemy.hitRadius) continue;
-      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, Math.atan2(enemy.y, enemy.x));
+      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, impactAngleFromSource(0, 0, enemy.x, enemy.y));
       enemy.applyPush(push, this.elapsed);
       enemy.applySlow(this.elapsed, slowDuration);
       this.recorder.recordControl('pushed', slowDuration);
@@ -474,24 +497,33 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private fireChain(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
+  private fireChain(weapon: Weapon, target: Enemy | null, _angle: number, damage: number): void {
     let current = target;
     const hit = new Set<number>();
     let lastPoint = { x: 0, y: 0 };
+    let chainHit = false;
     const count = (weapon.stats.chainCount ?? 3) + (weapon.branch === 'chain' ? 2 : 0);
     for (let index = 0; index < count && current; index += 1) {
       hit.add(current.id);
       const currentPoint = { x: current.x, y: current.y };
       const linkAngle = Math.atan2(currentPoint.y - lastPoint.y, currentPoint.x - lastPoint.x);
       this.addLine({ angle: linkAngle, color: WEAPONS.chain.color, life: 0.22, maxLife: 0.22, width: 5, startX: lastPoint.x, startY: lastPoint.y, length: Math.hypot(currentPoint.x - lastPoint.x, currentPoint.y - lastPoint.y) });
-      const result = applyDamage(current, this.adjustForSpecialEnemy(current, damage * Math.pow(0.8, index), weapon.slot), this.elapsed, Math.atan2(current.y, current.x));
+      // A chain hit enters from the previous node (or the core for the first
+      // node), rather than from the victim's radial direction.  This keeps
+      // shield plates consistent when a chain turns between enemies.
+      const impactAngle = impactAngleFromSource(lastPoint.x, lastPoint.y, current.x, current.y);
+      const result = applyDamage(current, this.adjustForSpecialEnemy(current, damage * Math.pow(0.8, index), weapon.slot), this.elapsed, impactAngle);
+      chainHit = true;
       this.recordHitDamage(weapon.id, result.amount, current.x, current.y);
       if (result.destroyed) this.handleEnemyDestroyed(current);
       if ((this.state as string) === 'finished') return;
       lastPoint = currentPoint;
       current = this.enemies.filter((enemy) => enemy.active && !hit.has(enemy.id) && Math.hypot(enemy.x - lastPoint.x, enemy.y - lastPoint.y) <= 150).sort((a, b) => Math.hypot(a.x - lastPoint.x, a.y - lastPoint.y) - Math.hypot(b.x - lastPoint.x, b.y - lastPoint.y))[0] ?? null;
     }
-    if (weapon.branch === 'burst' && lastPoint.x !== 0 && lastPoint.y !== 0) this.hitArea(weapon, lastPoint.x, lastPoint.y, 40, damage * 0.5, angle);
+    // An axis-aligned victim is still a valid final node.  Use the hit state,
+    // rather than requiring both coordinates to be non-zero, to decide if a
+    // terminal burst should happen.
+    if (weapon.branch === 'burst' && chainHit) this.hitArea(weapon, lastPoint.x, lastPoint.y, 40, damage * 0.5, null);
   }
 
   private fireOrbit(weapon: Weapon, damage: number): void {
@@ -511,7 +543,11 @@ export class BattleScene extends Phaser.Scene {
         if (!enemy.active || distanceToSegment(enemy.x, enemy.y, startX, startY, endX, endY) > 8 + enemy.hitRadius) continue;
         if (this.elapsed - (this.orbitHits.get(key) ?? -Infinity) < (weapon.stats.hitCooldown ?? 0.45)) continue;
         this.orbitHits.set(key, this.elapsed);
-        const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, bladeAngle);
+        // The blade's visible motion is a positive-angle orbit.  Its tangent
+        // is the attack travel direction; use the opposite side for the
+        // victim-facing shield check so the shield follows the animation.
+        const impactAngle = impactAngleFromVelocity(Math.cos(bladeAngle + Math.PI / 2), Math.sin(bladeAngle + Math.PI / 2));
+        const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, impactAngle);
         this.recordHitDamage(weapon.id, result.amount, enemy.x, enemy.y);
         if (result.destroyed) this.handleEnemyDestroyed(enemy);
         if (this.state === 'finished') return;
@@ -554,7 +590,7 @@ export class BattleScene extends Phaser.Scene {
     for (const enemy of this.enemies) {
       if (!enemy.active || hitIds?.has(enemy.id) || Math.hypot(enemy.x - x, enemy.y - y) > radius + enemy.hitRadius) continue;
       hitIds?.add(enemy.id);
-      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, attackAngle ?? Math.atan2(enemy.y, enemy.x));
+      const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, attackAngle ?? impactAngleFromSource(x, y, enemy.x, enemy.y));
       this.recordHitDamage(weapon.id, result.amount, enemy.x, enemy.y);
       if (result.destroyed) this.handleEnemyDestroyed(enemy);
       if ((this.state as string) === 'finished') return;
@@ -563,7 +599,23 @@ export class BattleScene extends Phaser.Scene {
 
   private createGravityField(x: number, y: number, duration: number, radius: number, damage: number, pullStrength: number, safeDistance: number, collapse: boolean, slowDuration = 0): void {
     if (this.gravityFields.length >= MAX_GRAVITY_FIELDS) return;
-    this.gravityFields.push({ x, y, life: duration, maxLife: duration, radius, damage, pullStrength, safeDistance, damageTimer: 0, collapse, slowDuration });
+    this.gravityFields.push({
+      x,
+      y,
+      life: duration,
+      maxLife: duration,
+      radius,
+      damage,
+      pullStrength,
+      safeDistance,
+      damageTimer: 0,
+      collapse,
+      // Lock the effective weapon power at creation.  A field can outlive a
+      // level-up, but its delayed collapse must not retroactively change when
+      // the player upgrades another weapon during the field's lifetime.
+      collapseDamage: collapse ? damage * GRAVITY_COLLAPSE_DAMAGE_MULTIPLIER : 0,
+      slowDuration,
+    });
   }
 
   private updateGravityFields(seconds: number): void {
@@ -581,7 +633,7 @@ export class BattleScene extends Phaser.Scene {
           this.recorder.recordControl('slowed', seconds);
         }
         if (field.damage > 0 && field.damageTimer <= 0) {
-          const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, field.damage, this.weapons.find((item) => item.id === 'gravity')?.slot ?? 0), this.elapsed, Math.atan2(enemy.y, enemy.x));
+          const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, field.damage, this.weapons.find((item) => item.id === 'gravity')?.slot ?? 0), this.elapsed, impactAngleFromSource(field.x, field.y, enemy.x, enemy.y));
           this.recordHitDamage('gravity', result.amount, enemy.x, enemy.y);
           if (result.destroyed) this.handleEnemyDestroyed(enemy);
           if (this.state === 'finished') return;
@@ -594,7 +646,7 @@ export class BattleScene extends Phaser.Scene {
       if (field && field.life <= 0) {
         if (field.collapse) {
           const weapon = this.weapons.find((item) => item.id === 'gravity');
-          if (weapon) this.hitArea(weapon, field.x, field.y, field.radius, weapon.stats.damage * 1.8, null);
+          if (weapon) this.hitArea(weapon, field.x, field.y, field.radius, field.collapseDamage, null);
           if (this.state === 'finished') return;
         }
         this.gravityFields.splice(index, 1);
@@ -621,7 +673,10 @@ export class BattleScene extends Phaser.Scene {
       if (disc?.branch === 'trail' && this.elapsed >= (this.discTrailAt.get(projectile.id) ?? 0)) {
         this.discTrailAt.set(projectile.id, this.elapsed + 0.18);
         this.addFlash({ x: projectile.x, y: projectile.y, color: WEAPONS.disc.color, life: 0.2, maxLife: 0.2, radius: 24 });
-        this.hitArea(disc, projectile.x, projectile.y, 28, projectile.damage * 0.2, Math.atan2(projectile.vy, projectile.vx));
+        // Trail damage is an area centered on the disc's current position.
+        // Let each victim derive its own source-facing side instead of using
+        // the disc's travel direction for every enemy in the area.
+        this.hitArea(disc, projectile.x, projectile.y, 28, projectile.damage * 0.2, null);
         if (this.state === 'finished') return;
       }
       const distance = Math.hypot(projectile.x, projectile.y);
@@ -888,8 +943,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private availablePlacementSlots(kind: UpgradeCandidate['kind']): number[] {
-    if (kind === 'weapon') return [0, 1, 2].filter((slot) => !this.weapons.some((weapon) => weapon.slot === slot));
-    if (kind === 'support') return [0, 1, 2].filter((slot) => !this.supports.some((support) => support.slot === slot));
+    const slots = Array.from({ length: DEVICE_SLOT_COUNT }, (_, slot) => slot);
+    if (kind === 'weapon') return slots.filter((slot) => !this.weapons.some((weapon) => weapon.slot === slot));
+    if (kind === 'support') return slots.filter((slot) => !this.supports.some((support) => support.slot === slot));
     return [];
   }
 
@@ -1084,7 +1140,7 @@ export class BattleScene extends Phaser.Scene {
       kills: this.recorder.kills,
       enemies: visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),
       projectiles: visibleProjectiles.map((projectile) => projectile.snapshot()),
-      weapons: this.weapons.map((weapon) => ({ id: weapon.id, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })),
+      weapons: this.weapons.map((weapon) => ({ id: weapon.id, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })),
       supports: this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })),
       aimAngle: this.aimAngle,
       manualAim: this.manualAim,
@@ -1142,7 +1198,7 @@ export class BattleScene extends Phaser.Scene {
     const visibleEnemies = this.visibleEnemies();
     const visibleProjectiles = this.visibleProjectiles();
 
-    drawDevice(deviceLayer, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })), this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })));
+    drawDevice(deviceLayer, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })), this.supports.map((support) => ({ id: support.id, level: support.level, slot: support.slot })));
     for (const projectile of visibleProjectiles) if (!projectile.enemyProjectile) this.drawProjectile(friendlyLayer, projectile, cx, cy);
     for (const particle of this.particles.active()) {
       const alpha = Math.max(0, particle.life / particle.maxLife);
@@ -1173,12 +1229,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private visibleEnemies(): Enemy[] {
-    const active = this.enemies.filter((enemy) => enemy.active);
-    return selectVisibleEntities(active, this.effectBudget.limits.enemies, (first, second) => {
-      if (first.isBoss !== second.isBoss) return first.isBoss ? -1 : 1;
-      if (first.telegraph !== second.telegraph) return first.telegraph ? -1 : 1;
-      return first.distanceToCore - second.distanceToCore || first.id - second.id;
-    });
+    // Every simulated enemy remains visible at every effects setting.  An
+    // active threat can be selected, collide, or reach the core regardless of
+    // decorative effects, so dropping it from the render would hide a real
+    // gameplay event.  The spawn director already caps this list at 180.
+    return this.enemies.filter((enemy) => enemy.active);
   }
 
   private visibleProjectiles(): Projectile[] {
@@ -1187,11 +1242,10 @@ export class BattleScene extends Phaser.Scene {
       this.effectBudget.limits.projectiles,
       (first, second) => Math.hypot(first.x, first.y) - Math.hypot(second.x, second.y) || first.id - second.id,
     );
-    const hostile = selectVisibleEntities(
-      this.projectiles.filter((projectile) => projectile.active && projectile.enemyProjectile),
-      this.effectBudget.limits.enemyProjectiles,
-      (first, second) => Math.hypot(first.x, first.y) - Math.hypot(second.x, second.y) || first.id - second.id,
-    );
+    // Hostile projectiles are gameplay hazards and are therefore all drawn.
+    // Friendly projectiles may still use a visual budget because losing a
+    // decorative shot does not conceal an incoming hit.
+    const hostile = this.projectiles.filter((projectile) => projectile.active && projectile.enemyProjectile);
     return [...friendly, ...hostile];
   }
 

@@ -16,8 +16,11 @@ interface FrameMeasurement {
 
 const LIMITS: Record<EffectsLevel, EffectLimits> = {
   standard: { enemies: 180, projectiles: 280, enemyProjectiles: 80, particles: 500, damageNumbers: 18, shake: 4 },
-  low: { enemies: 160, projectiles: 220, enemyProjectiles: 70, particles: 260, damageNumbers: 10, shake: 2 },
-  minimum: { enemies: 140, projectiles: 180, enemyProjectiles: 60, particles: 100, damageNumbers: 0, shake: 0 },
+  // Active enemies and hostile projectiles are gameplay hazards.  They stay
+  // in the render budget at every effects level; decorative effects can still
+  // be reduced below these limits.
+  low: { enemies: 180, projectiles: 220, enemyProjectiles: 80, particles: 260, damageNumbers: 10, shake: 2 },
+  minimum: { enemies: 180, projectiles: 180, enemyProjectiles: 80, particles: 100, damageNumbers: 0, shake: 0 },
 };
 
 export class EffectBudget {

@@ -22,6 +22,7 @@ import { WEAPONS } from '../data/weapons';
 import type { StageId } from '../types/content';
 import { isLocalTestHost } from './testMode';
 import { RunLifecycleGuard } from './RunLifecycleGuard';
+import { DEVICE_SLOT_COUNT, itemAtSlot } from '../game/deviceLayout';
 
 function stageLabel(stageId: StageId): string {
   return stageId === 'endless' ? 'ENDLESS' : stageId.replace('stage-', 'STAGE ');
@@ -257,6 +258,8 @@ export class AppController {
     const query = new URLSearchParams(window.location.search);
     const testMode = isLocalTestHost(window.location.hostname) && query.get('test') === '1';
     const outcome = query.get('outcome');
+    const rawSeed = query.get('seed');
+    const requestedSeed = rawSeed === null ? undefined : Number(rawSeed);
     this.gameHost.startBattle(gameMount, {
       stageId: this.state.selectedStage,
       effectsLevel: this.state.save.settings.effects,
@@ -267,6 +270,7 @@ export class AppController {
       testMode,
       testOutcome: testMode && (outcome === 'victory' || outcome === 'defeat') ? outcome : undefined,
       testUpgrade: testMode && query.get('upgrade') === '1',
+      seed: testMode && requestedSeed !== undefined && Number.isFinite(requestedSeed) ? requestedSeed : undefined,
       callbacks: {
         onSnapshot: (snapshot) => {
           this.latestBattleSnapshot = snapshot;
@@ -297,7 +301,14 @@ export class AppController {
     if (xpValue) xpValue.textContent = `${Math.floor(snapshot.experience)} / ${snapshot.nextExperience}`;
     if (scoreValue) scoreValue.textContent = snapshot.score.toLocaleString('ja-JP');
     aimState.textContent = snapshot.manualAim ? '手動照準中' : '自動照準';
-    buildList.textContent = [...snapshot.weapons.map((weapon) => `${this.weaponName(weapon.id)} Lv${weapon.level}`), ...snapshot.supports.map((support) => `${this.supportName(support.id)} Lv${support.level}`)].join(' / ');
+    const loadout: string[] = [];
+    for (let slot = 0; slot < DEVICE_SLOT_COUNT; slot += 1) {
+      const weapon = itemAtSlot(snapshot.weapons, slot);
+      const support = itemAtSlot(snapshot.supports, slot);
+      if (weapon) loadout.push(`武器面${slot + 1}: ${this.weaponName(weapon.id)} Lv${weapon.level}`);
+      if (support) loadout.push(`補助面${slot + 1}: ${this.supportName(support.id)} Lv${support.level}`);
+    }
+    buildList.textContent = loadout.join(' / ');
   }
 
   private showUpgrade(payload: UpgradePayload, shell: HTMLElement): void {
@@ -355,7 +366,7 @@ export class AppController {
       }
       if (candidate.requiresNewItemFirst) card.append(element('p', 'upgrade-details', '候補を3つ保つため、新しい装置を先に取得すると選べます。'));
       if (getResearchEffects(this.state.save).candidateDetails && candidate.details) card.append(element('p', 'upgrade-details', candidate.details));
-      const ban = button('この候補を除外', 'button button-small');
+      const ban = button('この候補を除外', 'button button-small upgrade-ban');
       ban.disabled = true;
       ban.addEventListener('click', () => {
         if (locked || ban.disabled) return;
@@ -375,7 +386,7 @@ export class AppController {
       locked = false;
       candidateButtons.forEach(({ button, candidate }) => { button.disabled = !candidate.isExisting || candidate.requiresNewItemFirst === true; });
       selectionButtons.forEach((selection) => { if (selection.classList.contains('upgrade-placement')) selection.disabled = false; });
-      list.querySelectorAll<HTMLButtonElement>('.button-small').forEach((ban) => { ban.disabled = payload.bansLeft <= 0; });
+      list.querySelectorAll<HTMLButtonElement>('.upgrade-ban').forEach((ban) => { ban.disabled = payload.bansLeft <= 0; });
     }, 150);
     const moveSelection = (direction: 1 | -1): void => {
       for (let offset = 1; offset <= selectionButtons.length; offset += 1) {
@@ -475,7 +486,15 @@ export class AppController {
     copy.append(element('h3', '', '現在の装置'));
     const snapshot = this.latestBattleSnapshot;
     const loadout = snapshot
-      ? [...snapshot.weapons.map((weapon) => `${this.weaponName(weapon.id)} Lv${weapon.level}`), ...snapshot.supports.map((support) => `${this.supportName(support.id)} Lv${support.level}`)]
+      ? Array.from({ length: DEVICE_SLOT_COUNT * 2 }, (_, index) => {
+        const slot = Math.floor(index / 2);
+        if (index % 2 === 0) {
+          const weapon = itemAtSlot(snapshot.weapons, slot);
+          return `武器面${slot + 1}: ${weapon ? `${this.weaponName(weapon.id)} Lv${weapon.level}` : '空き'}`;
+        }
+        const support = itemAtSlot(snapshot.supports, slot);
+        return `補助面${slot + 1}: ${support ? `${this.supportName(support.id)} Lv${support.level}` : '空き'}`;
+      })
       : ['装置情報を読み込んでいます'];
     const list = element('ul', 'loadout-list');
     for (const item of loadout) list.append(element('li', '', item));

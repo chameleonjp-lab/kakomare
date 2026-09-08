@@ -4,6 +4,7 @@ import type { SupportId, WeaponId } from '../../types/content';
 import type { UpgradeCandidate } from '../../types/game';
 import { SupportModule } from '../entities/SupportModule';
 import { Weapon } from '../entities/Weapon';
+import { DEVICE_SLOT_COUNT } from '../deviceLayout';
 import { DeterministicRng } from './SpawnDirector';
 
 export function createUpgradeCandidateList(
@@ -151,7 +152,7 @@ export function applyUpgradeCandidate(candidate: UpgradeCandidate, weapons: Weap
 }
 
 function resolvePlacementSlot(requestedSlot: number | undefined, occupiedSlots: number[]): number {
-  const availableSlots = [0, 1, 2].filter((slot) => !occupiedSlots.includes(slot));
+  const availableSlots = Array.from({ length: DEVICE_SLOT_COUNT }, (_, slot) => slot).filter((slot) => !occupiedSlots.includes(slot));
   return requestedSlot !== undefined && availableSlots.includes(requestedSlot) ? requestedSlot : availableSlots[0] ?? 0;
 }
 

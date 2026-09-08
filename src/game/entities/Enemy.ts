@@ -2,6 +2,8 @@ import { ENEMIES } from '../../data/enemies';
 import { BOSSES } from '../../data/bosses';
 import type { BossId, EnemyId } from '../../types/content';
 import type { EnemySnapshot, Point } from '../../types/game';
+import { angularDistance } from '../systems/Angle';
+import type { ImpactAngle } from '../systems/ImpactDirection';
 
 function isBossId(type: EnemyId | BossId): type is BossId {
   return type === 'crown' || type === 'designer' || type === 'echo';
@@ -36,6 +38,9 @@ export class Enemy {
   public lastHitAt = -Infinity;
   public specialDamageTaken = 0;
   private age = 0;
+  /** Radial path state stays separate from the runner's visual wobble. */
+  private movementAngle = 0;
+  private movementDistance = 0;
 
   public constructor(id: number, type: EnemyId | BossId, angle: number, distanceToCore: number, difficulty = 1, speedMultiplierCap = 1.25) {
     this.id = id;
@@ -64,6 +69,8 @@ export class Enemy {
     this.distanceToCore = distanceToCore;
     this.x = Math.cos(angle) * distanceToCore;
     this.y = Math.sin(angle) * distanceToCore;
+    this.movementAngle = angle;
+    this.movementDistance = distanceToCore;
     this.shieldHits = this.type === 'lattice' ? 8 : 0;
     this.invulnerable = false;
     this.telegraph = false;
@@ -83,12 +90,16 @@ export class Enemy {
   public update(seconds: number, elapsed: number, core: Point, movementMultiplier: number, speedMultiplier = 1): boolean {
     if (!this.active) return false;
     this.age += seconds;
-    const isStopped = (this.isBoss && this.distanceToCore <= 196) || (this.type === 'dropper' && this.distanceToCore <= 250);
+    const isStopped = (this.isBoss && this.movementDistance <= 196) || (this.type === 'dropper' && this.movementDistance <= 250);
     const slow = elapsed < this.slowUntil ? 0.55 : 1;
-    if (!isStopped) this.distanceToCore -= this.speed * slow * movementMultiplier * speedMultiplier * seconds;
-    this.x = core.x + Math.cos(this.angle) * this.distanceToCore;
-    this.y = core.y + Math.sin(this.angle) * this.distanceToCore;
+    if (!isStopped) this.movementDistance = Math.max(0, this.movementDistance - this.speed * slow * movementMultiplier * speedMultiplier * seconds);
+    this.x = core.x + Math.cos(this.movementAngle) * this.movementDistance;
+    this.y = core.y + Math.sin(this.movementAngle) * this.movementDistance;
     if (this.type === 'runner') this.y += Math.sin(elapsed * 8 + this.id) * 2;
+    // Keep the wobble visual and frame-local.  The next tick starts from the
+    // same radial path instead of feeding the offset back into the path angle.
+    this.syncPolarPosition(core, true);
+    this.angle = this.movementAngle;
     if (this.type === 'dropper') {
       if (this.distanceToCore <= 250) this.shotCooldown -= seconds;
       this.telegraph = this.distanceToCore <= 250
@@ -111,7 +122,7 @@ export class Enemy {
     return !this.isBoss && this.distanceToCore <= 52;
   }
 
-  public damage(amount: number, elapsed: number, attackAngle = 0): { dealt: number; destroyed: boolean; blocked: boolean } {
+  public damage(amount: number, elapsed: number, attackAngle: ImpactAngle = 0): { dealt: number; destroyed: boolean; blocked: boolean } {
     if (!this.active || this.invulnerable) return { dealt: 0, destroyed: false, blocked: true };
     if (this.type === 'lattice' && this.shieldHits > 0) {
       this.shieldHits -= 1;
@@ -134,8 +145,10 @@ export class Enemy {
       return;
     }
     this.distanceToCore = Math.min(700, this.distanceToCore + Math.max(0, distance));
-    this.x = Math.cos(this.angle) * this.distanceToCore;
-    this.y = Math.sin(this.angle) * this.distanceToCore;
+    this.movementDistance = this.distanceToCore;
+    this.movementAngle = this.angle;
+    this.x = Math.cos(this.movementAngle) * this.movementDistance;
+    this.y = Math.sin(this.movementAngle) * this.movementDistance;
     this.applySlow(elapsed, 0.4);
   }
 
@@ -145,12 +158,35 @@ export class Enemy {
       return;
     }
     const currentDistance = Math.hypot(this.x, this.y);
-    const nextDistance = Math.max(safeDistance, currentDistance - Math.max(0, distance));
-    const angle = Math.atan2(targetY - this.y, targetX - this.x);
-    this.x += Math.cos(angle) * (currentDistance - nextDistance);
-    this.y += Math.sin(angle) * (currentDistance - nextDistance);
-    this.distanceToCore = Math.max(safeDistance, Math.hypot(this.x, this.y));
-    this.angle = Math.atan2(this.y, this.x);
+    const minimumDistance = Math.max(0, safeDistance);
+    const availableDistance = Math.max(0, currentDistance - minimumDistance);
+    const targetDistance = Math.hypot(targetX - this.x, targetY - this.y);
+    const moveDistance = Math.min(availableDistance, Math.max(0, distance), targetDistance);
+    if (moveDistance > 0) {
+      const targetAngle = Math.atan2(targetY - this.y, targetX - this.x);
+      if (targetDistance > 1e-6) {
+        const unitX = Math.cos(targetAngle);
+        const unitY = Math.sin(targetAngle);
+        let allowedDistance = moveDistance;
+        if (minimumDistance > 0) {
+          // Find the first point where this one-update segment reaches the
+          // safety circle.  Clamping the segment parameter (rather than
+          // projecting the endpoint) keeps displacement <= the requested
+          // pull distance even for an off-axis field.
+          const radialDot = this.x * unitX + this.y * unitY;
+          const discriminant = radialDot * radialDot - (currentDistance * currentDistance - minimumDistance * minimumDistance);
+          if (discriminant >= 0) {
+            const boundaryDistance = -radialDot - Math.sqrt(discriminant);
+            if (boundaryDistance >= 0 && boundaryDistance < allowedDistance) allowedDistance = boundaryDistance;
+          }
+        }
+        const nextX = this.x + unitX * allowedDistance;
+        const nextY = this.y + unitY * allowedDistance;
+        this.x = nextX;
+        this.y = nextY;
+      }
+    }
+    this.syncPolarPosition({ x: 0, y: 0 });
     this.applySlow(elapsed, 0.4);
   }
 
@@ -184,14 +220,29 @@ export class Enemy {
       : ENEMIES[this.type as EnemyId].hitRadius ?? 16;
   }
 
-  private isShielded(attackAngle: number): boolean {
+  private isShielded(attackAngle: ImpactAngle): boolean {
+    // An area effect whose center is exactly on the victim has no unique
+    // incoming face. Treat it as omnidirectional rather than picking an
+    // arbitrary plate from floating point noise.
+    if (attackAngle === null) return false;
     const rotation = this.shieldRotation;
     const halfAngle = BOSSES.crown.shieldHalfAngle ?? 0.22;
     for (let index = 0; index < 3; index += 1) {
       const plate = rotation + index * Math.PI * 2 / 3;
-      const difference = Math.abs(((attackAngle - plate + Math.PI) % (Math.PI * 2)) - Math.PI);
-      if (difference < halfAngle) return true;
+      if (angularDistance(attackAngle, plate) < halfAngle) return true;
     }
     return false;
+  }
+
+  private syncPolarPosition(core: Point, preservePath = false): void {
+    const relativeX = this.x - core.x;
+    const relativeY = this.y - core.y;
+    const distance = Math.hypot(relativeX, relativeY);
+    this.distanceToCore = Number.isFinite(distance) ? distance : 0;
+    if (distance > 1e-6 && !preservePath) {
+      this.angle = Math.atan2(relativeY, relativeX);
+      this.movementAngle = this.angle;
+      this.movementDistance = distance;
+    }
   }
 }

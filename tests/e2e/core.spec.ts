@@ -139,12 +139,31 @@ test('候補を3つ保てない除外操作でも強化画面をロックしな�
   await enterBattle(page, '?test=1&upgrade=1');
   const candidates = page.getByTestId('upgrade-candidate');
   await expect(candidates.first()).toBeEnabled({ timeout: 3000 });
-  const ban = page.locator('.upgrade-card .button-small').first();
+  const ban = page.locator('.upgrade-ban').first();
   await expect(ban).toBeEnabled();
   await ban.click();
   await expect(page.getByTestId('battle-status')).toContainText('除外できません');
   await expect(candidates).toHaveCount(3);
   await expect(candidates.first()).toBeEnabled();
+});
+
+test('除外を使い切った後も新しい装置を面へ装着できる', async ({ page }) => {
+  await enterBattle(page, '?test=1&upgrade=1&seed=1');
+  const candidates = page.getByTestId('upgrade-candidate');
+  await expect(candidates.first()).toBeVisible({ timeout: 3000 });
+  const bans = page.locator('.upgrade-ban');
+  await expect(bans).toHaveCount(3);
+  // Seed 1 intentionally puts a new disc candidate in the third card. The
+  // first two existing upgrades cannot be removed without leaving too few
+  // candidates, while this new item can be removed and consumes the last ban.
+  // The replacement new-item candidate is the repulse weapon for this seed.
+  await expect(bans.nth(2)).toBeEnabled();
+  await bans.nth(2).click();
+  const placement = page.getByTestId('upgrade-placement').first();
+  await expect(placement).toBeEnabled({ timeout: 3000 });
+  await placement.click();
+  await expect(page.getByTestId('upgrade-candidate').first()).toBeHidden();
+  await expect(page.getByTestId('build-list')).toContainText('武器面2: 反発輪 Lv1');
 });
 
 test('一時停止と再開が二重開始なしで動く', async ({ page }) => {
