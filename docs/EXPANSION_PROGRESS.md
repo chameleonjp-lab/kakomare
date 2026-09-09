@@ -9,7 +9,7 @@
 作業ブランチ: `codex/expansion-pr1-20260909`
 開始時の最新main: `27a8b8846477682446e51c23b5a5a3fd11641feb`
 提出コードコミット: `fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`
-最終CI確認コミット: `1f8e5482e7931741d921c3314d3e08bf9cd79148`（進行記録のみの更新）
+最終CI確認コミット: `62b20e21201ade315a9a504c90dfc718719c5456`（進行記録のみの更新）
 Draft PR: [#16](https://github.com/chameleonjp-lab/kakomare/pull/16)（open / Draft）
 ローカルの最終対応コミット: `f9d72b8`（短い縦画面の同内容のCSS修正を記録。提出ブランチへはGitHub API経由で反映）
 
@@ -105,7 +105,8 @@ GitHub Actionsの記録（提出コードと対応づける）:
 - Quality #41（`2f1c9721acf5043575cdfe95368047b67933d895`、[run 34386848532](https://github.com/chameleonjp-lab/kakomare/actions/runs/34386848532)）は成功。進行記録の検査結果追記後も全ステップが成功した。
 - Quality #42（`e079f00ce26b1554de541842af7c543f1512877a`、[run 34387489431](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387489431)）は成功。コード変更を含まない参照先修正後も全ステップが成功した。
 - Quality #43（`1f8e5482e7931741d921c3314d3e08bf9cd79148`、[run 34387968825](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387968825)）は成功。現在のPR先端に対する全ステップの成功を確認した。
+- Quality #44（`62b20e21201ade315a9a504c90dfc718719c5456`、[run 34388580899](https://github.com/chameleonjp-lab/kakomare/actions/runs/34388580899)）は成功。#43後の進行記録更新を含む最終先端でも全ステップが成功した。
 
 ## 中断時の再開情報
 
-最終CI確認コミットは`1f8e5482e7931741d921c3314d3e08bf9cd79148`（コード変更の最終コミットは`fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`）、Draft PRは[#16](https://github.com/chameleonjp-lab/kakomare/pull/16)、最終Quality runは[34387968825](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387968825)である。中断時は、まず `git status --short --branch`、`git log -1 --oneline`、このファイル、Draft PRの未解決コメントを読み、未完了欄の最初の作業から再開する。次工程PR-2は、ユーザーがPR-1をマージした旨を伝え、実際のmainが更新されたことを確認した後に開始する。
+最終CI確認コミットは`62b20e21201ade315a9a504c90dfc718719c5456`（コード変更の最終コミットは`fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`）、Draft PRは[#16](https://github.com/chameleonjp-lab/kakomare/pull/16)、最終Quality runは[34388580899](https://github.com/chameleonjp-lab/kakomare/actions/runs/34388580899)である。中断時は、まず `git status --short --branch`、`git log -1 --oneline`、このファイル、Draft PRの未解決コメントを読み、未完了欄の最初の作業から再開する。次工程PR-2は、ユーザーがPR-1をマージした旨を伝え、実際のmainが更新されたことを確認した後に開始する。
