@@ -9,7 +9,7 @@
 作業ブランチ: `codex/expansion-pr1-20260909`
 開始時の最新main: `27a8b8846477682446e51c23b5a5a3fd11641feb`
 提出コードコミット: `fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`
-提出ブランチ最新コミット: `e079f00ce26b1554de541842af7c543f1512877a`（進行記録更新）
+最終CI確認コミット: `1f8e5482e7931741d921c3314d3e08bf9cd79148`（進行記録のみの更新）
 Draft PR: [#16](https://github.com/chameleonjp-lab/kakomare/pull/16)（open / Draft）
 ローカルの最終対応コミット: `f9d72b8`（短い縦画面の同内容のCSS修正を記録。提出ブランチへはGitHub API経由で反映）
 
@@ -102,7 +102,10 @@ GitHub Actionsの記録（提出コードと対応づける）:
 - Quality #38（`dc34117eea053fcb781d8dae99eac0e724cfc540`、[run 34385160711](https://github.com/chameleonjp-lab/kakomare/actions/runs/34385160711)）は公式Playwrightコンテナへ切り替え後の検査。静的・単体検査は成功したが、Chromiumで320x480と文字200%の縦方向超過が2件失敗した。
 - Quality #39（`014ab0010e73da8ed6482d2aa0bc7ec15ad17308`、[run 34385586081](https://github.com/chameleonjp-lab/kakomare/actions/runs/34385586081)）はヘッダーと戦場の調整後。Chromium 24件成功・2件失敗で、同じ2条件のパネル下端超過が残ったため、HUDを3列化し、500px以下のヘッダー条件を追加した。
 - Quality #40（`fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`、[run 34386165781](https://github.com/chameleonjp-lab/kakomare/actions/runs/34386165781)）は成功。静的・単体検査、Chromium 26件、WebKit 26件、build / verify:dist / verify:originality がすべて成功した。GitHub Actionsのブラウザ検査は実機Safari検査ではない。
+- Quality #41（`2f1c9721acf5043575cdfe95368047b67933d895`、[run 34386848532](https://github.com/chameleonjp-lab/kakomare/actions/runs/34386848532)）は成功。進行記録の検査結果追記後も全ステップが成功した。
+- Quality #42（`e079f00ce26b1554de541842af7c543f1512877a`、[run 34387489431](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387489431)）は成功。コード変更を含まない参照先修正後も全ステップが成功した。
+- Quality #43（`1f8e5482e7931741d921c3314d3e08bf9cd79148`、[run 34387968825](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387968825)）は成功。現在のPR先端に対する全ステップの成功を確認した。
 
 ## 中断時の再開情報
 
-提出ブランチ最新コミットは`e079f00ce26b1554de541842af7c543f1512877a`（コード変更の最終コミットは`fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`）、Draft PRは[#16](https://github.com/chameleonjp-lab/kakomare/pull/16)、最終Quality runは[34387489431](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387489431)である。中断時は、まず `git status --short --branch`、`git log -1 --oneline`、このファイル、Draft PRの未解決コメントを読み、未完了欄の最初の作業から再開する。次工程PR-2は、ユーザーがPR-1をマージした旨を伝え、実際のmainが更新されたことを確認した後に開始する。
+最終CI確認コミットは`1f8e5482e7931741d921c3314d3e08bf9cd79148`（コード変更の最終コミットは`fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`）、Draft PRは[#16](https://github.com/chameleonjp-lab/kakomare/pull/16)、最終Quality runは[34387968825](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387968825)である。中断時は、まず `git status --short --branch`、`git log -1 --oneline`、このファイル、Draft PRの未解決コメントを読み、未完了欄の最初の作業から再開する。次工程PR-2は、ユーザーがPR-1をマージした旨を伝え、実際のmainが更新されたことを確認した後に開始する。
