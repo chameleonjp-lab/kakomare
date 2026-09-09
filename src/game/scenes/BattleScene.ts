@@ -354,6 +354,10 @@ export class BattleScene extends Phaser.Scene {
     if (this.manualAim && this.aimPointerId === null && this.elapsed >= this.aimReleaseAt) this.manualAim = false;
     if (this.options.testMode && this.options.testUpgrade && !this.testUpgradeOpened && this.elapsed >= 0.7) {
       this.testUpgradeOpened = true;
+      // The browser fixture asks to inspect the real upgrade dialog before a
+      // kill has happened. Supply exactly one affordable choice in test mode;
+      // production runs still earn experience only from defeated enemies.
+      this.progression.addExperience(this.progression.nextExperience);
       this.upgradeRequestQueued = true;
     }
     const stage = STAGES[this.options.stageId];

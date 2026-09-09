@@ -205,6 +205,14 @@
 
 @media (max-width: 760px) and (max-height: 600px) {
   .battle-panel { padding: 5px 0 0; }
+  .arena-column { position: relative; }
+  .aim-state, .battle-status { position: absolute; z-index: 2; right: 8px; left: 8px; margin: 0; padding: 1px 4px; border-radius: 6px; background: rgba(7, 19, 31, .8); pointer-events: none; }
+  .aim-state { bottom: 24px; }
+  .battle-status { bottom: 2px; }
+  .battle-hud { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
+  .hud-item { min-height: 40px; padding: 2px; }
+  .hud-label { line-height: 1.05; }
+  .hud-value { margin-top: 0; line-height: 1.05; white-space: normal; overflow-wrap: anywhere; }
   .battle-canvas-shell { width: min(100%, max(140px, calc(var(--visual-viewport-height, 100dvh) - 20.5rem))); }
   .build-panel { margin-top: 2px; padding-top: 2px; }
   .build-panel h2 { margin-bottom: 1px; }
@@ -218,6 +226,10 @@
   .battle-panel > .build-panel,
   .battle-panel > .battle-help,
   .battle-panel > .battle-controls { display: none; }
+}
+
+@media (max-width: 760px) and (max-height: 500px) and (orientation: portrait) {
+  .battle-canvas-shell { width: min(100%, 280px); }
 }
 
 @media (orientation: landscape) and (max-height: 620px) {
