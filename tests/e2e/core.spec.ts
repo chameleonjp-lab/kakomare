@@ -165,14 +165,13 @@ test('強化中は背景操作を遮断し、フォーカス中の候補だけ�
   await expect(page.getByTestId('pause-button')).toBeFocused();
 });
 
-test('候補を3つ保てない除外操作でも強化画面をロックしない', async ({ page }) => {
+test('除外操作後も有効な3枚の候補を維持する', async ({ page }) => {
   await enterBattle(page, '?test=1&upgrade=1');
   const candidates = page.getByTestId('upgrade-candidate');
   await expect(candidates.first()).toBeEnabled({ timeout: 3000 });
-  const ban = page.locator('.upgrade-ban').first();
+  const ban = page.locator('.upgrade-ban:not([disabled])').first();
   await expect(ban).toBeEnabled();
   await ban.click();
-  await expect(page.getByTestId('battle-status')).toContainText('除外できません');
   await expect(candidates).toHaveCount(3);
   await expect(candidates.first()).toBeEnabled();
 });

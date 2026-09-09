@@ -64,8 +64,10 @@ export interface BattleSnapshot {
   isEndless: boolean;
   core: number;
   maxCore: number;
+  level: number;
   experience: number;
   nextExperience: number;
+  pendingUpgrades: number;
   score: number;
   kills: number;
   enemies: EnemySnapshot[];
@@ -82,8 +84,8 @@ export interface BattleSnapshot {
 
 export interface UpgradeCandidate {
   id: string;
-  kind: 'weapon' | 'support' | 'repair';
-  targetId: WeaponId | SupportId | 'core';
+  kind: 'weapon' | 'support' | 'repair' | 'continuous';
+  targetId: WeaponId | SupportId | 'core' | 'polish' | 'armor' | 'parts';
   title: string;
   description: string;
   before: string;
@@ -94,12 +96,18 @@ export interface UpgradeCandidate {
   requiresNewItemFirst?: boolean;
   placementSlots?: number[];
   placementSlot?: number;
+  /** Continuous safety-net upgrades remain obtainable and cannot be banned. */
+  canBan?: boolean;
 }
 
 export interface UpgradePayload {
+  phase?: 'selection' | 'break';
+  selectionId: number;
   candidates: UpgradeCandidate[];
   rerollsLeft: number;
   bansLeft: number;
+  pendingCount: number;
+  choicesSinceBreak: number;
 }
 
 export interface BattleResult {

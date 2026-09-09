@@ -21,11 +21,12 @@ import { EffectBudget, selectVisibleEntities, type EffectsLevel } from '../syste
 import { FixedStepClock } from '../systems/FixedStepClock';
 import { RunRecorder } from '../systems/RunRecorder';
 import { collideEnemyProjectiles, collideProjectiles } from '../systems/CollisionSystem';
-import { createUpgradeCandidateList, applyUpgradeCandidate, shouldRetryUpgradeDraw, wouldStrandNewItems } from '../systems/UpgradeSystem';
+import { createUpgradeCandidateList, applyUpgradeCandidate, type ContinuousUpgradeId } from '../systems/UpgradeSystem';
 import { DeterministicRng, seedFromStage, SpawnDirector, type SpawnWaveWarning } from '../systems/SpawnDirector';
 import { MANUAL_AIM_HALF_ANGLE, selectTarget } from '../systems/TargetingSystem';
 import { impactAngleFromSource, impactAngleFromVelocity } from '../systems/ImpactDirection';
 import { advanceOrbitAngle } from '../systems/OrbitSystem';
+import { ProgressionSystem } from '../systems/ProgressionSystem';
 import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
 import type { BattleCallbacks, BattleResult, BattleSnapshot, Point, UpgradeCandidate, UpgradePayload } from '../../types/game';
 import type { ResearchEffects } from '../../data/research';
@@ -111,9 +112,9 @@ export class BattleScene extends Phaser.Scene {
   private telegraphGraphics!: Phaser.GameObjects.Graphics;
   private hostileGraphics!: Phaser.GameObjects.Graphics;
   private elapsed = 0;
-  private experience = 0;
-  private level = 1;
-  private nextExperience = 25;
+  private readonly progression = new ProgressionSystem();
+  private weaponPolishStacks = 0;
+  private pendingPartsBonus = 0;
   private aimAngle = -Math.PI / 2;
   private manualAim = false;
   private aimPointerId: number | null = null;
@@ -127,8 +128,9 @@ export class BattleScene extends Phaser.Scene {
   private rerollsLeft: number;
   private bansLeft: number;
   private repairsUsed = 0;
-  private lastCandidateSignature = '';
-  private blockedUpgradeExperience: number | null = null;
+  private upgradeSequence = 0;
+  private choicesSinceBreak = 0;
+  private upgradeRequestQueued = false;
   private bossDefeated = false;
   private testUpgradeOpened = false;
   private testOutcomeTimer: number | null = null;
@@ -192,71 +194,139 @@ export class BattleScene extends Phaser.Scene {
     this.emitSnapshot(false);
   }
 
-  public chooseUpgrade(candidate: UpgradeCandidate): void {
-    if (this.state !== 'upgrade' || !this.upgradePayload || !this.upgradePayload.candidates.some((item) => item.id === candidate.id)) return;
-    if (candidate.requiresNewItemFirst) {
+  public chooseUpgrade(candidate: UpgradeCandidate, selectionId?: number): void {
+    const payload = this.upgradePayload;
+    if (this.state !== 'upgrade' || !payload || payload.phase === 'break' || selectionId !== payload.selectionId) return;
+    const storedCandidate = payload.candidates.find((item) => item.id === candidate.id);
+    if (!storedCandidate) return;
+    if (storedCandidate.requiresNewItemFirst) {
       this.options.callbacks.onStatus('候補を3つ保つため、先に新しい装置を取得してください');
-      this.options.callbacks.onUpgrade({ ...this.upgradePayload, candidates: [...this.upgradePayload.candidates] });
+      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
       return;
     }
-    if (!candidate.isExisting && !this.availablePlacementSlots(candidate.kind).includes(candidate.placementSlot ?? -1)) {
+    const selectedCandidate = { ...storedCandidate, placementSlot: candidate.placementSlot };
+    if (!selectedCandidate.isExisting && !this.availablePlacementSlots(selectedCandidate.kind).includes(selectedCandidate.placementSlot ?? -1)) {
       this.options.callbacks.onStatus('装置を置く空き面を選んでください');
-      this.options.callbacks.onUpgrade({ ...this.upgradePayload, candidates: [...this.upgradePayload.candidates] });
+      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
       return;
     }
-    applyUpgradeCandidate(candidate, this.weapons, this.supports, (amount) => this.core.heal(amount));
-    if (candidate.kind === 'repair') this.repairsUsed += 1;
-    this.recorder.upgrades.push(candidate.title);
-    if (candidate.id.includes(':branch:')) this.recorder.branches.push(candidate.title);
-    this.state = 'playing';
+    if (!this.progression.canChoose()) {
+      this.options.callbacks.onStatus('経験値が足りないため、この強化は確定できません');
+      return;
+    }
+    const applied = applyUpgradeCandidate(
+      selectedCandidate,
+      this.weapons,
+      this.supports,
+      (amount) => this.core.heal(amount),
+      { onContinuous: (id) => this.applyContinuousUpgrade(id) },
+    );
+    if (!applied || !this.progression.confirmChoice()) {
+      this.options.callbacks.onStatus('候補が現在の構成と合わないため、強化を確定できません');
+      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+      return;
+    }
+    if (selectedCandidate.kind === 'repair') this.repairsUsed += 1;
+    this.recorder.upgrades.push(selectedCandidate.title);
+    if (selectedCandidate.id.includes(':branch:')) this.recorder.branches.push(selectedCandidate.title);
     this.upgradePayload = null;
-    this.options.callbacks.onStatus(`${candidate.title}を取得しました`);
-    this.options.callbacks.onUpgrade({ candidates: [], rerollsLeft: 0, bansLeft: 0 });
+    this.choicesSinceBreak += 1;
+    this.releaseAimInput();
+    this.emitSnapshot(true);
+    this.state = 'playing';
+    if (this.progression.pendingChoices > 0) {
+      if (this.choicesSinceBreak >= 3) {
+        this.state = 'upgrade';
+        this.presentUpgradeBreak();
+      }
+      else if (!this.openUpgrade()) this.upgradeRequestQueued = true;
+      return;
+    }
+    this.choicesSinceBreak = 0;
+    this.options.callbacks.onStatus(`${selectedCandidate.title}を取得しました`);
+    this.notifyUpgradeClosed();
   }
 
-  public rerollUpgrade(): void {
-    if (this.state !== 'upgrade' || !this.upgradePayload || this.rerollsLeft <= 0) return;
-    const candidates = this.createCandidates(this.signature(this.upgradePayload.candidates));
+  public rerollUpgrade(selectionId?: number): void {
+    const payload = this.upgradePayload;
+    if (this.state !== 'upgrade' || !payload || payload.phase === 'break' || selectionId !== payload.selectionId || this.rerollsLeft <= 0) return;
+    const candidates = this.createCandidates(this.signature(payload.candidates));
     if (candidates.length !== 3) {
       this.options.callbacks.onStatus('これ以上候補を引き直せません');
-      this.options.callbacks.onUpgrade({ ...this.upgradePayload, candidates: [...this.upgradePayload.candidates] });
+      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+      return;
+    }
+    if (this.signature(candidates) === this.signature(payload.candidates)) {
+      this.options.callbacks.onStatus('現在の候補が、いま選べる内容のすべてです');
+      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
       return;
     }
     this.rerollsLeft -= 1;
-    this.upgradePayload = { candidates, rerollsLeft: this.rerollsLeft, bansLeft: this.bansLeft };
-    this.lastCandidateSignature = this.signature(candidates);
+    this.upgradeSequence += 1;
+    this.upgradePayload = { ...payload, phase: 'selection', selectionId: this.upgradeSequence, candidates, rerollsLeft: this.rerollsLeft, bansLeft: this.bansLeft, pendingCount: this.progression.pendingChoices };
     this.options.callbacks.onUpgrade(this.upgradePayload);
   }
 
-  public banUpgrade(candidateId: string): void {
-    if (this.state !== 'upgrade' || !this.upgradePayload || this.bansLeft <= 0) return;
-    const candidate = this.upgradePayload.candidates.find((item) => item.id === candidateId);
+  public banUpgrade(candidateId: string, selectionId?: number): void {
+    const payload = this.upgradePayload;
+    if (this.state !== 'upgrade' || !payload || payload.phase === 'break' || selectionId !== payload.selectionId || this.bansLeft <= 0) return;
+    const candidate = payload.candidates.find((item) => item.id === candidateId);
     if (!candidate) return;
+    if (candidate.canBan === false) {
+      this.options.callbacks.onStatus('この継続強化は、成長を止めないため除外できません');
+      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+      return;
+    }
     const nextBanned = this.effectiveBans();
     nextBanned.add(candidate.id);
-    const candidates = this.createCandidates(this.signature(this.upgradePayload.candidates), nextBanned);
+    const candidates = this.createCandidates(this.signature(payload.candidates), nextBanned);
     if (candidates.length !== 3) {
       this.options.callbacks.onStatus('候補を3つ保てないため、この候補は除外できません');
-      this.options.callbacks.onUpgrade({ ...this.upgradePayload, candidates: [...this.upgradePayload.candidates] });
+      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
       return;
     }
     this.banned.add(candidate.id);
     this.bansLeft -= 1;
-    this.upgradePayload = { candidates, rerollsLeft: this.rerollsLeft, bansLeft: this.bansLeft };
-    this.lastCandidateSignature = this.signature(candidates);
+    this.upgradeSequence += 1;
+    this.upgradePayload = { ...payload, phase: 'selection', selectionId: this.upgradeSequence, candidates, rerollsLeft: this.rerollsLeft, bansLeft: this.bansLeft, pendingCount: this.progression.pendingChoices };
     this.options.callbacks.onUpgrade(this.upgradePayload);
+  }
+
+  public continueUpgrade(selectionId?: number): void {
+    if (this.state !== 'upgrade' || !this.upgradePayload || this.upgradePayload.phase !== 'break' || selectionId !== this.upgradePayload.selectionId) return;
+    this.choicesSinceBreak = 0;
+    this.upgradePayload = null;
+    this.state = 'playing';
+    if (!this.openUpgrade()) this.upgradeRequestQueued = true;
+  }
+
+  public deferUpgrade(selectionId?: number): void {
+    if (this.state !== 'upgrade' || !this.upgradePayload || this.upgradePayload.phase !== 'break' || selectionId !== this.upgradePayload.selectionId) return;
+    const pending = this.progression.pendingChoices;
+    this.upgradePayload = null;
+    this.choicesSinceBreak = 0;
+    this.state = 'playing';
+    this.releaseAimInput();
+    this.emitSnapshot(true);
+    this.options.callbacks.onStatus(`未選択の強化 ${pending}回。戦闘へ戻りました`);
+    this.notifyUpgradeClosed();
   }
 
   public pause(): void {
     if (this.state === 'playing' || this.state === 'upgrade') {
       this.pauseReturnState = this.state;
       this.state = 'paused';
+      this.releaseAimInput();
       this.options.callbacks.onStatus('一時停止中');
     }
   }
 
   public resume(): void {
-    if (this.state === 'paused') { this.state = this.pauseReturnState; this.options.callbacks.onStatus('戦闘再開'); }
+    if (this.state === 'paused') {
+      this.releaseAimInput();
+      this.state = this.pauseReturnState;
+      this.options.callbacks.onStatus('戦闘再開');
+    }
   }
 
   public get paused(): boolean { return this.state === 'paused'; }
@@ -270,6 +340,7 @@ export class BattleScene extends Phaser.Scene {
   public shutdownBattle(): void {
     if (this.testOutcomeTimer !== null) { window.clearTimeout(this.testOutcomeTimer); this.testOutcomeTimer = null; }
     this.state = 'finished';
+    this.releaseAimInput();
     this.runLifecycle.cancel();
     if (this.created) this.input.removeAllListeners();
     this.created = false;
@@ -277,12 +348,14 @@ export class BattleScene extends Phaser.Scene {
 
   private step(seconds: number): void {
     if (!this.runLifecycle.active) return;
-    if (this.state !== 'playing' && this.state !== 'upgrade') return;
-    if (this.state === 'upgrade') seconds *= 0.1;
+    if (this.state !== 'playing') return;
     this.elapsed += seconds;
     this.updateSpecialWaveWarning(seconds);
     if (this.manualAim && this.aimPointerId === null && this.elapsed >= this.aimReleaseAt) this.manualAim = false;
-    if (this.state === 'playing' && this.options.testMode && this.options.testUpgrade && !this.testUpgradeOpened && this.elapsed >= 0.7) { this.testUpgradeOpened = true; this.openUpgrade(); return; }
+    if (this.options.testMode && this.options.testUpgrade && !this.testUpgradeOpened && this.elapsed >= 0.7) {
+      this.testUpgradeOpened = true;
+      this.upgradeRequestQueued = true;
+    }
     const stage = STAGES[this.options.stageId];
     const bossRequested = this.spawnDirector.requestBossSpawn(this.elapsed);
     const activeBoss = this.enemies.some((enemy) => enemy.active && enemy.isBoss);
@@ -364,6 +437,7 @@ export class BattleScene extends Phaser.Scene {
     if (stage.isEndless) this.updateEndlessMilestone();
     if (!stage.isEndless && this.elapsed >= stage.timeLimit && !this.bossDefeated) this.finish('defeat', `${stage.name}の制限時間内に${BOSSES[stage.boss].name}を止められませんでした`);
     if (this.options.testMode && !this.options.testOutcome && this.elapsed >= 8) this.finish('defeat', 'テスト用の時間切れ');
+    if (this.state === 'playing' && this.upgradeRequestQueued && this.progression.canChoose()) this.openUpgrade();
   }
 
   private fireWeapon(weapon: Weapon, allowBranch = true, powerFactor = 1): void {
@@ -905,14 +979,14 @@ export class BattleScene extends Phaser.Scene {
     this.recorder.kills += 1;
     this.recorder.recordEnemyKill(enemyId);
     this.addScore(10 * (1 + ENEMIES[enemyId].threatCost));
-    this.experience += enemyId === 'spore' ? 8 : 4;
+    this.progression.addExperience(enemyId === 'spore' ? 8 : 4);
     this.addFlash({ x: enemy.x, y: enemy.y, color: ENEMIES[enemyId].color, life: 0.32, maxLife: 0.32, radius: 26 });
     this.emitParticles(enemy.x, enemy.y, ENEMIES[enemyId].color);
     if (enemyId === 'spore' && !enemy.splitDone) {
       enemy.splitDone = true;
       this.pendingSporeSplits.push(enemy.angle);
     }
-    if (this.experience >= this.nextExperience && this.state === 'playing') this.openUpgrade();
+    if (this.progression.canChoose() && this.state === 'playing') this.upgradeRequestQueued = true;
   }
 
   private flushPendingSporeSplits(): void {
@@ -922,30 +996,31 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private openUpgrade(): void {
-    if (!shouldRetryUpgradeDraw(this.experience, this.blockedUpgradeExperience)) return;
-    const candidates = this.createCandidates(this.lastCandidateSignature);
+  private openUpgrade(): boolean {
+    if (!this.progression.canChoose() || this.state !== 'playing') return false;
+    const candidates = this.createCandidates();
     if (candidates.length !== 3) {
-      // Keep both the threshold experience and level intact. A failed draw is
-      // not a level-up, and must never consume progress silently. Retry once
-      // new experience arrives so a temporary empty draw cannot end growth.
-      this.blockedUpgradeExperience = this.experience;
-      this.options.callbacks.onStatus('選べる強化候補がないため、経験値を保持して戦闘を続けます');
-      return;
+      // The continuous candidates make this an invariant violation rather
+      // than a normal game state. Keep the experience untouched and leave the
+      // request queued so a broken content table cannot discard progression.
+      this.options.callbacks.onStatus('強化候補を準備できませんでした。経験値は保持されています');
+      return false;
     }
-    this.blockedUpgradeExperience = null;
-    this.experience -= this.nextExperience;
-    this.level += 1;
-    this.nextExperience = 16 + this.level * 9;
+    this.upgradeRequestQueued = false;
+    this.upgradeSequence += 1;
     this.upgradePayload = {
+      phase: 'selection',
+      selectionId: this.upgradeSequence,
       candidates,
       rerollsLeft: this.rerollsLeft,
       bansLeft: this.bansLeft,
+      pendingCount: this.progression.pendingChoices,
+      choicesSinceBreak: this.choicesSinceBreak,
     };
-    this.lastCandidateSignature = this.signature(candidates);
     this.state = 'upgrade';
     this.options.callbacks.onUpgrade(this.upgradePayload);
     this.options.callbacks.onStatus('強化候補を選んでください');
+    return true;
   }
 
   private effectiveBans(): Set<string> {
@@ -957,15 +1032,18 @@ export class BattleScene extends Phaser.Scene {
   private createCandidates(avoidSignature = '', bans = this.effectiveBans()): UpgradeCandidate[] {
     let fallback: UpgradeCandidate[] = [];
     for (let attempt = 0; attempt < 6; attempt += 1) {
-      const candidates = createUpgradeCandidateList(this.weapons, this.supports, this.core.health, this.rng, bans, this.core.maxHealth);
+      const candidates = createUpgradeCandidateList(
+        this.weapons,
+        this.supports,
+        this.core.health,
+        this.rng,
+        bans,
+        this.core.maxHealth,
+        { weaponPolishStacks: this.weaponPolishStacks, pendingPartsBonus: this.pendingPartsBonus },
+      );
       if (candidates.length !== 3) return [];
       const annotated = candidates.map((candidate) => {
-        const bansAfterChoice = new Set(bans);
-        if (candidate.kind === 'repair' && this.repairsUsed >= 1) bansAfterChoice.add('repair:core');
-        const withWarning = wouldStrandNewItems(candidate, this.weapons, this.supports, this.core.health, this.core.maxHealth, bansAfterChoice)
-          ? { ...candidate, requiresNewItemFirst: true }
-          : candidate;
-        return withWarning.isExisting ? withWarning : { ...withWarning, placementSlots: this.availablePlacementSlots(withWarning.kind) };
+        return candidate.isExisting ? candidate : { ...candidate, placementSlots: this.availablePlacementSlots(candidate.kind) };
       });
       fallback = annotated;
       if (!avoidSignature || this.signature(annotated) !== avoidSignature) return annotated;
@@ -984,17 +1062,52 @@ export class BattleScene extends Phaser.Scene {
     return [];
   }
 
+  private applyContinuousUpgrade(id: ContinuousUpgradeId): void {
+    if (id === 'polish') this.weaponPolishStacks += 1;
+    if (id === 'armor') this.core.reinforce(2);
+    if (id === 'parts') this.pendingPartsBonus += 1;
+  }
+
+  private presentUpgradeBreak(): void {
+    if (this.state !== 'upgrade' || this.progression.pendingChoices <= 0) return;
+    this.upgradeSequence += 1;
+    this.upgradePayload = {
+      phase: 'break',
+      selectionId: this.upgradeSequence,
+      candidates: [],
+      rerollsLeft: this.rerollsLeft,
+      bansLeft: this.bansLeft,
+      pendingCount: this.progression.pendingChoices,
+      choicesSinceBreak: this.choicesSinceBreak,
+    };
+    this.options.callbacks.onUpgrade(this.upgradePayload);
+    this.options.callbacks.onStatus(`未選択の強化 ${this.progression.pendingChoices}回。続けて選ぶか保留できます`);
+  }
+
+  private notifyUpgradeClosed(): void {
+    this.options.callbacks.onUpgrade({
+      phase: 'selection',
+      selectionId: this.upgradeSequence,
+      candidates: [],
+      rerollsLeft: 0,
+      bansLeft: 0,
+      pendingCount: this.progression.pendingChoices,
+      choicesSinceBreak: this.choicesSinceBreak,
+    });
+  }
+
   private finish(outcome: BattleResult['outcome'], cause: string, retired = false): void {
     if (!this.runLifecycle.finish()) return;
     if (this.testOutcomeTimer !== null) { window.clearTimeout(this.testOutcomeTimer); this.testOutcomeTimer = null; }
     const stage = STAGES[this.options.stageId];
     if (outcome === 'victory' && !retired) this.addScore(stage.clearBonus);
     this.state = 'finished';
+    this.releaseAimInput();
     if (cause) this.recorder.lastDamageSource = cause;
     this.recorder.survivalTime = this.elapsed;
     for (const support of this.supports) this.recorder.recordSupportUsage(support.id);
     const baseParts = Math.max(20, Math.floor(20 + this.elapsed / 6 + this.recorder.bossesDefeated * 25));
-    const parts = retired ? 0 : Math.floor(baseParts * this.options.researchEffects.partMultiplier);
+    const parts = retired ? 0 : Math.floor(baseParts * this.options.researchEffects.partMultiplier) + this.pendingPartsBonus;
     const result = this.recorder.result(outcome, this.core.health, parts, retired, outcome === 'victory' && !stage.isEndless ? nextStageId(this.options.stageId) : null);
     this.options.callbacks.onFinish(result);
   }
@@ -1109,7 +1222,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private weaponPower(weapon: Weapon, factor = 1): number {
-    return weapon.stats.damage * weapon.damageMultiplier * (1 + this.supportEffect('output', weapon.slot)) * this.options.researchEffects.powerMultiplier * factor;
+    const polishedBaseDamage = weapon.stats.damage * (1 + this.weaponPolishStacks * 0.02);
+    return polishedBaseDamage * weapon.damageMultiplier * (1 + this.supportEffect('output', weapon.slot)) * this.options.researchEffects.powerMultiplier * factor;
   }
 
   private adjustForSpecialEnemy(enemy: Enemy, amount: number, weaponSlot: number): number {
@@ -1171,8 +1285,10 @@ export class BattleScene extends Phaser.Scene {
       isEndless: STAGES[this.options.stageId].isEndless === true,
       core: this.core.health,
       maxCore: this.core.maxHealth,
-      experience: this.experience,
-      nextExperience: this.nextExperience,
+      level: this.progression.level,
+      experience: this.progression.experience,
+      nextExperience: this.progression.nextExperience,
+      pendingUpgrades: this.progression.pendingChoices,
       score: Math.round(this.recorder.score + this.elapsed * 5 + this.core.health * 20),
       kills: this.recorder.kills,
       enemies: visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),
@@ -1426,6 +1542,14 @@ export class BattleScene extends Phaser.Scene {
     this.aimReleaseAt = this.elapsed + (this.options.aimAssist === 'strong' ? 1.1 : 0.8);
     this.manualAim = true;
     this.aimMoved = false;
+  }
+
+  private releaseAimInput(): void {
+    this.aimPointerId = null;
+    this.aimStart = null;
+    this.aimMoved = false;
+    this.manualAim = false;
+    this.aimReleaseAt = 0;
   }
 }
 

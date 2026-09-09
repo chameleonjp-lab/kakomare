@@ -33,7 +33,7 @@ describe('UpgradeSystem', () => {
     expect(candidates.every((candidate) => !candidate.id.endsWith(':new'))).toBe(true);
   });
 
-  it('does not offer maximum-level equipment and returns an explicit empty list when nothing can grow', () => {
+  it('offers repeatable progress when all equipment is at its normal cap', () => {
     const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
     const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('brake', 2)];
     for (const weapon of weapons) {
@@ -42,7 +42,14 @@ describe('UpgradeSystem', () => {
       weapon.branch = weapon.definition.branches[0]?.id ?? null;
     }
     for (const support of supports) support.level = support.definition.maxLevel;
-    expect(createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(7), new Set())).toEqual([]);
+    const candidates = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(7), new Set());
+    expect(candidates).toHaveLength(3);
+    expect(candidates.map((candidate) => candidate.id)).toEqual([
+      'continuous:polish',
+      'continuous:armor',
+      'continuous:parts',
+    ]);
+    expect(candidates.every((candidate) => candidate.canBan === false)).toBe(true);
   });
 
   it('excludes a maximum-level item while other equipment can still grow', () => {
@@ -172,7 +179,7 @@ describe('UpgradeSystem', () => {
     }
   });
 
-  it('requires a new item before an existing choice could strand all later additions', () => {
+  it('does not strand a run when a normal choice would consume the last ordinary growth', () => {
     const weapon = new Weapon('needle', 0);
     weapon.level = 4;
     weapon.branch = 'spread';
@@ -182,8 +189,70 @@ describe('UpgradeSystem', () => {
     const newItem = candidates.find((candidate) => !candidate.isExisting);
     expect(finalBranch).toBeDefined();
     expect(newItem).toBeDefined();
-    expect(wouldStrandNewItems(finalBranch!, [weapon], [], 100, 100, new Set())).toBe(true);
+    expect(wouldStrandNewItems(finalBranch!, [weapon], [], 100, 100, new Set())).toBe(false);
     expect(wouldStrandNewItems(newItem!, [weapon], [], 100, 100, new Set())).toBe(false);
+  });
+
+  it('keeps the last ordinary support upgrade and fills the rest with different continuous effects', () => {
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
+    for (const weapon of weapons) {
+      weapon.level = weapon.definition.maxLevel;
+      weapon.precisionBonus = 2;
+    }
+    const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('brake', 2)];
+    supports[0]!.level = 1;
+    supports[1]!.level = supports[1]!.definition.maxLevel;
+    supports[2]!.level = supports[2]!.definition.maxLevel;
+    const candidates = createUpgradeCandidateList(weapons, supports, 90, new DeterministicRng(12), new Set());
+    expect(candidates).toHaveLength(3);
+    expect(candidates.some((candidate) => candidate.id === 'support:output:level')).toBe(true);
+    expect(candidates.filter((candidate) => candidate.kind === 'continuous')).toHaveLength(2);
+  });
+
+  it('fills two ordinary choices with one continuous choice', () => {
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
+    weapons[0]!.level = weapons[0]!.definition.maxLevel;
+    weapons[0]!.precisionBonus = 2;
+    weapons[1]!.level = weapons[1]!.definition.maxLevel;
+    weapons[1]!.precisionBonus = 2;
+    weapons[2]!.level = 4;
+    weapons[2]!.precisionBonus = 2;
+    const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('brake', 2)];
+    for (const support of supports) support.level = support.definition.maxLevel;
+    const candidates = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(3), new Set());
+    expect(candidates).toHaveLength(3);
+    expect(candidates.filter((candidate) => candidate.kind !== 'continuous')).toHaveLength(2);
+    expect(candidates.filter((candidate) => candidate.kind === 'continuous')).toHaveLength(1);
+  });
+
+  it('keeps the continuous exits after all ordinary choices are excluded', () => {
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
+    weapons[0]!.level = weapons[0]!.definition.maxLevel;
+    weapons[0]!.precisionBonus = 2;
+    weapons[1]!.level = weapons[1]!.definition.maxLevel;
+    weapons[1]!.precisionBonus = 2;
+    weapons[2]!.level = 4;
+    weapons[2]!.precisionBonus = 2;
+    const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('brake', 2)];
+    for (const support of supports) support.level = support.definition.maxLevel;
+    const first = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(3), new Set());
+    const ordinaryIds = first.filter((candidate) => candidate.canBan !== false).map((candidate) => candidate.id);
+    const candidates = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(3), new Set(ordinaryIds));
+    expect(candidates).toHaveLength(3);
+    expect(candidates.every((candidate) => candidate.kind === 'continuous')).toBe(true);
+  });
+
+  it('applies continuous effects through a single explicit callback', () => {
+    const applied: string[] = [];
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
+    const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('brake', 2)];
+    for (const weapon of weapons) { weapon.level = weapon.definition.maxLevel; weapon.precisionBonus = 2; }
+    for (const support of supports) support.level = support.definition.maxLevel;
+    const candidates = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(1), new Set());
+    for (const candidate of candidates.filter((item) => item.kind === 'continuous')) {
+      expect(applyUpgradeCandidate(candidate, [], [], () => undefined, { onContinuous: (id) => applied.push(id) })).toBe(true);
+    }
+    expect(applied).toEqual(['polish', 'armor', 'parts']);
   });
 
   it('retries a blocked candidate draw only after experience increases', () => {
