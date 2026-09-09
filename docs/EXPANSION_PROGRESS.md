@@ -8,8 +8,9 @@
 対象工程: PR-1「成長停止と選択画面を直す」
 作業ブランチ: `codex/expansion-pr1-20260909`
 開始時の最新main: `27a8b8846477682446e51c23b5a5a3fd11641feb`
-提出コミット: 実装・検査・文書更新後に確定して追記する
-Draft PR: push後に確定して追記する
+提出コードコミット: `9e5baacce6ef2bfc6db6235f1a71ea9327e4da80`
+Draft PR: [#16](https://github.com/chameleonjp-lab/kakomare/pull/16)（open / Draft）
+ローカルの最終対応コミット: `2e801a2`（GitHub API経由で上記提出コードコミットへ反映）
 
 担当の扱い: 実装・不具合調査・検査・記録はこの作業セッションで実施した。別エージェントの呼び出しは行っていないため、Sol・Highによる設計支援や独立レビューを実施済みとは記録しない。作品の採否、iPhone実機確認、マージはユーザーの判断とする。
 
@@ -83,13 +84,20 @@ Draft PR: push後に確定して追記する
 | 強化中の時間 | 戦闘を10%の速度で進める | 戦闘更新を完全停止 | 説明中の被害・予告・攻撃間隔を止める | 保存型変更なし | X08・X09成功 |
 | 複数回経験値 | 1回ずつ自動的に開く前提で、保留UIなし | 3回選択ごとに続行または保留。保留数を表示し再開可能 | まとめて得た経験値を新しい撃破なしで使う | 保存型変更なし。途中保存はPR-5 | 保留・再開統合テスト成功 |
 | 一時停止詳細 | 同じメニューの下へ詳細を追加 | 同じ表示領域のmenu/viewを切替 | 再開・戻る操作を長い一覧から守る | 保存型変更なし | コード検査済み、ブラウザ待ち |
+| 短い縦画面の戦闘レイアウト | ルート文字拡大時にヘッダー・戦場・HUDをそのまま縦積み | 600px以下の縦画面でヘッダーを48px基準、戦場を240px以上に調整し、HUDの文字を保持 | 保存型変更なし | Quality #35で検出した620.546875px超過を修正。ローカル静的検査成功、Quality #36はrunner障害で未到達 |
 
 ## 検査状況と未完了事項
 
 完了したローカル検査は `npm ci --ignore-scripts --no-audit --no-fund`、`npm run lint`、`npm run typecheck`、`npm test -- --testTimeout=30000`、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check`。テスト実績は22ファイル・159件すべて成功。ビルドのVite 500 kB超警告は残るが、検査失敗とは扱わない。
 
-未完了は、Chromium/WebKitのローカルブラウザ検査（各26件がブラウザ実行ファイル欠如で起動前失敗）、GitHub Actionsの提出コミット結果、iPhone 17 Pro Safari実機、指定表示幅・文字200%・回転・VoiceOver、通常本戦360試行、無限60試行、30/60/120描画頻度比較、独立レビューである。ローカルブラウザはChrome実行ファイル未導入で、`agent-browser`のChrome取得も証明書付きCDNの制限で失敗した。これらを成功扱いしない。
+未完了は、Chromium/WebKitのローカルブラウザ検査（各26件がブラウザ実行ファイル欠如で起動前失敗）、最終提出コードに対するGitHub Actionsのコード検査、iPhone 17 Pro Safari実機、指定表示幅・文字200%・回転・VoiceOver、通常本戦360試行、無限60試行、30/60/120描画頻度比較、独立レビューである。ローカルブラウザはChrome実行ファイル未導入で、`agent-browser`のChrome取得も証明書付きCDNの制限で失敗した。これらを成功扱いしない。
+
+GitHub Actionsの記録（提出コードと対応づける）:
+
+- Quality #34（`9d3d6fc3f304995720cb005e034e4aa379785f5c`、[run 34382137064](https://github.com/chameleonjp-lab/kakomare/actions/runs/34382137064)）は静的・単体検査後のChromiumで19件成功・7件失敗。候補を開くテスト用経験値供給の不足と、320x480／文字200%のレイアウト超過を同じブランチで修正した。
+- Quality #35（`c9b4fdb388c1f35407e6ca3423d27deebc170e53`、[run 34382983179](https://github.com/chameleonjp-lab/kakomare/actions/runs/34382983179)）は静的・単体検査成功、Chromium 25件成功・1件失敗。320x568／文字200%でパネル下端620.546875pxが画面569pxを超えたため、ヘッダーと戦場の短画面CSSを修正した。
+- Quality #36（提出コード`9e5baacce6ef2bfc6db6235f1a71ea9327e4da80`、[run 34383693818](https://github.com/chameleonjp-lab/kakomare/actions/runs/34383693818)）はPlaywrightブラウザ導入中のrunner側APT `dl.google.com` `Hash Sum mismatch`で停止。失敗jobを2回再実行したが同じ導入段階で停止し、静的・単体・Chromium・WebKit・buildはこのrunでは未実行である。提出コードの検査成功とは数えない。
 
 ## 中断時の再開情報
 
-最新コミット、Draft PR URL、Actions URL、失敗ログの所在は、push・CI確認後にこの節へ追記する。中断時は、まず `git status --short --branch`、`git log -1 --oneline`、このファイル、Draft PRの未解決コメントを読み、未完了欄の最初の作業から再開する。次工程PR-2は、ユーザーがPR-1をマージした旨を伝え、実際のmainが更新されたことを確認した後に開始する。
+提出コードは`9e5baacce6ef2bfc6db6235f1a71ea9327e4da80`、Draft PRは[#16](https://github.com/chameleonjp-lab/kakomare/pull/16)、最終Quality runは[34383693818](https://github.com/chameleonjp-lab/kakomare/actions/runs/34383693818)である。中断時は、まず `git status --short --branch`、`git log -1 --oneline`、このファイル、Draft PRの未解決コメントを読み、未完了欄の最初の作業から再開する。次工程PR-2は、ユーザーがPR-1をマージした旨を伝え、実際のmainが更新されたことを確認した後に開始する。
