@@ -1,7 +1,7 @@
 import { createAppState, type AppState } from './AppState';
 import type { AppView } from './routes';
 import { SaveService } from '../services/SaveService';
-import { AudioService } from '../services/AudioService';
+import { AudioService, audioCueForStatus } from '../services/AudioService';
 import { ShareService } from '../services/ShareService';
 import { LifecycleService } from '../services/LifecycleService';
 import { GameHost } from '../game/GameHost';
@@ -204,9 +204,11 @@ export class AppController {
       remaining -= 1;
       if (remaining <= 0) {
         this.clearCountdown();
+        this.audio.cue('start');
         this.render('battle');
         return;
       }
+      this.audio.cue('countdown');
       number.textContent = String(remaining);
     }, 1000);
   }
@@ -239,7 +241,7 @@ export class AppController {
     const hud = element('div', 'battle-hud');
     const maxCore = getResearchEffects(this.state.save).maxCore;
     const health = this.hudItem('耐久力', `${maxCore} / ${maxCore}`, 'hud-health');
-    const time = this.hudItem('経過時間', '0秒', 'hud-time');
+    const time = this.hudItem(STAGES[this.state.selectedStage].isEndless ? '経過時間' : '残り時間', STAGES[this.state.selectedStage].isEndless ? '0秒' : `${Math.ceil(STAGES[this.state.selectedStage].timeLimit)}秒`, 'hud-time');
     const xp = this.hudItem('経験値', '0 / 25', 'hud-xp');
     const score = this.hudItem('得点', '0', 'hud-score');
     hud.append(health, time, xp, score);
@@ -278,7 +280,8 @@ export class AppController {
         },
         onUpgrade: (payload) => this.showUpgrade(payload, shell),
         onFinish: (result) => { window.setTimeout(() => this.finishBattle(result), 0); },
-        onStatus: (message) => { status.textContent = message; this.announce(message); this.audio.tone(message.includes('ダメージ') ? 'danger' : 'game', message.includes('ダメージ') ? 120 : 440); },
+        onStatus: (message) => { status.textContent = message; this.announce(message); this.audio.cue(audioCueForStatus(message)); },
+        onAudioCue: (cue) => this.audio.cue(cue),
         onPauseRequest: () => this.openPause(false),
       },
     });
@@ -297,7 +300,7 @@ export class AppController {
     const xpValue = xp.querySelector<HTMLElement>('[data-testid="hud-xp"]');
     const scoreValue = score.querySelector<HTMLElement>('[data-testid="hud-score"]');
     if (healthValue) healthValue.textContent = `${Math.max(0, Math.round(snapshot.core))} / ${snapshot.maxCore}`;
-    if (timeValue) timeValue.textContent = `${Math.floor(snapshot.elapsed)}秒`;
+    if (timeValue) timeValue.textContent = snapshot.isEndless ? `${Math.floor(snapshot.elapsed)}秒` : `${Math.max(0, Math.ceil(snapshot.timeLimit - snapshot.elapsed))}秒`;
     if (xpValue) xpValue.textContent = `${Math.floor(snapshot.experience)} / ${snapshot.nextExperience}`;
     if (scoreValue) scoreValue.textContent = snapshot.score.toLocaleString('ja-JP');
     aimState.textContent = snapshot.manualAim ? '手動照準中' : '自動照準';
@@ -332,13 +335,21 @@ export class AppController {
     const candidateButtons: Array<{ button: HTMLButtonElement; candidate: UpgradeCandidate }> = [];
     const selectionButtons: HTMLButtonElement[] = [];
     let selectedIndex = 0;
-    for (const candidate of payload.candidates) {
+    for (const [candidateIndex, candidate] of payload.candidates.entries()) {
       const card = element('article', 'upgrade-card');
+      card.dataset.testid = 'upgrade-card';
+      card.dataset.candidateId = candidate.id;
       const choose = button(candidate.title, 'upgrade-choice');
       choose.dataset.testid = 'upgrade-candidate';
+      choose.setAttribute('aria-label', `${candidate.title}。${candidate.description}`);
+      choose.setAttribute('aria-describedby', `upgrade-description-${candidateIndex} upgrade-change-${candidateIndex}`);
       choose.disabled = true;
       candidateButtons.push({ button: choose, candidate });
-      card.append(choose, element('p', 'upgrade-description', candidate.description), element('p', 'upgrade-change', `${candidate.before} → ${candidate.after}`), element('p', 'upgrade-role', `得意: ${candidate.role}`));
+      const description = element('p', 'upgrade-description', candidate.description);
+      description.id = `upgrade-description-${candidateIndex}`;
+      const change = element('p', 'upgrade-change', `${candidate.before} → ${candidate.after}`);
+      change.id = `upgrade-change-${candidateIndex}`;
+      card.append(choose, description, change, element('p', 'upgrade-role', `得意: ${candidate.role}`));
       if (candidate.isExisting) {
         selectionButtons.push(choose);
         choose.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(choose); });
@@ -346,7 +357,7 @@ export class AppController {
       } else {
         choose.setAttribute('aria-disabled', 'true');
         choose.title = '装着する面を下から選んでください';
-        card.append(element('p', 'upgrade-details', '装着する面を選んで取得します。'));
+        card.append(element('p', 'upgrade-details upgrade-slot-hint', '空いている面を1回タップして装着します。'));
         const placementList = element('div', 'upgrade-placement-list');
         for (const slot of candidate.placementSlots ?? [0, 1, 2]) {
           const placement = button(`面${slot + 1}`, 'button button-small upgrade-placement');
@@ -442,6 +453,7 @@ export class AppController {
     }
     const resumeWithCountdown = fromVisibility || interruptedResume;
     this.gameHost.pause();
+    this.audio.cue('pause');
     if (shell.querySelector('.pause-layer')) return;
     shell.querySelector<HTMLElement>('.upgrade-layer')?.setAttribute('inert', '');
     this.setBattleContentInert(shell, true);
@@ -461,6 +473,7 @@ export class AppController {
       if (resumeWithCountdown) this.shortResume();
       else {
         this.gameHost.resume();
+        this.audio.cue('resume');
         this.restoreBattleFocus(shell);
       }
     });
@@ -529,6 +542,7 @@ export class AppController {
         this.clearResumeCountdown();
         layer.remove();
         this.gameHost.resume();
+        this.audio.cue('resume');
         this.restoreBattleFocus(shell);
       } else message.textContent = String(remaining);
     }, 500);
@@ -631,6 +645,7 @@ export class AppController {
     };
     if (this.commitSave(next)) this.state.notice = nextBest ? '自己最高記録を更新しました。' : '';
     this.render('result');
+    this.audio.cue(result.retired ? 'pause' : result.outcome === 'victory' ? 'victory' : 'defeat');
     this.announce(result.retired ? 'プレイを終了しました' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗');
   }
 

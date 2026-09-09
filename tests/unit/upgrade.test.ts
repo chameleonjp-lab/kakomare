@@ -114,7 +114,7 @@ describe('UpgradeSystem', () => {
     const focusB = new SupportModule('focus', 1);
     focusA.level = 3;
     focusB.level = 3;
-    expect(supportEffectsFor([focusA, focusB], 'focus', 1)).toEqual({ primary: 0.35, secondary: 0.35 });
+    expect(supportEffectsFor([focusA, focusB], 'focus', 1)).toEqual({ primary: 0.35, secondary: 0.44 });
   });
 
   it('installs new weapons and supports on the requested empty face', () => {

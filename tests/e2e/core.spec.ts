@@ -115,6 +115,36 @@ test('3秒カウントダウン後に戦闘が始まり、ドラッグ照準と�
   await expect(page.getByTestId('upgrade-candidate').first()).toBeHidden();
 });
 
+test('狭い画面と文字200%でも強化候補を縦に読み、面を1回タップできる', async ({ page }) => {
+  for (const viewport of [{ width: 320, height: 568 }, { width: 402, height: 874 }]) {
+    await page.setViewportSize(viewport);
+    await enterBattle(page, '?test=1&upgrade=1&seed=1');
+    const candidates = page.getByTestId('upgrade-candidate');
+    await expect(candidates.first()).toBeVisible({ timeout: 3000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const metrics = await page.locator('.upgrade-card').evaluateAll((cards) => cards.map((card) => {
+      const box = card.getBoundingClientRect();
+      const controls = [...card.querySelectorAll<HTMLButtonElement>('button')].map((button) => {
+        const buttonBox = button.getBoundingClientRect();
+        return { width: buttonBox.width, height: buttonBox.height };
+      });
+      return { left: box.left, right: box.right, width: box.width, controls };
+    }));
+    expect(metrics).toHaveLength(3);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    for (const card of metrics) {
+      expect(card.left).toBeGreaterThanOrEqual(0);
+      expect(card.right).toBeLessThanOrEqual(viewport.width + 1);
+      for (const control of card.controls) {
+        expect(control.width).toBeGreaterThanOrEqual(48);
+        expect(control.height).toBeGreaterThanOrEqual(48);
+      }
+    }
+    await page.getByTestId('upgrade-placement').first().click();
+    await expect(page.getByTestId('upgrade-candidate').first()).toBeHidden();
+  }
+});
+
 test('強化中は背景操作を遮断し、フォーカス中の候補だけをEnterで選べる', async ({ page }) => {
   await enterBattle(page, '?test=1&upgrade=1');
   const candidates = page.getByTestId('upgrade-candidate');
@@ -230,6 +260,11 @@ test('敗北結果へ進み、結果画面の共有導線と実験場リンク�
   await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 4000 });
   await expect(page.getByRole('heading', { name: '防衛失敗' })).toBeVisible();
   await expect(page.getByRole('button', { name: '結果を共有' })).toBeVisible();
+  const deviceRecords = page.getByTestId('result-device-records');
+  await expect(deviceRecords).toContainText('連針砲');
+  await expect(deviceRecords).toContainText('遠隔重力点');
+  await expect(deviceRecords).toContainText('出力環');
+  await expect(deviceRecords).toContainText('未採用');
   await expect(page.getByRole('link', { name: 'カメレオンJPの実験場' })).toHaveAttribute('href', 'https://chameleonjp-lab.github.io/chameleonjp_lab/');
 });
 

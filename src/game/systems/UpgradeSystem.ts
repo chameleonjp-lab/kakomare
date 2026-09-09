@@ -30,14 +30,14 @@ export function createUpgradeCandidateList(
           before: `Lv${weapon.level} / 威力 ${weapon.stats.damage}`,
           after: `Lv${next} / 威力 ${weapon.definition.levels[next - 1].damage}`,
           role: weapon.definition.role, isExisting: true,
-          details: attackPowerChange(
+          details: `${attackPowerChange(
             weapon.stats.damage,
             weapon.stats.cooldown * weapon.cooldownMultiplier,
             weapon.damageMultiplier,
             weapon.definition.levels[next - 1].damage,
             weapon.definition.levels[next - 1].cooldown * (branch.cooldownMultiplier ?? weapon.cooldownMultiplier),
             weapon.damageMultiplier * (branch.damageMultiplier ?? 1),
-          ),
+          )} / ${branchEffectLabel(branch.damageMultiplier, branch.cooldownMultiplier)}`,
         });
       } else {
         existing.push({
@@ -126,6 +126,13 @@ function attackPowerChange(beforeDamage: number, beforeCooldown: number, beforeM
   const before = Math.round(beforeDamage * beforeMultiplier / beforeCooldown);
   const after = Math.round(afterDamage * afterMultiplier / afterCooldown);
   return `1秒あたりの基準攻撃力 ${before} → ${after}`;
+}
+
+function branchEffectLabel(damageMultiplier?: number, cooldownMultiplier?: number): string {
+  const effects: string[] = [];
+  if (damageMultiplier !== undefined) effects.push(`分岐威力 +${Math.round((damageMultiplier - 1) * 100)}%`);
+  if (cooldownMultiplier !== undefined) effects.push(`発射間隔 -${Math.round((1 - cooldownMultiplier) * 100)}%`);
+  return effects.length > 0 ? effects.join(' / ') : '固有効果を追加';
 }
 
 export function applyUpgradeCandidate(candidate: UpgradeCandidate, weapons: Weapon[], supports: SupportModule[], heal: (amount: number) => void): void {

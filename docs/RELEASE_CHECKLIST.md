@@ -68,3 +68,7 @@ PR-Aの公開確認です。コードと自動検査の結果は [QUALITY_A_REPO
 - [ ] 演出最小でも接近中の敵と敵弾を見失わない
 
 この欄はiPhone実機で確認した日時・OS・Safari・対象コミットとともに記録します。未実施の項目へチェックを入れません。
+
+## PR-B引継ぎ
+
+PR-A（PR #14）のマージ後、PR-Bは `codex/quality-b-20260908` で実装・自動検査を行う。8武器×6補助の適用表、強化候補の狭い画面、結果・図鑑の説明を追加し、GitHub ActionsのChromium/WebKitが成功してから公開確認へ進む。iPhone 17 Pro・Safari実機と公開URLの確認は、PR-BのCI成功とは別に実施する。

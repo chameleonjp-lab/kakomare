@@ -63,7 +63,7 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
       { damage: 36, cooldown: 2.2, range: 230, radius: 230, pushDistance: 112 },
     ],
     branches: [
-      { id: 'strong-push', name: '強反発型', description: '押し戻し距離と威力を増やします。', atLevel: 3 },
+      { id: 'strong-push', name: '強反発型', description: '押し戻し距離と威力を増やします。', atLevel: 3, damageMultiplier: 1.25 },
       { id: 'delayed', name: '遅延型', description: '押し戻した敵の速度をさらに下げます。', atLevel: 3 },
       { id: 'power', name: '衝圧深化', description: '衝撃波の威力を22%高め、コア近くの敵を崩します。', atLevel: 5, damageMultiplier: 1.22 },
       { id: 'tempo', name: '循環深化', description: '発射間隔を18%短くし、防衛の空白を減らします。', atLevel: 5, cooldownMultiplier: 0.82 },
