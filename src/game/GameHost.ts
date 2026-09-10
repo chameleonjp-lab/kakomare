@@ -24,6 +24,7 @@ const GAME_RESOLUTION = 720;
 export class GameHost {
   private game: Phaser.Game | null = null;
   private scene: BattleScene | null = null;
+  private activeRunId: number | null = null;
 
   public startBattle(mount: HTMLElement, options: {
     stageId: StageId;
@@ -35,10 +36,13 @@ export class GameHost {
     testMode?: boolean;
     testOutcome?: 'victory' | 'defeat';
     testUpgrade?: boolean;
+    testUpgradeExperience?: number;
+    runId: number;
     seed?: number;
     callbacks: BattleCallbacks;
   }): void {
     this.stop();
+    this.activeRunId = options.runId;
     const sceneOptions: BattleSceneOptions = { ...options, researchEffects: options.researchEffects ?? DEFAULT_RESEARCH_EFFECTS };
     const scene = new BattleScene(sceneOptions);
     this.scene = scene;
@@ -55,14 +59,17 @@ export class GameHost {
     });
   }
 
-  public chooseUpgrade(candidate: UpgradeCandidate, selectionId: number): void { this.scene?.chooseUpgrade(candidate, selectionId); }
-  public rerollUpgrade(selectionId: number): void { this.scene?.rerollUpgrade(selectionId); }
-  public banUpgrade(candidateId: string, selectionId: number): void { this.scene?.banUpgrade(candidateId, selectionId); }
-  public continueUpgrade(selectionId: number): void { this.scene?.continueUpgrade(selectionId); }
-  public deferUpgrade(selectionId: number): void { this.scene?.deferUpgrade(selectionId); }
-  public pause(): void { this.scene?.pause(); }
-  public resume(): void { this.scene?.resume(); }
-  public retire(): void { this.scene?.retire(); }
+  public chooseUpgrade(candidate: UpgradeCandidate, selectionId: number, runId: number): void { if (runId === this.activeRunId) this.scene?.chooseUpgrade(candidate, selectionId); }
+  public rerollUpgrade(selectionId: number, runId: number): void { if (runId === this.activeRunId) this.scene?.rerollUpgrade(selectionId); }
+  public banUpgrade(candidateId: string, selectionId: number, runId: number): void { if (runId === this.activeRunId) this.scene?.banUpgrade(candidateId, selectionId); }
+  public continueUpgrade(selectionId: number, runId: number): void { if (runId === this.activeRunId) this.scene?.continueUpgrade(selectionId); }
+  public deferUpgrade(selectionId: number, runId: number): void { if (runId === this.activeRunId) this.scene?.deferUpgrade(selectionId); }
+  public pause(runId: number): void { if (runId === this.activeRunId) this.scene?.pause(); }
+  public resume(runId: number): void { if (runId === this.activeRunId) this.scene?.resume(); }
+  public retire(runId: number): void { if (runId === this.activeRunId) this.scene?.retire(); }
+  public requestPendingUpgrade(selectionId: number, runId: number): void {
+    if (runId === this.activeRunId) this.scene?.requestPendingUpgrade(selectionId);
+  }
   public isPaused(): boolean { return this.scene?.paused ?? false; }
   public isUpgrading(): boolean { return this.scene?.upgrading ?? false; }
 
@@ -71,5 +78,6 @@ export class GameHost {
     this.game?.destroy(true);
     this.game = null;
     this.scene = null;
+    this.activeRunId = null;
   }
 }

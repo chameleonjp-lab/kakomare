@@ -1,5 +1,7 @@
 # カコマレ 検査チェックリスト
 
+> 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
+
 ## PR-Aの品質検査
 
 対象ブランチ: `codex/quality-a-20260908`

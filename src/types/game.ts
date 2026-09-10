@@ -68,6 +68,8 @@ export interface BattleSnapshot {
   experience: number;
   nextExperience: number;
   pendingUpgrades: number;
+  /** The deferred break token; null when the HUD must not request a choice. */
+  pendingUpgradeSelectionId: number | null;
   score: number;
   kills: number;
   enemies: EnemySnapshot[];

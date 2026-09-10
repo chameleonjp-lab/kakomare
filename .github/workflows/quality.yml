@@ -28,7 +28,7 @@ jobs:
       - name: Verify Playwright browsers
         run: npx playwright install --list
       - name: Run static and unit checks
-        run: npm run lint && npm run typecheck && npm run test
+        run: npm run lint && npm run typecheck && npm run test && git diff --check
       - name: Run Chromium checks
         run: npm run test:e2e:chromium
       - name: Run WebKit checks

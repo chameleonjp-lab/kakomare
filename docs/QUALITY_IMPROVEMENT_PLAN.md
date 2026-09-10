@@ -1,5 +1,7 @@
 # カコマレ 品質改善の進行計画
 
+> 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
+
 2026年9月8日の「カコマレ：監査と改善実装計画」に基づく作業記録。初回開発の `IMPLEMENTATION_PLAN.md` に対する追加の改善工程です。
 
 監査基準は `e6ca4229156819ccce8b47ef4273b2e0451d4d75`（PR #13）。PR-A（PR #14）はユーザーによるマージ済みで、PR-Bの開始時mainは `70f1e4ec397cb6d98c7bcb778f416aff641849c0` です。

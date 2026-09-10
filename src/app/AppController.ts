@@ -43,6 +43,8 @@ export class AppController {
   private lifecycleCleanup: (() => void) | null = null;
   private started = false;
   private battleUpgradeOpen = false;
+  private battleRunSequence = 0;
+  private upgradeInterrupted = false;
   private latestBattleSnapshot: BattleSnapshot | null = null;
 
   public constructor(private readonly root: HTMLElement) {}
@@ -214,6 +216,8 @@ export class AppController {
   }
 
   private renderBattle(): void {
+    const runId = ++this.battleRunSequence;
+    this.upgradeInterrupted = false;
     this.latestBattleSnapshot = null;
     const shell = element('section', 'battle-shell');
     shell.dataset.testid = 'battle-screen';
@@ -221,7 +225,7 @@ export class AppController {
     header.append(element('p', 'eyebrow', `カコマレ / ${stageLabel(this.state.selectedStage)}`));
     const pause = button('一時停止', 'button button-secondary pause-button');
     pause.dataset.testid = 'pause-button';
-    pause.addEventListener('click', () => this.openPause(false));
+    pause.addEventListener('click', () => this.openPause(false, '', runId));
     header.append(pause);
     shell.append(header);
 
@@ -244,7 +248,19 @@ export class AppController {
     const time = this.hudItem(STAGES[this.state.selectedStage].isEndless ? '経過時間' : '残り時間', STAGES[this.state.selectedStage].isEndless ? '0秒' : `${Math.ceil(STAGES[this.state.selectedStage].timeLimit)}秒`, 'hud-time');
     const level = this.hudItem('現在Lv', 'Lv1', 'hud-level');
     const xp = this.hudItem('経験値', '0 / 25', 'hud-xp');
-    const pending = this.hudItem('保留強化', '0回', 'hud-pending');
+    const pending = button('', 'hud-item pending-upgrade-button');
+    pending.dataset.testid = 'pending-upgrade-button';
+    pending.disabled = true;
+    pending.setAttribute('aria-label', '強化を選ぶ（0回）');
+    pending.append(element('span', 'hud-label', '強化を選ぶ'));
+    const pendingCount = element('strong', 'hud-value', '0回');
+    pendingCount.dataset.testid = 'hud-pending';
+    pending.append(pendingCount);
+    pending.addEventListener('click', () => {
+      if (!pending.isConnected || pending.disabled) return;
+      const selectionId = this.latestBattleSnapshot?.pendingUpgradeSelectionId;
+      if (selectionId !== null && selectionId !== undefined) this.gameHost.requestPendingUpgrade(selectionId, runId);
+    });
     const score = this.hudItem('得点', '0', 'hud-score');
     hud.append(health, time, level, xp, pending, score);
     panel.append(hud);
@@ -264,7 +280,9 @@ export class AppController {
     const outcome = query.get('outcome');
     const rawSeed = query.get('seed');
     const requestedSeed = rawSeed === null ? undefined : Number(rawSeed);
+    const requestedTestExperience = Number(query.get('testXp'));
     this.gameHost.startBattle(gameMount, {
+      runId,
       stageId: this.state.selectedStage,
       effectsLevel: this.state.save.settings.effects,
       reducedMotion: this.state.save.settings.reducedMotion,
@@ -274,17 +292,19 @@ export class AppController {
       testMode,
       testOutcome: testMode && (outcome === 'victory' || outcome === 'defeat') ? outcome : undefined,
       testUpgrade: testMode && query.get('upgrade') === '1',
+      testUpgradeExperience: testMode && Number.isInteger(requestedTestExperience) && requestedTestExperience > 0 && requestedTestExperience <= 10000 ? requestedTestExperience : undefined,
       seed: testMode && requestedSeed !== undefined && Number.isFinite(requestedSeed) ? requestedSeed : undefined,
       callbacks: {
         onSnapshot: (snapshot) => {
+          if (runId !== this.battleRunSequence || !shell.isConnected) return;
           this.latestBattleSnapshot = snapshot;
           this.updateBattleHud(snapshot, health, time, level, xp, pending, score, aimState, buildList);
         },
-        onUpgrade: (payload) => this.showUpgrade(payload, shell),
-        onFinish: (result) => { window.setTimeout(() => this.finishBattle(result), 0); },
-        onStatus: (message) => { status.textContent = message; this.announce(message); this.audio.cue(audioCueForStatus(message)); },
-        onAudioCue: (cue) => this.audio.cue(cue),
-        onPauseRequest: () => this.openPause(false),
+        onUpgrade: (payload) => { if (runId === this.battleRunSequence && shell.isConnected) this.showUpgrade(payload, shell, runId); },
+        onFinish: (result) => { window.setTimeout(() => { if (runId === this.battleRunSequence && shell.isConnected) this.finishBattle(result); }, 0); },
+        onStatus: (message) => { if (runId !== this.battleRunSequence || !shell.isConnected) return; status.textContent = message; this.announce(message); this.audio.cue(audioCueForStatus(message)); },
+        onAudioCue: (cue) => { if (runId === this.battleRunSequence && shell.isConnected) this.audio.cue(cue); },
+        onPauseRequest: () => this.openPause(false, '', runId),
       },
     });
   }
@@ -296,7 +316,7 @@ export class AppController {
     return item;
   }
 
-  private updateBattleHud(snapshot: BattleSnapshot, health: HTMLElement, time: HTMLElement, level: HTMLElement, xp: HTMLElement, pending: HTMLElement, score: HTMLElement, aimState: HTMLElement, buildList: HTMLElement): void {
+  private updateBattleHud(snapshot: BattleSnapshot, health: HTMLElement, time: HTMLElement, level: HTMLElement, xp: HTMLElement, pending: HTMLButtonElement, score: HTMLElement, aimState: HTMLElement, buildList: HTMLElement): void {
     const healthValue = health.querySelector<HTMLElement>('[data-testid="hud-health"]');
     const timeValue = time.querySelector<HTMLElement>('[data-testid="hud-time"]');
     const levelValue = level.querySelector<HTMLElement>('[data-testid="hud-level"]');
@@ -308,6 +328,8 @@ export class AppController {
     if (levelValue) levelValue.textContent = `Lv${snapshot.level}`;
     if (xpValue) xpValue.textContent = `${Math.floor(snapshot.experience)} / ${snapshot.nextExperience}`;
     if (pendingValue) pendingValue.textContent = `${snapshot.pendingUpgrades}回`;
+    pending.setAttribute('aria-label', `強化を選ぶ（${snapshot.pendingUpgrades}回）`);
+    pending.disabled = snapshot.pendingUpgrades <= 0 || snapshot.pendingUpgradeSelectionId === null;
     if (scoreValue) scoreValue.textContent = snapshot.score.toLocaleString('ja-JP');
     aimState.textContent = snapshot.manualAim ? '手動照準中' : '自動照準';
     const loadout: string[] = [];
@@ -320,14 +342,20 @@ export class AppController {
     buildList.textContent = loadout.join(' / ');
   }
 
-  private showUpgrade(payload: UpgradePayload, shell: HTMLElement): void {
+  private showUpgrade(payload: UpgradePayload, shell: HTMLElement, runId: number): void {
     this.removeModal(shell, '.upgrade-layer');
     if (payload.phase === 'break') {
-      this.showUpgradeBreak(payload, shell);
+      this.showUpgradeBreak(payload, shell, runId);
       return;
     }
     if (payload.candidates.length === 0) {
       this.battleUpgradeOpen = false;
+      if (this.upgradeInterrupted) {
+        this.upgradeInterrupted = false;
+        this.gameHost.pause(runId);
+        this.openPause(true, '画面を離れたため停止中', runId);
+        return;
+      }
       if (shell.querySelector('.pause-layer, .resume-layer')) this.setBattleContentInert(shell, true);
       else this.restoreBattleFocus(shell);
       return;
@@ -365,7 +393,7 @@ export class AppController {
       if (candidate.isExisting) {
         selectionButtons.push(choose);
         choose.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(choose); });
-        choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate, selectionId); });
+        choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate, selectionId, runId); });
       } else {
         choose.setAttribute('aria-disabled', 'true');
         choose.title = '装着する面を下から選んでください';
@@ -380,7 +408,7 @@ export class AppController {
           placement.addEventListener('click', () => {
             if (locked) return;
             locked = true;
-            this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot }, selectionId);
+            this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot }, selectionId, runId);
           });
           selectionButtons.push(placement);
           placementList.append(placement);
@@ -396,7 +424,7 @@ export class AppController {
         if (locked || ban.disabled) return;
         locked = true;
         ban.disabled = true;
-        this.gameHost.banUpgrade(candidate.id, selectionId);
+        this.gameHost.banUpgrade(candidate.id, selectionId, runId);
       });
       card.append(ban);
       card.addEventListener('click', (event) => {
@@ -442,7 +470,7 @@ export class AppController {
       if (locked || reroll.disabled) return;
       locked = true;
       reroll.disabled = true;
-      this.gameHost.rerollUpgrade(selectionId);
+      this.gameHost.rerollUpgrade(selectionId, runId);
     });
     footer.append(reroll);
     dialog.append(footer); layer.append(dialog); shell.append(layer);
@@ -451,7 +479,7 @@ export class AppController {
     window.setTimeout(() => selectionButtons.find((choice) => !choice.disabled)?.focus(), 160);
   }
 
-  private showUpgradeBreak(payload: UpgradePayload, shell: HTMLElement): void {
+  private showUpgradeBreak(payload: UpgradePayload, shell: HTMLElement, runId: number): void {
     this.battleUpgradeOpen = true;
     this.setBattleContentInert(shell, true);
     const layer = element('div', 'modal-layer upgrade-layer');
@@ -467,7 +495,7 @@ export class AppController {
       locked = true;
       continueButton.disabled = true;
       deferButton.disabled = true;
-      this.gameHost.continueUpgrade(payload.selectionId);
+      this.gameHost.continueUpgrade(payload.selectionId, runId);
     });
     const deferButton = button('残りを保留して戦闘へ戻る', 'button button-secondary button-large');
     deferButton.addEventListener('click', () => {
@@ -475,7 +503,7 @@ export class AppController {
       locked = true;
       continueButton.disabled = true;
       deferButton.disabled = true;
-      this.gameHost.deferUpgrade(payload.selectionId);
+      this.gameHost.deferUpgrade(payload.selectionId, runId);
     });
     actions.append(continueButton, deferButton);
     dialog.append(actions); layer.append(dialog); shell.append(layer);
@@ -483,12 +511,14 @@ export class AppController {
     window.setTimeout(() => continueButton.focus(), 0);
   }
 
-  private openPause(fromVisibility: boolean, reason = ''): void {
-    if (!this.runLifecycle.active || this.state.view !== 'battle') return;
-    // The upgrade dialog already owns the pause boundary.  Ignore every
-    // pause entry (including visibility recovery) while it is open so a
-    // browser Escape/visibility event cannot leave a hidden pause state.
-    if (this.battleUpgradeOpen || this.gameHost.isUpgrading()) return;
+  private openPause(fromVisibility: boolean, reason = '', runId = this.battleRunSequence): void {
+    if (runId !== this.battleRunSequence || !this.runLifecycle.active || this.state.view !== 'battle') return;
+    // Keep the exact dialog and RNG while interrupted. On leaving the batch,
+    // require explicit recovery without adding a countdown to normal choices.
+    if (this.battleUpgradeOpen || this.gameHost.isUpgrading()) {
+      if (fromVisibility) this.upgradeInterrupted = true;
+      return;
+    }
     const shell = this.root.querySelector<HTMLElement>('.battle-shell');
     if (!shell) return;
     const interruptedResume = this.resumeCountdownTimer !== null;
@@ -497,7 +527,7 @@ export class AppController {
       shell.querySelector('.resume-layer')?.remove();
     }
     const resumeWithCountdown = fromVisibility || interruptedResume;
-    this.gameHost.pause();
+    this.gameHost.pause(runId);
     this.audio.cue('pause');
     if (shell.querySelector('.pause-layer')) return;
     shell.querySelector<HTMLElement>('.upgrade-layer')?.setAttribute('inert', '');
@@ -515,12 +545,12 @@ export class AppController {
     pauseView.hidden = true;
     const resume = button('再開', 'button button-primary button-large'); resume.dataset.testid = 'resume-button';
     const resumeBattle = (): void => {
-      if (resume.disabled) return;
+      if (resume.disabled || runId !== this.battleRunSequence || !layer.isConnected) return;
       resume.disabled = true;
       layer.remove();
-      if (resumeWithCountdown) this.shortResume();
+      if (resumeWithCountdown) this.shortResume(runId);
       else {
-        this.gameHost.resume();
+        this.gameHost.resume(runId);
         this.audio.cue('resume');
         this.restoreBattleFocus(shell);
       }
@@ -535,8 +565,8 @@ export class AppController {
     const rules = button('遊び方'); rules.addEventListener('click', () => this.showPauseRules(pauseMenu, pauseView, showMenu, resumeBattle));
     const loadout = button('装置を確認'); loadout.addEventListener('click', () => this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle));
     const settings = button('音量と演出'); settings.addEventListener('click', () => this.showPauseSettings(pauseMenu, pauseView, showMenu, resumeBattle));
-    const retire = button('リタイア', 'button button-danger'); retire.addEventListener('click', () => { if (window.confirm('このプレイを終了しますか？得点は確定しません。')) this.gameHost.retire(); });
-    const home = button('ホームへ戻る'); home.addEventListener('click', () => { if (window.confirm('プレイを終了してホームへ戻りますか？')) { this.gameHost.stop(); this.runLifecycle.cancel(); this.render('home'); } });
+    const retire = button('リタイア', 'button button-danger'); retire.addEventListener('click', () => { if (window.confirm('このプレイを終了しますか？得点は確定しません。')) this.gameHost.retire(runId); });
+    const home = button('ホームへ戻る'); home.addEventListener('click', () => { if (runId === this.battleRunSequence && layer.isConnected && window.confirm('プレイを終了してホームへ戻りますか？')) { this.gameHost.stop(); this.runLifecycle.cancel(); this.render('home'); } });
     pauseMenu.append(resume, rules, loadout, settings, retire, home);
     dialog.append(pauseMenu, pauseView); layer.append(dialog); shell.append(layer);
     this.trapFocus(dialog);
@@ -605,18 +635,19 @@ export class AppController {
     container.append(actions);
   }
 
-  private shortResume(): void {
+  private shortResume(runId: number): void {
     const shell = this.root.querySelector<HTMLElement>('.battle-shell'); if (!shell) return;
     if (this.resumeCountdownTimer !== null) return;
     const layer = element('div', 'modal-layer resume-layer'); const message = element('div', 'resume-countdown', '3'); layer.append(message); shell.append(layer);
     let remaining = 3;
     this.resumeCountdownTimer = window.setInterval(() => {
+      if (runId !== this.battleRunSequence || !layer.isConnected) { this.clearResumeCountdown(); return; }
       if (document.visibilityState === 'hidden') return;
       remaining -= 1;
       if (remaining <= 0) {
         this.clearResumeCountdown();
         layer.remove();
-        this.gameHost.resume();
+        this.gameHost.resume(runId);
         this.audio.cue('resume');
         this.restoreBattleFocus(shell);
       } else message.textContent = String(remaining);
