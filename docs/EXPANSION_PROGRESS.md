@@ -16,7 +16,7 @@
 
 | 工程 | 状態 | 次の境界 |
 |---|---|---|
-| V0 | 実装・検査中 | 保留画面再開/P16/X/文書/提出commit検査/Draft |
+| V0 | Draft提出・自動検査完了、ユーザーマージ待ち | 下記提出記録。V1へは進まない |
 | V1 | 未着手・V0マージ待ち | 全50設計/S/50×S/各2方向/D01～D07/型と定義検証器 |
 | V2 | 未着手 | 8武器6補助で個体接続容量配置/乱数/入力基盤 |
 | V3 | 未着手 | 12武器/対応補助/連動弱点/初期混成。12は最終でない |
@@ -88,17 +88,17 @@ XP式とX05、継続候補、3回休止、選択番号で一度確定、完全�
 
 環境履歴：
 - npm ci成功（162パッケージ）。
-- npx playwright install chromium webkitはCDNの502/timeoutでブラウザ導入失敗。画面検査は未実行。
+- npx playwright install chromium webkitはCDNの502/timeoutでブラウザ導入失敗。この時点のローカル画面検査は未実行（後のActionsでの実行は下記）。
 - その後、作業環境がexec-server transport disconnected、409 environment_offlineとなり再接続も失敗。承認拒否ではなく環境切断。
 - 切断前の途中確認ではtypecheckと対象3ファイル39件（独立レビュー担当確認）が成功したが、後続修正を含む最終証拠へ流用しない。
-- GitHub接続が稼働しているため、基準mainのファイルを再取得し修正をGitHub APIで再構成して作業branchへ反映。最終コードの静的/単体/画面/ビルド検査は既存Actions公式Playwrightコンテナで実行する。
+- GitHub接続が稼働しているため、基準mainのファイルを再取得し修正をGitHub APIで再構成して作業branchへ反映。提出コードの静的/単体/画面/ビルド検査は既存Actions公式Playwrightコンテナで実行し、下記のコミット別ログで確認した。
 
-最終提出の実結果は下の提出欄に追記する。未実行を成功にしない。
+提出結果は下の提出欄に記録した。ローカル環境失敗とActionsでの成功は区別する。
 
 ## 担当と未確認
 
-Luna・Maxの別エージェントが実装/調査/検査を担当。親セッションが計画反映/統合/提出を担当。Sol・Highの別エージェントが独立レビューを実施。自分の再検査とは区別する。
-レビューで前play入力のrunId照合、公開境界の必須化、X08実同時発生、P16-04実状態保持、P16-05/06候補/乱数復帰、文書の会話履歴依存を指摘し対応中。最終レビュー結果は提出欄へ追記。
+Luna・Maxの別エージェントが切断前の実装/調査/検査を担当。環境切断後の提出コードは親セッションがGitHubの基準mainから再構成し、計画反映/統合/提出も担当。Sol・Highの別エージェントが独立レビューを実施。自分の再検査とは区別する。
+初回レビューの前play入力runId照合、公開境界、X08実同時発生、P16-04実状態保持、P16-05/06候補/乱数復帰、文書の会話履歴依存は対応済み。最終の別担当Sol・Highによるread-onlyコードレビュー（7be9990と4b5e57a）でblocker/actionable bugなし。別のSol・High文書監査でも0～21章・全要求/検査ID・50/S/連動/競技契約と旧全文履歴の保持を確認。これらはソース/文書レビューで、iPhone実機操作ではない。
 Sol・Extra Highは今回使用していない。作品採否/iPhone実機/マージはユーザー。
 
 iPhone 17 Pro Safari、VoiceOver/片手/発熱/長時間識別、公開ページと配備一致、本番DB/受付/ランキングは未確認。WebKit自動検査は実機Safariではない。
@@ -106,6 +106,31 @@ iPhone 17 Pro Safari、VoiceOver/片手/発熱/長時間識別、公開ページ
 
 ## 提出記録・再開
 
-提出コミット／Draft PR／現コミットActions：準備中。
+- Draft PR：[#17](https://github.com/chameleonjp-lab/kakomare/pull/17)（open / Draft）。
+- 基準main：c34d1910e53ca7b75ff858cb1135070723d438a7。
+- 実装コードコミット：7be999050b4ae379eaedb8b2ff11856d9f9cad99。
+- 検査強化コミット：4b5e57a13c456cd2db8872d95e0745a4a4bfcc59（本番コード変更なし）。
+- [Quality #46](https://github.com/chameleonjp-lab/kakomare/actions/runs/34508421433)、job 102976208763：7be9990に対し全step成功。22ファイル160件、Chromium30件、WebKit30件。
+- [Quality #47](https://github.com/chameleonjp-lab/kakomare/actions/runs/34509395413)、job 102979472696：4b5e57aに対し全step成功。22ファイル161件、Chromium31件、WebKit31件。前run入力/3回再戦/非zero停止状態の追加検査とgit diff --checkを含む。
+- 本記録の同期後の最終head/CIはPR #17の最新headとChecksで照合する。本記録自身のSHAを自己参照で更新し続けない。最終headの検査状態はPR説明にも記録する。
+- 実行コマンド：npm ci / npm run lint / npm run typecheck / npm run test / npm run test:e2e:chromium / npm run test:e2e:webkit / npm run build / npm run verify:dist / npm run verify:originality / git diff --check。最後のコマンドはCIのcheckout作業ツリーで実行。旧履歴の原文にあるMarkdown改行用末尾空白は保持。
+- Viteの500kB超チャンク警告は残る。処理負荷/実機性能の合格を意味しない。Quality46の成功を後続変更の成功へ読み替えない。
+
+| 条件 | 実行証拠・範囲 |
+|---|---|
+| P16-01 | core.spec.ts：ローカル限定testXp=154を開始準備に使い、3回選択→保留→HUD再開→最後の選択をDOMボタンで実行。Lv5/XP0/次61、残0無効。追加撃破なし |
+| P16-02 | battle-quality.test.ts：保留中100回の撃破通知で経験値/回数増、選択は自動表示されない。内部撃破通知の結合検査で、画面からの敵撃破実績とは区別 |
+| P16-03 | 再開連打、古い選択番号、同じ番号を持つ前run、終了後入力。実GameHost公開APIと3回再戦後の旧DOMを別検査 |
+| P16-04 | 同じ本番stepを1/60秒×3600回。HP・敵・弾・非zero攻撃待ち・重力・複数予告・時間・候補・乱数・出現処理を比較 |
+| P16-05 | 強化画面の非表示/回転/復帰で同じ候補とXP。画面から確定し、一時停止→明示再開。Safari実機ではない |
+| P16-06 | 保留/再開2巡、無効番号/重複要求/一時停止は候補・乱数を変えない。再抽選操作の新ルールはV1対象 |
+| P16-07 | 装置確認/戻る/一時停止/再開/強化/リタイア/結果/再戦。結果の背後へ候補を残さない |
+| P16-08 / X01～04 | 既存upgrade.test.tsの通常候補1/2枚・全上限・全除外を全件実行 |
+| X05 | progression.test.ts：Lv27/XP3085/次259→10確定→Lv37/XP90/次349。式/収入は無変更 |
+| X06～07 | battle-quality.test.ts：重複番号/古い候補/無効配置の消費・取得・記録を防止 |
+| X08 | 事前HP0を廃止。HP1から同じstep内に味方弾が敵を撃破、敵弾がコアへ致死。経験値獲得と敗北を確認し候補0 |
+| X09～10 | P16-04/05と既存回転/非表示のUI検査で維持 |
+
+画面検査は本番ビルドをローカルpreviewで動かすChromium/WebKit。320×568、375×667、390×844、402×874、430×932/横画面、320×480、文字200%の既存検査も残し全件実行する。新テストのUI操作にBattleScene内部メソッドは使用していない。
 まずgit status、git log -1、本記録、PR状態/コメント/最新Actionsを読む。環境復旧時は未提出ローカルコピーをそのままpushせずGitHubの作業branchを取得し差分を照合する。
-V0の残る検査・修正・文書・Draft提出を完了し、その後はユーザーのマージ待ち。実マージ確認後にV1の全50台帳/S/適用連動/D01～D07/定義検証器へ進む。
+V0はDraft提出後のユーザーマージ待ち。実マージ確認後にV1の全50台帳/S/適用連動/D01～D07/定義検証器へ進む。
