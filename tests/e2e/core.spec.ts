@@ -653,3 +653,78 @@ test('破損保存を白画面にせず、退避データを画面からコピ�
   await expect(page.getByTestId('copy-damaged-modal')).toBeVisible();
   await expect(page.locator('.share-text')).toHaveValue('{broken');
 });
+
+
+// V0: state injection is only setup. All selection/defer/resume actions use DOM buttons.
+async function chooseV0Upgrade(page: Page): Promise<void> {
+  const existing = page.locator('[data-testid="upgrade-candidate"]:not([aria-disabled="true"])').first();
+  await expect(existing).toBeEnabled();
+  await existing.click();
+}
+
+async function deferV0Upgrades(page: Page): Promise<void> {
+  for (let count = 0; count < 3; count += 1) await chooseV0Upgrade(page);
+  await page.getByRole('button', { name: '残りを保留して戦闘へ戻る' }).click();
+  await expect(page.getByTestId('pending-upgrade-button')).toBeEnabled();
+}
+
+test('P16-01/03: 154経験値の保留を追加撃破なしに画面ボタンで再開し連打しても一度だけ消費する', async ({ page }) => {
+  await enterBattle(page, '?test=1&upgrade=1&testXp=154&seed=123');
+  await deferV0Upgrades(page);
+  const pending = page.getByTestId('pending-upgrade-button');
+  await expect(pending).toHaveAccessibleName('強化を選ぶ（1回）');
+  await expect(page.locator('.upgrade-layer')).toHaveCount(0);
+  await pending.evaluate((button) => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  await expect(page.locator('.upgrade-layer')).toHaveCount(1);
+  await chooseV0Upgrade(page);
+  await expect(pending).toHaveAccessibleName('強化を選ぶ（0回）');
+  await expect(pending).toBeDisabled();
+  await expect(page.getByTestId('hud-level')).toContainText('5');
+  await expect(page.getByTestId('hud-xp')).toContainText('0 / 61');
+  await expect(page.locator('.resume-layer, .pause-layer')).toHaveCount(0);
+});
+
+test('P16-05/X10: 強化中の非表示と回転は同じ候補を保ち画面で確定後に明示再開できる', async ({ page }) => {
+  await enterBattle(page, '?test=1&upgrade=1&testXp=25&seed=123');
+  await expect(page.getByTestId('upgrade-card')).toHaveCount(3);
+  const candidates = await page.getByTestId('upgrade-card').evaluateAll((cards) => cards.map((card) => card.getAttribute('data-candidate-id')));
+  const xp = await page.getByTestId('hud-xp').textContent();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('orientationchange'));
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(await page.getByTestId('upgrade-card').evaluateAll((cards) => cards.map((card) => card.getAttribute('data-candidate-id')))).toEqual(candidates);
+  await expect(page.getByTestId('hud-xp')).toHaveText(xp ?? '');
+  await chooseV0Upgrade(page);
+  await expect(page.locator('.pause-layer')).toBeVisible();
+  await page.getByTestId('resume-button').click();
+  await expect(page.locator('.resume-layer')).toHaveCount(0, { timeout: 4000 });
+  await expect(page.locator('.pause-layer, .upgrade-layer')).toHaveCount(0);
+});
+
+test('P16-07: 保留から構成・停止・再開・強化・終了を画面操作できる', async ({ page }) => {
+  await enterBattle(page, '?test=1&upgrade=1&testXp=154&seed=123');
+  await deferV0Upgrades(page);
+  await page.getByTestId('pause-button').click();
+  await page.getByRole('button', { name: '装置を確認', exact: true }).click();
+  await expect(page.getByTestId('pause-loadout')).toBeVisible();
+  await page.getByRole('button', { name: '一時停止へ戻る', exact: true }).click();
+  await page.getByTestId('resume-button').click();
+  await page.getByTestId('pending-upgrade-button').click();
+  await chooseV0Upgrade(page);
+  await page.getByTestId('pause-button').click();
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: 'リタイア', exact: true }).click();
+  await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('.upgrade-layer')).toHaveCount(0);
+});
+
+test('P16-01: test指定なしの画面では経験値注入を有効にしない', async ({ page }) => {
+  await enterBattle(page, '?upgrade=1&testXp=154&seed=123');
+  await page.waitForTimeout(1000);
+  await expect(page.locator('.upgrade-layer')).toHaveCount(0);
+  await expect(page.getByTestId('pending-upgrade-button')).toBeDisabled();
+});

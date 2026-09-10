@@ -1,5 +1,7 @@
 # カコマレ 詳細実装計画書
 
+> 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
+
 文書バージョン: 1.0
 対象リポジトリ: `chameleonjp-lab/kakomare`
 対象公開先: GitHub Pages

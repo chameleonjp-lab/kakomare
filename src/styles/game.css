@@ -249,3 +249,9 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Reuse the pending HUD cell so the recovery control adds no extra row. */
+.pending-upgrade-button { min-height: 48px; width: 100%; color: #f2f0e8; font: inherit; text-align: left; touch-action: manipulation; }
+.pending-upgrade-button:not(:disabled) { border-color: #63d7e6; background: #123044; cursor: pointer; }
+.pending-upgrade-button:disabled { opacity: 1; cursor: default; }
+.pending-upgrade-button:focus-visible { outline: 3px solid #63d7e6; outline-offset: -3px; }

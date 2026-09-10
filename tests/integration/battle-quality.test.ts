@@ -338,43 +338,49 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     expect(after?.selectionId).toBe(payload.selectionId);
   });
 
-  it('強化画面では1秒経っても戦闘時計・敵・弾・耐久が進まない', () => {
+  it('P16-04/X09: 3600回の更新でも敵・弾・攻撃待ち・予告・HP・戦闘時間が完全停止する', () => {
     const scene = new moduleUnderTest.BattleScene(options());
-    const progression = privateValue<{ addExperience(amount: number): void }>(scene, 'progression');
-    progression.addExperience(25);
+    privateValue<{ addExperience(amount: number): void }>(scene, 'progression').addExperience(25);
     privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
-    const enemy = new moduleUnderTest.Enemy(1, 'shard', 0, 220) as Record<string, number | boolean>;
-    privateValue<unknown[]>(scene, 'enemies').push(enemy);
-    const addProjectile = privateValue<(config: Record<string, unknown>) => unknown>(scene, 'addProjectile').bind(scene);
-    addProjectile({ kind: 'needle', x: 0, y: 0, vx: 100, vy: 0, radius: 6, damage: 2, life: 2, piercing: 0, sourceWeaponId: 'needle' });
-    const before = {
-      elapsed: privateValue<number>(scene, 'elapsed'),
-      health: privateValue<{ health: number }>(scene, 'core').health,
-      enemyX: Number(enemy.x),
-      projectileX: Number(privateValue<Array<{ x: number }>>(scene, 'projectiles')[0]?.x),
-    };
-    privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1);
-    expect(privateValue<number>(scene, 'elapsed')).toBe(before.elapsed);
-    expect(privateValue<{ health: number }>(scene, 'core').health).toBe(before.health);
-    expect(enemy.x).toBe(before.enemyX);
-    expect(privateValue<Array<{ x: number }>>(scene, 'projectiles')[0]?.x).toBe(before.projectileX);
+    privateValue<unknown[]>(scene, 'enemies').push(new moduleUnderTest.Enemy(1, 'dropper', 0, 220));
+    privateValue<(config: Record<string, unknown>) => unknown>(scene, 'addProjectile').bind(scene)({
+      kind: 'needle', x: 80, y: 0, vx: 100, vy: 0, radius: 6, damage: 2, life: 2, piercing: 0, sourceWeaponId: 'needle',
+    });
+    (scene as Record<string, unknown>).specialWaveWarning = { angle: 1, life: 1.2, maxLife: 1.2 };
+    const capture = (): string => JSON.stringify(Object.fromEntries(
+      ['elapsed', 'core', 'enemies', 'projectiles', 'weapons', 'gravityFields', 'specialWaveWarning',
+        'spawnDirector', 'progression', 'upgradePayload', 'rng'].map((key) => [key, privateValue<unknown>(scene, key)]),
+    ));
+    const before = capture();
+    const step = privateValue<(seconds: number) => void>(scene, 'step').bind(scene);
+    for (let frame = 0; frame < 3600; frame += 1) step(1 / 60);
+    expect(capture()).toBe(before);
   });
 
-  it('同時撃破と致死被害では終了を優先し、強化候補を残さない', () => {
+  it('X08: 同じ戦闘更新内の弾による撃破と致死被害は終了を優先する', () => {
     let upgradeCount = 0;
     let finishCount = 0;
     const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
       onStatus() {}, onFinish: () => { finishCount += 1; }, onSnapshot() {}, onPauseRequest() {},
       onUpgrade: () => { upgradeCount += 1; },
     } }));
-    privateValue<{ addExperience(amount: number): void }>(scene, 'progression').addExperience(25);
-    const destroyed = new moduleUnderTest.Enemy(1, 'shard', 0, 200) as Record<string, number | boolean>;
-    privateValue<(enemy: unknown) => void>(scene, 'handleEnemyDestroyed').bind(scene)(destroyed);
-    privateValue<{ health: number }>(scene, 'core').health = 0;
+    const progression = privateValue<{ addExperience(amount: number): void; experience: number }>(scene, 'progression');
+    progression.addExperience(24);
+    const victim = new moduleUnderTest.Enemy(1, 'shard', 0, 200) as Record<string, number | boolean>;
+    victim.hp = 1;
+    privateValue<unknown[]>(scene, 'enemies').push(victim);
+    privateValue<{ health: number }>(scene, 'core').health = 1;
+    const add = privateValue<(config: Record<string, unknown>) => unknown>(scene, 'addProjectile').bind(scene);
+    add({ kind: 'needle', x: 200, y: 0, vx: 0, vy: 0, radius: 10, damage: 999, life: 2, piercing: 0, sourceWeaponId: 'needle' });
+    add({ kind: 'enemy', x: 0, y: 20, vx: 0, vy: 0, radius: 9, damage: 100, life: 2, piercing: 0, enemyProjectile: true });
     privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1 / 60);
+    expect(victim.active).toBe(false);
+    expect(progression.experience).toBeGreaterThanOrEqual(25);
+    expect(privateValue<{ health: number }>(scene, 'core').health).toBe(0);
     expect(finishCount).toBe(1);
     expect(upgradeCount).toBe(0);
     expect(privateValue<string>(scene, 'state')).toBe('finished');
+    expect(privateValue<unknown>(scene, 'upgradePayload')).toBeNull();
   });
 
   it('3回選択後に保留でき、再開操作で残りの強化を新しい撃破なしに選べる', () => {
@@ -402,7 +408,15 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     expect(privateValue<string>(scene, 'state')).toBe('playing');
     expect(progression.pendingChoices).toBe(1);
 
-    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    const request = privateValue<(id: number) => void>(scene, 'requestPendingUpgrade').bind(scene);
+    const beforeRequest = JSON.stringify(privateValue<unknown>(scene, 'rng'));
+    request(breakPayload.selectionId - 1);
+    expect(privateValue<boolean>(scene, 'pendingUpgradeDeferred')).toBe(true);
+    request(breakPayload.selectionId);
+    request(breakPayload.selectionId);
+    expect(JSON.stringify(privateValue<unknown>(scene, 'rng'))).toBe(beforeRequest);
+    expect(privateValue<string>(scene, 'state')).toBe('playing');
+    privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1 / 60);
     const resumed = payloads.at(-1);
     if (!resumed || resumed.phase !== 'selection') throw new Error('resumed selection payload was not emitted');
     expect(resumed.pendingCount).toBe(1);
@@ -411,6 +425,59 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     (scene as unknown as { chooseUpgrade(candidate: UpgradeCandidate, selectionId: number): void }).chooseUpgrade(finalCandidate, resumed.selectionId);
     expect(progression.pendingChoices).toBe(0);
     expect(privateValue<string>(scene, 'state')).toBe('playing');
+    progression.addExperience(61);
+    const enemy = new moduleUnderTest.Enemy(2, 'shard', 0, 300);
+    privateValue<(enemy: unknown) => void>(scene, 'handleEnemyDestroyed').bind(scene)(enemy);
+    privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1 / 60);
+    expect(privateValue<string>(scene, 'state')).toBe('upgrade');
+
+  });
+
+  it('P16-02/06: 保留中の追加撃破は経験値と回数だけを増やし、停止や無効入力で乱数を消費しない', () => {
+    const scene = new moduleUnderTest.BattleScene(options());
+    const progression = privateValue<{ addExperience(amount: number): void; pendingChoices: number; experience: number }>(scene, 'progression');
+    progression.addExperience(154);
+    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    for (let round = 0; round < 2; round += 1) {
+      for (let choice = 0; choice < 3; choice += 1) {
+        const payload = privateValue<UpgradePayload>(scene, 'upgradePayload');
+        const candidate = payload.candidates.find((item) => item.kind === 'continuous') ?? payload.candidates[0];
+        if (!candidate) throw new Error('missing candidate');
+        privateValue<(candidate: UpgradeCandidate, id: number) => void>(scene, 'chooseUpgrade').bind(scene)(candidate, payload.selectionId);
+      }
+      const payload = privateValue<UpgradePayload>(scene, 'upgradePayload');
+      expect(payload.phase).toBe('break');
+      privateValue<(id: number) => void>(scene, 'deferUpgrade').bind(scene)(payload.selectionId);
+      const pending = progression.pendingChoices;
+      const experience = progression.experience;
+      const randomState = JSON.stringify(privateValue<unknown>(scene, 'rng'));
+      for (let kill = 0; kill < 100; kill += 1) {
+        privateValue<(enemy: unknown) => void>(scene, 'handleEnemyDestroyed').bind(scene)(new moduleUnderTest.Enemy(kill + 10, 'shard', 0, 300));
+      }
+      privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1 / 60);
+      expect(progression.experience).toBeGreaterThan(experience);
+      expect(progression.pendingChoices).toBeGreaterThan(pending);
+      expect(privateValue<string>(scene, 'state')).toBe('playing');
+      expect(privateValue<unknown>(scene, 'upgradePayload')).toBeNull();
+      privateValue<() => void>(scene, 'pause').bind(scene)();
+      privateValue<(id: number) => void>(scene, 'requestPendingUpgrade').bind(scene)(payload.selectionId);
+      privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(60);
+      expect(privateValue<string>(scene, 'state')).toBe('paused');
+      privateValue<() => void>(scene, 'resume').bind(scene)();
+      privateValue<(id: number) => void>(scene, 'requestPendingUpgrade').bind(scene)(payload.selectionId - 1);
+      expect(JSON.stringify(privateValue<unknown>(scene, 'rng'))).toBe(randomState);
+      privateValue<(id: number) => void>(scene, 'requestPendingUpgrade').bind(scene)(payload.selectionId);
+      privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1 / 60);
+      const offered = JSON.stringify(privateValue<unknown>(scene, 'upgradePayload'));
+      const rng = JSON.stringify(privateValue<unknown>(scene, 'rng'));
+      privateValue<(id: number) => void>(scene, 'requestPendingUpgrade').bind(scene)(payload.selectionId);
+      expect(JSON.stringify(privateValue<unknown>(scene, 'upgradePayload'))).toBe(offered);
+      expect(JSON.stringify(privateValue<unknown>(scene, 'rng'))).toBe(rng);
+    }
+    privateValue<() => void>(scene, 'retire').bind(scene)();
+    privateValue<(id: number) => void>(scene, 'requestPendingUpgrade').bind(scene)(1);
+    expect(privateValue<string>(scene, 'state')).toBe('finished');
+    expect(privateValue<unknown>(scene, 'upgradePayload')).toBeNull();
   });
 
   it('部品確保は結果確定で一度だけ精算し、リタイアでは精算しない', () => {

@@ -44,6 +44,7 @@ export interface BattleSceneOptions {
   testMode?: boolean;
   testOutcome?: 'victory' | 'defeat';
   testUpgrade?: boolean;
+  testUpgradeExperience?: number;
   callbacks: BattleCallbacks;
 }
 
@@ -131,6 +132,7 @@ export class BattleScene extends Phaser.Scene {
   private upgradeSequence = 0;
   private choicesSinceBreak = 0;
   private upgradeRequestQueued = false;
+  private pendingUpgradeDeferred = false;
   private bossDefeated = false;
   private testUpgradeOpened = false;
   private testOutcomeTimer: number | null = null;
@@ -305,11 +307,23 @@ export class BattleScene extends Phaser.Scene {
     const pending = this.progression.pendingChoices;
     this.upgradePayload = null;
     this.choicesSinceBreak = 0;
+    this.pendingUpgradeDeferred = true;
+    this.upgradeRequestQueued = false;
     this.state = 'playing';
     this.releaseAimInput();
     this.emitSnapshot(true);
     this.options.callbacks.onStatus(`未選択の強化 ${pending}回。戦闘へ戻りました`);
     this.notifyUpgradeClosed();
+  }
+
+  /** Queue a HUD request once; the next complete combat update keeps finish priority. */
+  public requestPendingUpgrade(selectionId: number): void {
+    if (this.state !== 'playing' || !this.pendingUpgradeDeferred || !this.progression.canChoose()) return;
+    if (selectionId !== this.upgradeSequence || this.upgradeRequestQueued) return;
+    this.pendingUpgradeDeferred = false;
+    this.upgradeRequestQueued = true;
+    this.releaseAimInput();
+    this.emitSnapshot(true);
   }
 
   public pause(): void {
@@ -357,7 +371,10 @@ export class BattleScene extends Phaser.Scene {
       // The browser fixture asks to inspect the real upgrade dialog before a
       // kill has happened. Supply exactly one affordable choice in test mode;
       // production runs still earn experience only from defeated enemies.
-      this.progression.addExperience(this.progression.nextExperience);
+      const injected = this.options.testUpgradeExperience;
+      this.progression.addExperience(injected !== undefined && Number.isInteger(injected) && injected > 0 && injected <= 10000
+        ? injected
+        : this.progression.nextExperience);
       this.upgradeRequestQueued = true;
     }
     const stage = STAGES[this.options.stageId];
@@ -441,7 +458,7 @@ export class BattleScene extends Phaser.Scene {
     if (stage.isEndless) this.updateEndlessMilestone();
     if (!stage.isEndless && this.elapsed >= stage.timeLimit && !this.bossDefeated) this.finish('defeat', `${stage.name}の制限時間内に${BOSSES[stage.boss].name}を止められませんでした`);
     if (this.options.testMode && !this.options.testOutcome && this.elapsed >= 8) this.finish('defeat', 'テスト用の時間切れ');
-    if (this.state === 'playing' && this.upgradeRequestQueued && this.progression.canChoose()) this.openUpgrade();
+    if (this.state === 'playing' && !this.pendingUpgradeDeferred && this.upgradeRequestQueued && this.progression.canChoose()) this.openUpgrade();
   }
 
   private fireWeapon(weapon: Weapon, allowBranch = true, powerFactor = 1): void {
@@ -990,7 +1007,7 @@ export class BattleScene extends Phaser.Scene {
       enemy.splitDone = true;
       this.pendingSporeSplits.push(enemy.angle);
     }
-    if (this.progression.canChoose() && this.state === 'playing') this.upgradeRequestQueued = true;
+    if (this.progression.canChoose() && this.state === 'playing' && !this.pendingUpgradeDeferred) this.upgradeRequestQueued = true;
   }
 
   private flushPendingSporeSplits(): void {
@@ -1001,7 +1018,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private openUpgrade(): boolean {
-    if (!this.progression.canChoose() || this.state !== 'playing') return false;
+    if (!this.progression.canChoose() || this.state !== 'playing' || this.pendingUpgradeDeferred) return false;
     const candidates = this.createCandidates();
     if (candidates.length !== 3) {
       // The continuous candidates make this an invariant violation rather
@@ -1106,6 +1123,9 @@ export class BattleScene extends Phaser.Scene {
     const stage = STAGES[this.options.stageId];
     if (outcome === 'victory' && !retired) this.addScore(stage.clearBonus);
     this.state = 'finished';
+    this.upgradePayload = null;
+    this.pendingUpgradeDeferred = false;
+    this.upgradeRequestQueued = false;
     this.releaseAimInput();
     if (cause) this.recorder.lastDamageSource = cause;
     this.recorder.survivalTime = this.elapsed;
@@ -1293,6 +1313,7 @@ export class BattleScene extends Phaser.Scene {
       experience: this.progression.experience,
       nextExperience: this.progression.nextExperience,
       pendingUpgrades: this.progression.pendingChoices,
+      pendingUpgradeSelectionId: this.pendingUpgradeDeferred ? this.upgradeSequence : null,
       score: Math.round(this.recorder.score + this.elapsed * 5 + this.core.health * 20),
       kills: this.recorder.kills,
       enemies: visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),

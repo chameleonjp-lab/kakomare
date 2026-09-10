@@ -27,7 +27,9 @@ GitHub Pagesの公開パスは `/kakomare/` です。`main`へのpush、また�
 
 ## 関連文書
 
-- [実装計画](docs/IMPLEMENTATION_PLAN.md)
+- [拡張実装計画 v2.0](docs/EXPANSION_IMPLEMENTATION_PLAN.md)
+- [拡張の進行記録](docs/EXPANSION_PROGRESS.md)
+- [初回実装計画（履歴）](docs/IMPLEMENTATION_PLAN.md)
 - [ゲームルール](docs/GAME_RULES.md)
 - [検査チェックリスト](docs/TEST_CHECKLIST.md)
 - [公開確認手順](docs/RELEASE_CHECKLIST.md)
