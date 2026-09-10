@@ -728,3 +728,33 @@ test('P16-01: test指定なしの画面では経験値注入を有効にしな�
   await expect(page.locator('.upgrade-layer')).toHaveCount(0);
   await expect(page.getByTestId('pending-upgrade-button')).toBeDisabled();
 });
+
+
+test('P16-03/07: 3回の再戦で前プレイの保留・停止ボタンが現在のプレイを変更しない', async ({ page }) => {
+  test.setTimeout(60000);
+  await enterBattle(page, '?test=1&upgrade=1&testXp=154&seed=123');
+  for (let run = 0; run < 4; run += 1) {
+    await deferV0Upgrades(page);
+    await page.evaluate(() => {
+      const saved = window as Window & { oldV0Pending?: HTMLButtonElement; oldV0Pause?: HTMLButtonElement };
+      saved.oldV0Pending?.click();
+      saved.oldV0Pause?.click();
+    });
+    await expect(page.locator('.upgrade-layer, .pause-layer')).toHaveCount(0);
+    await expect(page.getByTestId('pending-upgrade-button')).toHaveAccessibleName('強化を選ぶ（1回）');
+    await page.evaluate(() => {
+      const saved = window as Window & { oldV0Pending?: HTMLButtonElement; oldV0Pause?: HTMLButtonElement };
+      saved.oldV0Pending = document.querySelector<HTMLButtonElement>('[data-testid="pending-upgrade-button"]') ?? undefined;
+      saved.oldV0Pause = document.querySelector<HTMLButtonElement>('[data-testid="pause-button"]') ?? undefined;
+    });
+    await page.getByTestId('pause-button').click();
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByRole('button', { name: 'リタイア', exact: true }).click();
+    await expect(page.getByTestId('result-screen')).toBeVisible();
+    await expect(page.locator('.upgrade-layer')).toHaveCount(0);
+    if (run < 3) {
+      await page.getByRole('button', { name: 'もう一度', exact: true }).click();
+      await expect(page.getByTestId('battle-screen')).toBeVisible({ timeout: 8000 });
+    }
+  }
+});

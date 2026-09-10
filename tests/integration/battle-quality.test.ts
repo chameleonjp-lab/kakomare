@@ -8,6 +8,7 @@ import type { BattleResult, UpgradeCandidate, UpgradePayload } from '../../src/t
 
 type BattleModule = {
   BattleScene: new (options: Record<string, unknown>) => unknown;
+  GameHost: new () => { startBattle(mount: unknown, options: Record<string, unknown>): void; requestPendingUpgrade(id: number, runId: number): void; chooseUpgrade(candidate: UpgradeCandidate, id: number, runId: number): void; pause(runId: number): void; retire(runId: number): void; stop(): void };
   Enemy: new (id: number, type: string, angle: number, distance: number) => unknown;
   Weapon: new (id: string, slot: number) => { id: string; level: number; precisionBonus: number; slot: number };
   SupportModule: new (id: string, slot: number) => { id: string; level: number; slot: number };
@@ -47,7 +48,7 @@ async function createBundle(): Promise<void> {
   const output = join(temporaryDirectory, 'battle.mjs');
   await build({
     stdin: {
-      contents: `export { BattleScene } from ${JSON.stringify(join(repositoryRoot, 'src/game/scenes/BattleScene.ts'))}; export { Enemy } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/Enemy.ts'))}; export { Weapon } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/Weapon.ts'))}; export { SupportModule } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/SupportModule.ts'))};`,
+      contents: `export { GameHost } from ${JSON.stringify(join(repositoryRoot, 'src/game/GameHost.ts'))}; export { BattleScene } from ${JSON.stringify(join(repositoryRoot, 'src/game/scenes/BattleScene.ts'))}; export { Enemy } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/Enemy.ts'))}; export { Weapon } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/Weapon.ts'))}; export { SupportModule } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/SupportModule.ts'))};`,
       resolveDir: repositoryRoot,
       sourcefile: 'quality-a-entry.ts',
     },
@@ -60,7 +61,7 @@ async function createBundle(): Promise<void> {
       setup(buildApi) {
         buildApi.onResolve({ filter: /^phaser$/ }, () => ({ path: 'phaser-stub', namespace: 'phaser-test-stub' }));
         buildApi.onLoad({ filter: /.*/, namespace: 'phaser-test-stub' }, () => ({
-          contents: 'export default { Scene: class { constructor() {} } };',
+          contents: 'export default { Scene: class {}, Game: class { destroy() {} }, CANVAS: 1, Scale: { FIT: 1, CENTER_BOTH: 1 } };',
           loader: 'js',
         }));
       },
@@ -347,9 +348,15 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
       kind: 'needle', x: 80, y: 0, vx: 100, vy: 0, radius: 6, damage: 2, life: 2, piercing: 0, sourceWeaponId: 'needle',
     });
     (scene as Record<string, unknown>).specialWaveWarning = { angle: 1, life: 1.2, maxLife: 1.2 };
+    privateValue<Array<{ cooldown: number }>>(scene, 'weapons')[0]!.cooldown = 2.5;
+    (scene as Record<string, unknown>).designerWave = { angle: 2, life: 0.9, maxLife: 1.2 };
+    privateValue<unknown[]>(scene, 'gravityFields').push({
+      x: 150, y: 0, life: 2, maxLife: 3, radius: 50, damage: 5, pullStrength: 20,
+      safeDistance: 80, damageTimer: 0.2, collapse: false, collapseDamage: 9, slowDuration: 0.5,
+    });
     const capture = (): string => JSON.stringify(Object.fromEntries(
       ['elapsed', 'core', 'enemies', 'projectiles', 'weapons', 'gravityFields', 'specialWaveWarning',
-        'spawnDirector', 'progression', 'upgradePayload', 'rng'].map((key) => [key, privateValue<unknown>(scene, key)]),
+        'spawnDirector', 'progression', 'upgradePayload', 'rng', 'designerWave', 'orbitAngles', 'orbitHits', 'targetLocks'].map((key) => [key, privateValue<unknown>(scene, key)]),
     ));
     const before = capture();
     const step = privateValue<(seconds: number) => void>(scene, 'step').bind(scene);
@@ -478,6 +485,59 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     privateValue<(id: number) => void>(scene, 'requestPendingUpgrade').bind(scene)(1);
     expect(privateValue<string>(scene, 'state')).toBe('finished');
     expect(privateValue<unknown>(scene, 'upgradePayload')).toBeNull();
+  });
+
+  it('P16-03: GameHostは前プレイの同じ選択番号と終了後の入力を拒否する', () => {
+    const host = new moduleUnderTest.GameHost();
+    let resultCount = 0;
+    const start = (runId: number): unknown => {
+      host.startBattle({}, options({ runId, callbacks: {
+        onStatus() {}, onUpgrade() {}, onSnapshot() {}, onPauseRequest() {},
+        onFinish() { resultCount += 1; },
+      } }));
+      const scene = privateValue<unknown>(host, 'scene');
+      privateValue<{ addExperience(amount: number): void }>(scene, 'progression').addExperience(154);
+      privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+      for (let choice = 0; choice < 3; choice += 1) {
+        const payload = privateValue<UpgradePayload>(scene, 'upgradePayload');
+        const candidate = payload.candidates[0];
+        if (!candidate) throw new Error('missing candidate');
+        host.chooseUpgrade(candidate, payload.selectionId, runId);
+      }
+      const payload = privateValue<UpgradePayload>(scene, 'upgradePayload');
+      privateValue<(id: number) => void>(scene, 'deferUpgrade').bind(scene)(payload.selectionId);
+      return scene;
+    };
+    const oldScene = start(1);
+    const oldId = privateValue<number>(oldScene, 'upgradeSequence');
+    const scene = start(2);
+    const currentId = privateValue<number>(scene, 'upgradeSequence');
+    expect(currentId).toBe(oldId);
+    const before = JSON.stringify(privateValue<unknown>(scene, 'progression'));
+    host.requestPendingUpgrade(oldId, 1);
+    host.pause(1);
+    host.retire(1);
+    expect(privateValue<boolean>(scene, 'pendingUpgradeDeferred')).toBe(true);
+    expect(privateValue<string>(scene, 'state')).toBe('playing');
+    expect(JSON.stringify(privateValue<unknown>(scene, 'progression'))).toBe(before);
+    expect(resultCount).toBe(0);
+    host.requestPendingUpgrade(currentId, 2);
+    privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1 / 60);
+    const payload = privateValue<UpgradePayload>(scene, 'upgradePayload');
+    const candidate = payload.candidates[0];
+    if (!candidate) throw new Error('missing candidate');
+    host.chooseUpgrade(candidate, payload.selectionId, 1);
+    expect(JSON.stringify(privateValue<unknown>(scene, 'progression'))).toBe(before);
+    host.chooseUpgrade(candidate, payload.selectionId, 2);
+    expect(privateValue<{ pendingChoices: number }>(scene, 'progression').pendingChoices).toBe(0);
+    host.retire(2);
+    host.retire(2);
+    host.requestPendingUpgrade(currentId, 2);
+    expect(resultCount).toBe(1);
+    expect(privateValue<string>(scene, 'state')).toBe('finished');
+    host.stop();
+    host.requestPendingUpgrade(currentId, 2);
+    expect(resultCount).toBe(1);
   });
 
   it('部品確保は結果確定で一度だけ精算し、リタイアでは精算しない', () => {
