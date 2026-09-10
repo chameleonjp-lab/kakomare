@@ -1,0 +1,112 @@
+# カコマレ 拡張実装進行記録
+
+## この記録の扱い
+
+このファイルを拡張計画の作業進行の正本とする。計画本文は [`EXPANSION_IMPLEMENTATION_PLAN.md`](EXPANSION_IMPLEMENTATION_PLAN.md)、旧工程の履歴は [`QUALITY_IMPROVEMENT_PLAN.md`](QUALITY_IMPROVEMENT_PLAN.md) と [`TEST_CHECKLIST.md`](TEST_CHECKLIST.md) に残し、完了表示を相互に上書きしない。
+
+更新日: 2026-09-09（UTC）
+対象工程: PR-1「成長停止と選択画面を直す」
+作業ブランチ: `codex/expansion-pr1-20260909`
+開始時の最新main: `27a8b8846477682446e51c23b5a5a3fd11641feb`
+提出コードコミット: `fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`
+最終CI確認コミット: `62b20e21201ade315a9a504c90dfc718719c5456`（進行記録のみの更新）
+Draft PR: [#16](https://github.com/chameleonjp-lab/kakomare/pull/16)（open / Draft）
+ローカルの最終対応コミット: `f9d72b8`（短い縦画面の同内容のCSS修正を記録。提出ブランチへはGitHub API経由で反映）
+
+担当の扱い: 実装・不具合調査・検査・記録はこの作業セッションで実施した。別エージェントの呼び出しは行っていないため、Sol・Highによる設計支援や独立レビューを実施済みとは記録しない。作品の採否、iPhone実機確認、マージはユーザーの判断とする。
+
+## A01〜A20の対応状況
+
+状態は「未着手／実装中／検査待ち／実機待ち／完了」で管理する。工程の一部だけを実装した項目は、全計画が完了したとは扱わない。
+
+| ID | 計画上の不足 | 対応工程 | 現在の状態 | PR-1で行ったこと・次の境界 |
+|---|---|---|---|---|
+| A01 | 1〜2種類の通常強化が残っても3枚制約で停止する | PR-1 | 完了 | 通常候補を保持し、継続強化で不足分を補完。X01・X02・X04 |
+| A02 | 通常成長を使い切った後の経験値の使い道がない | PR-1、PR-3 | 実装中 | PR-1で兵装研磨・追加外装・部品確保を実装。武器発展・成長ツリーはPR-3 |
+| A03 | レベル・保留中の強化・次の拡張条件が見えない | PR-1 | 完了 | HUDに現在Lv、経験値、保留強化数を分離表示 |
+| A04 | 説明中も戦闘が10%進む | PR-1 | 完了 | 強化・配置確認・構成変更中の本番更新を完全停止 |
+| A05 | 一時停止へ情報を追加し続け、再開操作が遠い | PR-1 | 完了 | 同じ表示領域をメニューと詳細ビューで切り替え、内部操作を固定 |
+| A06 | 3武器・3補助から外側へ拡張できない | PR-2 | 未着手 | PR-1では現在の6枠を維持 |
+| A07 | 武器種を個体識別に兼用している | PR-2 | 未着手 | 個体ID・接続図は後続工程 |
+| A08 | 発射元・反射境界・射程が中心原点前提 | PR-2 | 未着手 | PR-1では既存座標規則を変更していない |
+| A09 | Lv5以後の発展、移設、入替がない | PR-3 | 未着手 | PR-1では追加武器・発展形を実装していない |
+| A10 | 敵の倒す順番を変える編成が未検証 | PR-4、PR-6 | 未着手 | PR-1では敵・HP・ステージを変更していない |
+| A11 | 無限モードの節目が同じボスと数値上昇中心 | PR-4 | 未着手 | PR-1では無限モードを変更していない |
+| A12 | 戦場拡大による接敵時間・射程・迎撃猶予の公平性が未検証 | PR-2、PR-6 | 未着手 | 戦場半径と敵速度を変更していない |
+| A13 | 弾上限に先着した装備だけが有利になるリスク | PR-2、PR-6 | 未着手 | 弾枠の割当は後続工程 |
+| A14 | ブラウザ終了後の長時間プレイ保存がない | PR-5 | 未着手 | 保存v3・途中再開は対象外 |
+| A15 | 未使用装備の一覧が結果画面と再戦を押し下げる | PR-5 | 未着手 | PR-1では結果画面を変更していない |
+| A16 | 拡張前後の得点比較条件がない | PR-5 | 未着手 | ルール版・比較記録は後続工程 |
+| A17 | 研究と成長ツリーに枝分かれがない | PR-3、PR-5 | 未着手 | PR-1では戦闘内の継続強化のみ |
+| A18 | 通常3ステージの後の攻略課題がない | PR-5 | 未着手 | ステージ追加は対象外 |
+| A19 | 長時間本戦と成長枯渇を完成条件にできていない | 全工程、PR-6 | 実装中 | PR-1の停止・成長回帰を追加。360/720試行・無限60試行は未着手 |
+| A20 | マージ済みPRと文書進行表示がずれる | PR-1 | 完了 | 旧文書を履歴として残し、本計画と本記録を追加 |
+
+## PR-1の実装・検査・文書対応
+
+| 作業 | 実装 | 検査 | 文書 | 状態 |
+|---|---|---|---|---|
+| 候補生成を停止させない | `UpgradeSystem.ts`の通常候補優先＋継続候補補完 | X01〜X04、候補生成ユニット | `GAME_RULES.md`、計画5章 | 完了 |
+| 継続強化3種 | 兵装研磨、追加外装、部品確保。加算・保留台帳・リタイア除外 | 継続候補、効果コールバック、精算回帰 | 本記録の仕様変更表 | 完了 |
+| 選択確定を一回にする | `ProgressionSystem`、selectionId、保存候補との再照合 | X05〜X07 | `TEST_CHECKLIST.md` | 完了 |
+| 複数回分と保留 | 3回ごとの選択休止、続行／保留、再開 | 保留・再開統合テスト | `GAME_RULES.md`、UI記録 | 完了 |
+| 戦闘完全停止 | `BattleScene.step`をplaying時だけ実行し、候補表示を更新境界後へ移動 | X08・X09、停止統合テスト | `GAME_RULES.md`、旧10%記載の履歴追記 | 完了 |
+| 現在Lv・経験値・保留数表示 | BattleSnapshotと戦闘HUDを分離表示 | Snapshot型検査、既存UI構築 | `TEST_CHECKLIST.md` | 完了 |
+| 一時停止の詳細表示 | pause menuと詳細 viewを同一領域で切替 | Chromium/WebKitのUI検査 | 本記録の未確認欄 | 完了 |
+| 既存保存の保持 | 保存型・キー・移行処理を変更しない | typecheck・既存保存コード差分確認 | 仕様変更表 | 完了 |
+
+## X01〜X10と追加検査
+
+| ID | 対応テスト | 実行結果 |
+|---|---|---|
+| X01 | `tests/unit/upgrade.test.ts`「keeps the last ordinary support upgrade」 | 成功 |
+| X02 | `tests/unit/upgrade.test.ts`「fills two ordinary choices」 | 成功 |
+| X03 | `tests/unit/upgrade.test.ts`「offers repeatable progress」 | 成功 |
+| X04 | `tests/unit/upgrade.test.ts`「keeps the continuous exits」 | 成功 |
+| X05 | `tests/unit/progression.test.ts`「keeps X05 experience math」 | 成功。Lv27/3085→Lv37/90、次349 |
+| X06 | `tests/integration/battle-quality.test.ts`の選択番号二重送信 | 成功 |
+| X07 | 同テストの古い候補・無効配置先 | 成功 |
+| X08 | 同テストの同時撃破・致死被害 | 成功 |
+| X09 | 同テストの強化中1秒停止 | 成功 |
+| X10 | `tests/e2e/core.spec.ts`「画面回転と非表示からの復帰で戦闘を一時停止する」 | Chromium/WebKit各1件成功。実機Safariは別途確認 |
+| 追加 | 3回選択後の保留と再開 | 成功 |
+| 追加 | 部品確保の一回精算とリタイア時0精算 | 成功 |
+| 追加 | 同一候補を返す引き直しで回数を消費しない | `tests/integration/battle-quality.test.ts`で成功 |
+
+## 仕様変更記録
+
+| 項目 | 旧仕様 | 新仕様 | 理由 | 保存への影響 | 検査結果 |
+|---|---|---|---|---|---|
+| 候補不足 | 関連候補が規定数に満たないと空配列を返し、経験値を保持したまま戦闘を続ける | 残る通常候補を優先し、不足分を継続強化で3枚にする | 獲得済み経験値を必ず選べる状態に戻す | 保存形式・保存キー変更なし | X01〜X04成功 |
+| 継続火力 | なし | 兵装研磨。全武器へ基準威力2%分を加算し、スタックを加算管理 | 既存総倍率の連続乗算を避ける | スタックは現在プレイ内。保存v3へは持ち込まない | 候補生成・callback検査成功 |
+| 継続防衛 | なし | 追加外装。最大耐久力と現在耐久力を2増加 | 満タン時にも有効な出口を持つ | 保存形式・保存キー変更なし | Core回復ロジックを含む検査成功 |
+| 部品確保 | なし | 結果受取台帳へ1を保留。通常終了時に一回だけ精算、リタイアは0 | 途中の重複精算を防ぐ | 既存保存へ即時書込しない | 二重finish・retire検査成功 |
+| 選択確定 | 候補表示時に経験値を消費しレベルを上げる | 有効な候補と配置を再検証し、確定時に一回だけ消費 | 二重タップ・古い入力・無効配置を無害化 | 保存型変更なし | X05〜X07成功 |
+| 強化中の時間 | 戦闘を10%の速度で進める | 戦闘更新を完全停止 | 説明中の被害・予告・攻撃間隔を止める | 保存型変更なし | X08・X09成功 |
+| 複数回経験値 | 1回ずつ自動的に開く前提で、保留UIなし | 3回選択ごとに続行または保留。保留数を表示し再開可能 | まとめて得た経験値を新しい撃破なしで使う | 保存型変更なし。途中保存はPR-5 | 保留・再開統合テスト成功 |
+| 一時停止詳細 | 同じメニューの下へ詳細を追加 | 同じ表示領域のmenu/viewを切替 | 再開・戻る操作を長い一覧から守る | 保存型変更なし | Chromium/WebKit UI検査成功。実機Safariは未確認 |
+| 短い縦画面の戦闘レイアウト | ルート文字拡大時にヘッダー・戦場・HUDをそのまま縦積み | 600px以下の縦画面でHUDを3列化し、戦場を240px以上に維持。500px以下では48pxボタンを収めるヘッダーへ調整 | 保存型変更なし | Quality #35・#39で検出した縦方向超過を修正。Quality #40のChromium/WebKitで成功 |
+
+## 検査状況と未完了事項
+
+完了したローカル検査は `npm ci --ignore-scripts --no-audit --no-fund`、`npm run lint`、`npm run typecheck`、`npm test -- --testTimeout=30000`、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check`。テスト実績は22ファイル・159件すべて成功。ビルドのVite 500 kB超警告は残るが、検査失敗とは扱わない。
+
+ローカルではChromium/WebKitの実行ファイルを取得できず、各26件の起動前検査を実行できない。`agent-browser`のChrome取得も証明書付きCDNの制限で失敗したため、ローカルブラウザ検査は未実施のままとする。一方、最終提出ブランチではGitHub ActionsのChromium/WebKit UI検査が完了した。未完了は、iPhone 17 Pro Safari実機、指定幅・文字200%・回転・VoiceOverの実機確認、通常本戦360試行、無限60試行、30/60/120描画頻度比較、独立レビューである。
+
+GitHub Actionsの記録（提出コードと対応づける）:
+
+- Quality #34（`9d3d6fc3f304995720cb005e034e4aa379785f5c`、[run 34382137064](https://github.com/chameleonjp-lab/kakomare/actions/runs/34382137064)）は静的・単体検査後のChromiumで19件成功・7件失敗。候補を開くテスト用経験値供給の不足と、320x480／文字200%のレイアウト超過を同じブランチで修正した。
+- Quality #35（`c9b4fdb388c1f35407e6ca3423d27deebc170e53`、[run 34382983179](https://github.com/chameleonjp-lab/kakomare/actions/runs/34382983179)）は静的・単体検査成功、Chromium 25件成功・1件失敗。320x568／文字200%でパネル下端620.546875pxが画面569pxを超えたため、ヘッダーと戦場の短画面CSSを修正した。
+- Quality #36（提出コード`9e5baacce6ef2bfc6db6235f1a71ea9327e4da80`、[run 34383693818](https://github.com/chameleonjp-lab/kakomare/actions/runs/34383693818)）はPlaywrightブラウザ導入中のrunner側APT `dl.google.com` `Hash Sum mismatch`で停止。失敗jobを2回再実行したが同じ導入段階で停止し、静的・単体・Chromium・WebKit・buildはこのrunでは未実行である。提出コードの検査成功とは数えない。
+- Quality #37（`df7213c4ce402afd1e5e078a9c0936ab74cabd7b`）は#36と同じPlaywrightブラウザ導入中のrunner側APT `Hash Sum mismatch`で停止したため、成功数へ含めない。
+- Quality #38（`dc34117eea053fcb781d8dae99eac0e724cfc540`、[run 34385160711](https://github.com/chameleonjp-lab/kakomare/actions/runs/34385160711)）は公式Playwrightコンテナへ切り替え後の検査。静的・単体検査は成功したが、Chromiumで320x480と文字200%の縦方向超過が2件失敗した。
+- Quality #39（`014ab0010e73da8ed6482d2aa0bc7ec15ad17308`、[run 34385586081](https://github.com/chameleonjp-lab/kakomare/actions/runs/34385586081)）はヘッダーと戦場の調整後。Chromium 24件成功・2件失敗で、同じ2条件のパネル下端超過が残ったため、HUDを3列化し、500px以下のヘッダー条件を追加した。
+- Quality #40（`fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`、[run 34386165781](https://github.com/chameleonjp-lab/kakomare/actions/runs/34386165781)）は成功。静的・単体検査、Chromium 26件、WebKit 26件、build / verify:dist / verify:originality がすべて成功した。GitHub Actionsのブラウザ検査は実機Safari検査ではない。
+- Quality #41（`2f1c9721acf5043575cdfe95368047b67933d895`、[run 34386848532](https://github.com/chameleonjp-lab/kakomare/actions/runs/34386848532)）は成功。進行記録の検査結果追記後も全ステップが成功した。
+- Quality #42（`e079f00ce26b1554de541842af7c543f1512877a`、[run 34387489431](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387489431)）は成功。コード変更を含まない参照先修正後も全ステップが成功した。
+- Quality #43（`1f8e5482e7931741d921c3314d3e08bf9cd79148`、[run 34387968825](https://github.com/chameleonjp-lab/kakomare/actions/runs/34387968825)）は成功。現在のPR先端に対する全ステップの成功を確認した。
+- Quality #44（`62b20e21201ade315a9a504c90dfc718719c5456`、[run 34388580899](https://github.com/chameleonjp-lab/kakomare/actions/runs/34388580899)）は成功。#43後の進行記録更新を含む最終先端でも全ステップが成功した。
+
+## 中断時の再開情報
+
+最終CI確認コミットは`62b20e21201ade315a9a504c90dfc718719c5456`（コード変更の最終コミットは`fa5f8ce4fadfc2cbb93ccd2db1e39e5d13af580c`）、Draft PRは[#16](https://github.com/chameleonjp-lab/kakomare/pull/16)、最終Quality runは[34388580899](https://github.com/chameleonjp-lab/kakomare/actions/runs/34388580899)である。中断時は、まず `git status --short --branch`、`git log -1 --oneline`、このファイル、Draft PRの未解決コメントを読み、未完了欄の最初の作業から再開する。次工程PR-2は、ユーザーがPR-1をマージした旨を伝え、実際のmainが更新されたことを確認した後に開始する。

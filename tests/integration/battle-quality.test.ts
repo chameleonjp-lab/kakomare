@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
+import type { BattleResult, UpgradeCandidate, UpgradePayload } from '../../src/types/game';
 
 type BattleModule = {
   BattleScene: new (options: Record<string, unknown>) => unknown;
   Enemy: new (id: number, type: string, angle: number, distance: number) => unknown;
+  Weapon: new (id: string, slot: number) => { id: string; level: number; precisionBonus: number; slot: number };
   SupportModule: new (id: string, slot: number) => { id: string; level: number; slot: number };
 };
 
@@ -45,7 +47,7 @@ async function createBundle(): Promise<void> {
   const output = join(temporaryDirectory, 'battle.mjs');
   await build({
     stdin: {
-      contents: `export { BattleScene } from ${JSON.stringify(join(repositoryRoot, 'src/game/scenes/BattleScene.ts'))}; export { Enemy } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/Enemy.ts'))}; export { SupportModule } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/SupportModule.ts'))};`,
+      contents: `export { BattleScene } from ${JSON.stringify(join(repositoryRoot, 'src/game/scenes/BattleScene.ts'))}; export { Enemy } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/Enemy.ts'))}; export { Weapon } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/Weapon.ts'))}; export { SupportModule } from ${JSON.stringify(join(repositoryRoot, 'src/game/entities/SupportModule.ts'))};`,
       resolveDir: repositoryRoot,
       sourcefile: 'quality-a-entry.ts',
     },
@@ -261,5 +263,210 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     const endless = makeScene('endless');
     privateValue<(force: boolean) => void>(endless, 'emitSnapshot').bind(endless)(true);
     expect(snapshots).toEqual([{ timeLimit: 180, isEndless: false }, { timeLimit: Infinity, isEndless: true }]);
+  });
+
+  it('強化候補を表示しても経験値とレベルを消費せず、確定は同じ選択番号で一度だけ行う', () => {
+    const upgrades: Array<{ selectionId: number; candidates: Array<{ id: string; isExisting: boolean; canBan?: boolean }> }> = [];
+    const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
+      onStatus() {}, onFinish() {}, onSnapshot() {}, onPauseRequest() {},
+      onUpgrade: (payload: { selectionId: number; candidates: Array<{ id: string; isExisting: boolean; canBan?: boolean }> }) => upgrades.push(payload),
+    } }));
+    const progression = privateValue<{ addExperience(amount: number): void; level: number; experience: number }>(scene, 'progression');
+    progression.addExperience(25);
+    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    const first = upgrades.at(-1);
+    if (!first) throw new Error('upgrade payload was not emitted');
+    expect(progression.level).toBe(1);
+    expect(progression.experience).toBe(25);
+    const candidate = first.candidates.find((item) => item.isExisting && item.canBan !== false);
+    if (!candidate) throw new Error('ordinary candidate was not emitted');
+    const choice = first.candidates.find((item) => item.id === candidate.id);
+    if (!choice) throw new Error('candidate lookup failed');
+    const fullCandidate = { ...choice, title: '', description: '', before: '', after: '', role: '', kind: 'weapon' as const, targetId: 'needle' as const };
+    (scene as unknown as { chooseUpgrade(candidate: unknown, selectionId: number): void }).chooseUpgrade(fullCandidate, first.selectionId);
+    const levelAfterFirstChoice = progression.level;
+    const experienceAfterFirstChoice = progression.experience;
+    (scene as unknown as { chooseUpgrade(candidate: unknown, selectionId: number): void }).chooseUpgrade(fullCandidate, first.selectionId);
+    expect(progression.level).toBe(levelAfterFirstChoice);
+    expect(progression.experience).toBe(experienceAfterFirstChoice);
+  });
+
+  it('古い候補と無効な配置先は経験値・装備を変更しない', () => {
+    const upgrades: Array<{ selectionId: number; candidates: Array<{ id: string; isExisting: boolean; placementSlots?: number[] }> }> = [];
+    const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
+      onStatus() {}, onFinish() {}, onSnapshot() {}, onPauseRequest() {},
+      onUpgrade: (payload: { selectionId: number; candidates: Array<{ id: string; isExisting: boolean; placementSlots?: number[] }> }) => upgrades.push(payload),
+    } }));
+    const progression = privateValue<{ addExperience(amount: number): void; level: number; experience: number }>(scene, 'progression');
+    progression.addExperience(25);
+    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    const first = upgrades.at(-1);
+    if (!first) throw new Error('upgrade payload was not emitted');
+    const newCandidate = first.candidates.find((candidate) => !candidate.isExisting);
+    if (!newCandidate) throw new Error('new candidate was not emitted');
+    const weaponsBefore = privateValue<Array<{ id: string; slot: number }>>(scene, 'weapons').map((weapon) => ({ ...weapon }));
+    (scene as unknown as { chooseUpgrade(candidate: unknown, selectionId: number): void }).chooseUpgrade(newCandidate, first.selectionId);
+    expect(progression.experience).toBe(25);
+    expect(privateValue<Array<{ id: string; slot: number }>>(scene, 'weapons')).toEqual(weaponsBefore);
+  });
+
+  it('継続強化しかないとき、同じ内容の引き直しで回数を消費しない', () => {
+    const payloads: UpgradePayload[] = [];
+    const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
+      onStatus() {}, onFinish() {}, onSnapshot() {}, onPauseRequest() {},
+      onUpgrade: (payload: UpgradePayload) => payloads.push(payload),
+    } }));
+    const progression = privateValue<{ addExperience(amount: number): void }>(scene, 'progression');
+    const ordinary = privateValue<() => UpgradeCandidate[]>(scene, 'createCandidates').bind(scene)()
+      .filter((candidate) => candidate.canBan !== false);
+    const banned = privateValue<Set<string>>(scene, 'banned');
+    for (const candidate of ordinary) banned.add(candidate.id);
+    for (const id of ['needle', 'ray', 'cluster', 'repulse', 'chain', 'orbit', 'disc', 'gravity']) banned.add(`weapon:${id}:new`);
+    for (const id of ['output', 'rhythm', 'branch', 'focus', 'observe', 'brake']) banned.add(`support:${id}:new`);
+    banned.add('weapon:needle:level');
+    banned.add('weapon:needle:focus');
+    (scene as unknown as { bansLeft: number }).bansLeft = 99;
+    progression.addExperience(25);
+    privateValue<() => boolean>(scene, 'openUpgrade').bind(scene)();
+    const payload = payloads.at(-1);
+    if (!payload || payload.phase !== 'selection') throw new Error('continuous selection payload was not emitted');
+    expect(payload.candidates.every((candidate) => candidate.kind === 'continuous')).toBe(true);
+    const before = privateValue<number>(scene, 'rerollsLeft');
+    (scene as unknown as { rerollUpgrade(selectionId: number): void }).rerollUpgrade(payload.selectionId);
+    const after = payloads.at(-1);
+    expect(privateValue<number>(scene, 'rerollsLeft')).toBe(before);
+    expect(after?.selectionId).toBe(payload.selectionId);
+  });
+
+  it('強化画面では1秒経っても戦闘時計・敵・弾・耐久が進まない', () => {
+    const scene = new moduleUnderTest.BattleScene(options());
+    const progression = privateValue<{ addExperience(amount: number): void }>(scene, 'progression');
+    progression.addExperience(25);
+    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    const enemy = new moduleUnderTest.Enemy(1, 'shard', 0, 220) as Record<string, number | boolean>;
+    privateValue<unknown[]>(scene, 'enemies').push(enemy);
+    const addProjectile = privateValue<(config: Record<string, unknown>) => unknown>(scene, 'addProjectile').bind(scene);
+    addProjectile({ kind: 'needle', x: 0, y: 0, vx: 100, vy: 0, radius: 6, damage: 2, life: 2, piercing: 0, sourceWeaponId: 'needle' });
+    const before = {
+      elapsed: privateValue<number>(scene, 'elapsed'),
+      health: privateValue<{ health: number }>(scene, 'core').health,
+      enemyX: Number(enemy.x),
+      projectileX: Number(privateValue<Array<{ x: number }>>(scene, 'projectiles')[0]?.x),
+    };
+    privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1);
+    expect(privateValue<number>(scene, 'elapsed')).toBe(before.elapsed);
+    expect(privateValue<{ health: number }>(scene, 'core').health).toBe(before.health);
+    expect(enemy.x).toBe(before.enemyX);
+    expect(privateValue<Array<{ x: number }>>(scene, 'projectiles')[0]?.x).toBe(before.projectileX);
+  });
+
+  it('同時撃破と致死被害では終了を優先し、強化候補を残さない', () => {
+    let upgradeCount = 0;
+    let finishCount = 0;
+    const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
+      onStatus() {}, onFinish: () => { finishCount += 1; }, onSnapshot() {}, onPauseRequest() {},
+      onUpgrade: () => { upgradeCount += 1; },
+    } }));
+    privateValue<{ addExperience(amount: number): void }>(scene, 'progression').addExperience(25);
+    const destroyed = new moduleUnderTest.Enemy(1, 'shard', 0, 200) as Record<string, number | boolean>;
+    privateValue<(enemy: unknown) => void>(scene, 'handleEnemyDestroyed').bind(scene)(destroyed);
+    privateValue<{ health: number }>(scene, 'core').health = 0;
+    privateValue<(seconds: number) => void>(scene, 'step').bind(scene)(1 / 60);
+    expect(finishCount).toBe(1);
+    expect(upgradeCount).toBe(0);
+    expect(privateValue<string>(scene, 'state')).toBe('finished');
+  });
+
+  it('3回選択後に保留でき、再開操作で残りの強化を新しい撃破なしに選べる', () => {
+    const payloads: UpgradePayload[] = [];
+    const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
+      onStatus() {}, onFinish() {}, onSnapshot() {}, onPauseRequest() {},
+      onUpgrade: (payload: UpgradePayload) => payloads.push(payload),
+    } }));
+    const progression = privateValue<{ addExperience(amount: number): void; pendingChoices: number }>(scene, 'progression');
+    // Lv1から4回分: 25 + 34 + 43 + 52 = 154.
+    progression.addExperience(154);
+    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    for (let choice = 0; choice < 3; choice += 1) {
+      const payload = payloads.at(-1);
+      if (!payload || payload.phase !== 'selection') throw new Error('selection payload was not emitted');
+      const candidate = payload.candidates.find((item) => item.kind === 'continuous') ?? payload.candidates[0];
+      if (!candidate) throw new Error('candidate was not emitted');
+      (scene as unknown as { chooseUpgrade(candidate: UpgradeCandidate, selectionId: number): void }).chooseUpgrade(candidate, payload.selectionId);
+    }
+    const breakPayload = payloads.at(-1);
+    expect(breakPayload?.phase).toBe('break');
+    expect(progression.pendingChoices).toBe(1);
+    if (!breakPayload) throw new Error('break payload was not emitted');
+    (scene as unknown as { deferUpgrade(selectionId: number): void }).deferUpgrade(breakPayload.selectionId);
+    expect(privateValue<string>(scene, 'state')).toBe('playing');
+    expect(progression.pendingChoices).toBe(1);
+
+    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    const resumed = payloads.at(-1);
+    if (!resumed || resumed.phase !== 'selection') throw new Error('resumed selection payload was not emitted');
+    expect(resumed.pendingCount).toBe(1);
+    const finalCandidate = resumed.candidates.find((item) => item.kind === 'continuous') ?? resumed.candidates[0];
+    if (!finalCandidate) throw new Error('resumed candidate was not emitted');
+    (scene as unknown as { chooseUpgrade(candidate: UpgradeCandidate, selectionId: number): void }).chooseUpgrade(finalCandidate, resumed.selectionId);
+    expect(progression.pendingChoices).toBe(0);
+    expect(privateValue<string>(scene, 'state')).toBe('playing');
+  });
+
+  it('部品確保は結果確定で一度だけ精算し、リタイアでは精算しない', () => {
+    type WeaponProgression = { id: string; slot: number; level: number; precisionBonus: number; definition: { maxLevel: number } };
+    type SupportProgression = { level: number; definition: { maxLevel: number } };
+    const fillOrdinaryCaps = (run: unknown): void => {
+      const weapons = privateValue<WeaponProgression[]>(run, 'weapons');
+      for (const weapon of weapons) { weapon.level = weapon.definition.maxLevel; weapon.precisionBonus = 2; }
+      for (const [id, slot] of [['ray', 1], ['cluster', 2]] as const) {
+        const weapon = new moduleUnderTest.Weapon(id, slot) as unknown as WeaponProgression;
+        weapon.level = weapon.definition.maxLevel;
+        weapon.precisionBonus = 2;
+        weapons.push(weapon);
+      }
+      const supports = privateValue<SupportProgression[]>(run, 'supports');
+      for (const [id, slot] of [['output', 0], ['rhythm', 1], ['brake', 2]] as const) {
+        const support = new moduleUnderTest.SupportModule(id, slot) as unknown as SupportProgression;
+        support.level = support.definition.maxLevel;
+        supports.push(support);
+      }
+    };
+    const results: BattleResult[] = [];
+    const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
+      onStatus() {}, onUpgrade() {}, onSnapshot() {}, onPauseRequest() {},
+      onFinish: (result: BattleResult) => results.push(result),
+    } }));
+    fillOrdinaryCaps(scene);
+    const progression = privateValue<{ addExperience(amount: number): void }>(scene, 'progression');
+    progression.addExperience(25);
+    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    const payload = privateValue<UpgradePayload | null>(scene, 'upgradePayload');
+    if (!payload) throw new Error('upgrade payload was not emitted');
+    const parts = payload.candidates.find((candidate) => candidate.id === 'continuous:parts');
+    if (!parts) throw new Error('parts candidate was not emitted');
+    (scene as unknown as { chooseUpgrade(candidate: UpgradeCandidate, selectionId: number): void }).chooseUpgrade(parts, payload.selectionId);
+    privateValue<(outcome: BattleResult['outcome'], cause: string) => void>(scene, 'finish').bind(scene)('victory', '');
+    privateValue<(outcome: BattleResult['outcome'], cause: string) => void>(scene, 'finish').bind(scene)('victory', '');
+    expect(results).toHaveLength(1);
+    expect(results[0]?.partsEarned).toBe(21);
+
+    const retiredResults: BattleResult[] = [];
+    const retiredScene = new moduleUnderTest.BattleScene(options({ callbacks: {
+      onStatus() {}, onUpgrade() {}, onSnapshot() {}, onPauseRequest() {},
+      onFinish: (result: BattleResult) => retiredResults.push(result),
+    } }));
+    fillOrdinaryCaps(retiredScene);
+    const retiredProgression = privateValue<{ addExperience(amount: number): void }>(retiredScene, 'progression');
+    retiredProgression.addExperience(25);
+    privateValue<() => void>(retiredScene, 'openUpgrade').bind(retiredScene)();
+    const retiredPayload = privateValue<UpgradePayload | null>(retiredScene, 'upgradePayload');
+    if (!retiredPayload) throw new Error('retire upgrade payload was not emitted');
+    const retiredParts = retiredPayload.candidates.find((candidate) => candidate.id === 'continuous:parts');
+    if (!retiredParts) throw new Error('retire parts candidate was not emitted');
+    (retiredScene as unknown as { chooseUpgrade(candidate: UpgradeCandidate, selectionId: number): void }).chooseUpgrade(retiredParts, retiredPayload.selectionId);
+    retiredScene.retire();
+    expect(retiredResults).toHaveLength(1);
+    expect(retiredResults[0]?.partsEarned).toBe(0);
   });
 });

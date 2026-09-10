@@ -55,9 +55,11 @@ export class GameHost {
     });
   }
 
-  public chooseUpgrade(candidate: UpgradeCandidate): void { this.scene?.chooseUpgrade(candidate); }
-  public rerollUpgrade(): void { this.scene?.rerollUpgrade(); }
-  public banUpgrade(candidateId: string): void { this.scene?.banUpgrade(candidateId); }
+  public chooseUpgrade(candidate: UpgradeCandidate, selectionId: number): void { this.scene?.chooseUpgrade(candidate, selectionId); }
+  public rerollUpgrade(selectionId: number): void { this.scene?.rerollUpgrade(selectionId); }
+  public banUpgrade(candidateId: string, selectionId: number): void { this.scene?.banUpgrade(candidateId, selectionId); }
+  public continueUpgrade(selectionId: number): void { this.scene?.continueUpgrade(selectionId); }
+  public deferUpgrade(selectionId: number): void { this.scene?.deferUpgrade(selectionId); }
   public pause(): void { this.scene?.pause(); }
   public resume(): void { this.scene?.resume(); }
   public retire(): void { this.scene?.retire(); }

@@ -7,6 +7,17 @@ import { Weapon } from '../entities/Weapon';
 import { DEVICE_SLOT_COUNT } from '../deviceLayout';
 import { DeterministicRng } from './SpawnDirector';
 
+export type ContinuousUpgradeId = 'polish' | 'armor' | 'parts';
+
+export interface ContinuousUpgradeState {
+  weaponPolishStacks?: number;
+  pendingPartsBonus?: number;
+}
+
+export interface UpgradeApplicationCallbacks {
+  onContinuous?: (id: ContinuousUpgradeId) => void;
+}
+
 export function createUpgradeCandidateList(
   weapons: Weapon[],
   supports: SupportModule[],
@@ -14,6 +25,7 @@ export function createUpgradeCandidateList(
   rng: DeterministicRng,
   banned: Set<string>,
   coreMaxHealth = 100,
+  continuousState: ContinuousUpgradeState = {},
 ): UpgradeCandidate[] {
   const existing: UpgradeCandidate[] = [];
   const newItems: UpgradeCandidate[] = [];
@@ -87,15 +99,15 @@ export function createUpgradeCandidateList(
   const related = uniqueCandidates(orderedExisting, banned);
   const additions = uniqueCandidates(shuffle(newItems, rng), banned);
 
-  // A displayed choice must always satisfy the three-card contract. Returning
-  // an incomplete list would either violate the two-related/one-new limits or
-  // leave the battle waiting on a choice that cannot be made safely.
-  if (additions.length > 0) {
-    if (related.length < 2) return [];
-    return [...related.slice(0, 2), additions[0]!];
-  }
-  if (related.length < 3) return [];
-  return related.slice(0, 3);
+  // The old two-related/one-new ratio is a preference, not a gate. When only
+  // one or two normal choices remain, keep them and fill the rest with
+  // repeatable progress. A candidate list is therefore always actionable,
+  // even after every device has reached its normal cap or has been banned.
+  const normal = additions.length > 0
+    ? [...related.slice(0, 2), additions[0]!]
+    : related.slice(0, 3);
+  const continuous = createContinuousCandidates(coreHealth, coreMaxHealth, continuousState);
+  return [...normal, ...continuous].slice(0, 3);
 }
 
 function uniqueCandidates(candidates: UpgradeCandidate[], banned: Set<string>): UpgradeCandidate[] {
@@ -111,6 +123,37 @@ function newWeaponCandidate(id: WeaponId): UpgradeCandidate {
 function newSupportCandidate(id: SupportId): UpgradeCandidate {
   const definition = SUPPORTS[id];
   return { id: `support:${id}:new`, kind: 'support', targetId: id, title: `${definition.name} Lv1`, description: definition.description, before: '空き面', after: definition.levels[0].label, role: definition.role, isExisting: false };
+}
+
+function createContinuousCandidates(coreHealth: number, coreMaxHealth: number, state: ContinuousUpgradeState): UpgradeCandidate[] {
+  const weaponPolishStacks = Math.max(0, Math.floor(state.weaponPolishStacks ?? 0));
+  const pendingPartsBonus = Math.max(0, Math.floor(state.pendingPartsBonus ?? 0));
+  return [
+    {
+      id: 'continuous:polish', kind: 'continuous', targetId: 'polish',
+      title: '兵装研磨',
+      description: 'すべての武器へ、基準威力の2%分を加算します。既存の倍率へ連続乗算しません。',
+      before: `全武器 基準威力 +${weaponPolishStacks * 2}%`,
+      after: `全武器 基準威力 +${(weaponPolishStacks + 1) * 2}%`,
+      role: '継続火力', isExisting: true, canBan: false,
+    },
+    {
+      id: 'continuous:armor', kind: 'continuous', targetId: 'armor',
+      title: '追加外装',
+      description: 'コアの最大耐久力と現在耐久力を2ずつ増やします。満タンでも有効です。',
+      before: `最大${Math.round(coreMaxHealth)} / 現在${Math.round(coreHealth)}`,
+      after: `最大${Math.round(coreMaxHealth + 2)} / 現在${Math.round(Math.min(coreMaxHealth + 2, coreHealth + 2))}`,
+      role: '継続防衛', isExisting: true, canBan: false,
+    },
+    {
+      id: 'continuous:parts', kind: 'continuous', targetId: 'parts',
+      title: '部品確保',
+      description: 'このプレイが結果確定したときに受け取る部品を1つ増やします。リタイアでは精算しません。',
+      before: `結果精算時 +${pendingPartsBonus}部品`,
+      after: `結果精算時 +${pendingPartsBonus + 1}部品`,
+      role: '継続報酬', isExisting: true, canBan: false,
+    },
+  ];
 }
 
 function shuffle<T>(items: T[], rng: DeterministicRng): T[] {
@@ -135,27 +178,63 @@ function branchEffectLabel(damageMultiplier?: number, cooldownMultiplier?: numbe
   return effects.length > 0 ? effects.join(' / ') : '固有効果を追加';
 }
 
-export function applyUpgradeCandidate(candidate: UpgradeCandidate, weapons: Weapon[], supports: SupportModule[], heal: (amount: number) => void): void {
-  if (candidate.kind === 'repair') { heal(20); return; }
+export function applyUpgradeCandidate(
+  candidate: UpgradeCandidate,
+  weapons: Weapon[],
+  supports: SupportModule[],
+  heal: (amount: number) => void,
+  callbacks: UpgradeApplicationCallbacks = {},
+): boolean {
+  if (candidate.kind === 'repair') { heal(20); return true; }
+  if (candidate.kind === 'continuous') {
+    if (candidate.targetId !== 'polish' && candidate.targetId !== 'armor' && candidate.targetId !== 'parts') return false;
+    callbacks.onContinuous?.(candidate.targetId);
+    return true;
+  }
   if (candidate.kind === 'weapon') {
+    if (candidate.id.endsWith(':new')) {
+      const placementSlot = resolvePlacementSlot(candidate.placementSlot, weapons.map((item) => item.slot));
+      if (weapons.some((item) => item.slot === placementSlot)) return false;
+      weapons.push(new Weapon(candidate.targetId as WeaponId, placementSlot));
+      return true;
+    }
     const weapon = weapons.find((item) => item.id === candidate.targetId);
-    if (candidate.id.endsWith(':new')) weapons.push(new Weapon(candidate.targetId as WeaponId, resolvePlacementSlot(candidate.placementSlot, weapons.map((item) => item.slot))));
-    else if (weapon && candidate.id.includes(':focus')) weapon.precisionBonus += 1;
-    else if (weapon) {
+    if (!weapon) return false;
+    if (candidate.id.includes(':focus')) {
+      if (weapon.precisionBonus >= 2) return false;
+      weapon.precisionBonus += 1;
+      return true;
+    }
+    if (weapon) {
       const parts = candidate.id.split(':');
       const branchIndex = parts.indexOf('branch');
       if (branchIndex >= 0) {
         const nextLevel = Number(parts[branchIndex + 2]);
+        if (!Number.isInteger(nextLevel) || nextLevel !== weapon.level + 1 || nextLevel > weapon.definition.maxLevel) return false;
         if (nextLevel === 5) weapon.finalBranch = parts[branchIndex + 1] as Weapon['finalBranch'];
         else weapon.branch = parts[branchIndex + 1] as Weapon['branch'];
         weapon.level = Math.min(weapon.definition.maxLevel, weapon.level + 1);
-      } else weapon.level = Math.min(weapon.definition.maxLevel, weapon.level + 1);
+        return true;
+      }
+      if (weapon.level >= weapon.definition.maxLevel) return false;
+      weapon.level = Math.min(weapon.definition.maxLevel, weapon.level + 1);
+      return true;
     }
-    return;
+    return false;
   }
-  const support = supports.find((item) => item.id === candidate.targetId);
-  if (candidate.id.endsWith(':new')) supports.push(new SupportModule(candidate.targetId as SupportId, resolvePlacementSlot(candidate.placementSlot, supports.map((item) => item.slot))));
-  else if (support) support.level = Math.min(support.definition.maxLevel, support.level + 1);
+  if (candidate.kind === 'support') {
+    if (candidate.id.endsWith(':new')) {
+      const placementSlot = resolvePlacementSlot(candidate.placementSlot, supports.map((item) => item.slot));
+      if (supports.some((item) => item.slot === placementSlot)) return false;
+      supports.push(new SupportModule(candidate.targetId as SupportId, placementSlot));
+      return true;
+    }
+    const support = supports.find((item) => item.id === candidate.targetId);
+    if (!support || support.level >= support.definition.maxLevel) return false;
+    support.level = Math.min(support.definition.maxLevel, support.level + 1);
+    return true;
+  }
+  return false;
 }
 
 function resolvePlacementSlot(requestedSlot: number | undefined, occupiedSlots: number[]): number {

@@ -242,9 +242,11 @@ export class AppController {
     const maxCore = getResearchEffects(this.state.save).maxCore;
     const health = this.hudItem('耐久力', `${maxCore} / ${maxCore}`, 'hud-health');
     const time = this.hudItem(STAGES[this.state.selectedStage].isEndless ? '経過時間' : '残り時間', STAGES[this.state.selectedStage].isEndless ? '0秒' : `${Math.ceil(STAGES[this.state.selectedStage].timeLimit)}秒`, 'hud-time');
+    const level = this.hudItem('現在Lv', 'Lv1', 'hud-level');
     const xp = this.hudItem('経験値', '0 / 25', 'hud-xp');
+    const pending = this.hudItem('保留強化', '0回', 'hud-pending');
     const score = this.hudItem('得点', '0', 'hud-score');
-    hud.append(health, time, xp, score);
+    hud.append(health, time, level, xp, pending, score);
     panel.append(hud);
     const build = element('div', 'build-panel'); build.dataset.testid = 'build-panel';
     build.append(element('h2', '', '六角装置'));
@@ -276,7 +278,7 @@ export class AppController {
       callbacks: {
         onSnapshot: (snapshot) => {
           this.latestBattleSnapshot = snapshot;
-          this.updateBattleHud(snapshot, health, time, xp, score, aimState, buildList);
+          this.updateBattleHud(snapshot, health, time, level, xp, pending, score, aimState, buildList);
         },
         onUpgrade: (payload) => this.showUpgrade(payload, shell),
         onFinish: (result) => { window.setTimeout(() => this.finishBattle(result), 0); },
@@ -294,14 +296,18 @@ export class AppController {
     return item;
   }
 
-  private updateBattleHud(snapshot: BattleSnapshot, health: HTMLElement, time: HTMLElement, xp: HTMLElement, score: HTMLElement, aimState: HTMLElement, buildList: HTMLElement): void {
+  private updateBattleHud(snapshot: BattleSnapshot, health: HTMLElement, time: HTMLElement, level: HTMLElement, xp: HTMLElement, pending: HTMLElement, score: HTMLElement, aimState: HTMLElement, buildList: HTMLElement): void {
     const healthValue = health.querySelector<HTMLElement>('[data-testid="hud-health"]');
     const timeValue = time.querySelector<HTMLElement>('[data-testid="hud-time"]');
+    const levelValue = level.querySelector<HTMLElement>('[data-testid="hud-level"]');
     const xpValue = xp.querySelector<HTMLElement>('[data-testid="hud-xp"]');
+    const pendingValue = pending.querySelector<HTMLElement>('[data-testid="hud-pending"]');
     const scoreValue = score.querySelector<HTMLElement>('[data-testid="hud-score"]');
     if (healthValue) healthValue.textContent = `${Math.max(0, Math.round(snapshot.core))} / ${snapshot.maxCore}`;
     if (timeValue) timeValue.textContent = snapshot.isEndless ? `${Math.floor(snapshot.elapsed)}秒` : `${Math.max(0, Math.ceil(snapshot.timeLimit - snapshot.elapsed))}秒`;
+    if (levelValue) levelValue.textContent = `Lv${snapshot.level}`;
     if (xpValue) xpValue.textContent = `${Math.floor(snapshot.experience)} / ${snapshot.nextExperience}`;
+    if (pendingValue) pendingValue.textContent = `${snapshot.pendingUpgrades}回`;
     if (scoreValue) scoreValue.textContent = snapshot.score.toLocaleString('ja-JP');
     aimState.textContent = snapshot.manualAim ? '手動照準中' : '自動照準';
     const loadout: string[] = [];
@@ -316,6 +322,10 @@ export class AppController {
 
   private showUpgrade(payload: UpgradePayload, shell: HTMLElement): void {
     this.removeModal(shell, '.upgrade-layer');
+    if (payload.phase === 'break') {
+      this.showUpgradeBreak(payload, shell);
+      return;
+    }
     if (payload.candidates.length === 0) {
       this.battleUpgradeOpen = false;
       if (shell.querySelector('.pause-layer, .resume-layer')) this.setBattleContentInert(shell, true);
@@ -328,10 +338,12 @@ export class AppController {
     const dialog = element('div', 'modal-dialog');
     dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'upgrade-title'); dialog.tabIndex = -1;
     dialog.append(element('p', 'eyebrow', '装置を更新')); const title = element('h2', '', '強化候補を1つ選ぶ'); title.id = 'upgrade-title'; dialog.append(title);
-    dialog.append(element('p', 'modal-copy', '戦闘速度を落としています。変更前と変更後を確認してください。'));
+    dialog.append(element('p', 'modal-copy', '戦闘を完全に停止しています。変更前と変更後を確認してください。'));
+    dialog.append(element('p', 'upgrade-pending', `未選択の強化 ${payload.pendingCount}回`));
     if (getResearchEffects(this.state.save).candidateDetails) dialog.append(element('p', 'modal-copy', '詳細解析: 数値の変化と得意な敵を表示しています。'));
     const list = element('div', 'upgrade-list');
     let locked = true;
+    const selectionId = payload.selectionId;
     const candidateButtons: Array<{ button: HTMLButtonElement; candidate: UpgradeCandidate }> = [];
     const selectionButtons: HTMLButtonElement[] = [];
     let selectedIndex = 0;
@@ -353,7 +365,7 @@ export class AppController {
       if (candidate.isExisting) {
         selectionButtons.push(choose);
         choose.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(choose); });
-        choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate); });
+        choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate, selectionId); });
       } else {
         choose.setAttribute('aria-disabled', 'true');
         choose.title = '装着する面を下から選んでください';
@@ -368,7 +380,7 @@ export class AppController {
           placement.addEventListener('click', () => {
             if (locked) return;
             locked = true;
-            this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot });
+            this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot }, selectionId);
           });
           selectionButtons.push(placement);
           placementList.append(placement);
@@ -379,11 +391,12 @@ export class AppController {
       if (getResearchEffects(this.state.save).candidateDetails && candidate.details) card.append(element('p', 'upgrade-details', candidate.details));
       const ban = button('この候補を除外', 'button button-small upgrade-ban');
       ban.disabled = true;
+      if (candidate.canBan === false) ban.title = '成長を止めないため除外できません';
       ban.addEventListener('click', () => {
         if (locked || ban.disabled) return;
         locked = true;
         ban.disabled = true;
-        this.gameHost.banUpgrade(candidate.id);
+        this.gameHost.banUpgrade(candidate.id, selectionId);
       });
       card.append(ban);
       card.addEventListener('click', (event) => {
@@ -397,7 +410,7 @@ export class AppController {
       locked = false;
       candidateButtons.forEach(({ button, candidate }) => { button.disabled = !candidate.isExisting || candidate.requiresNewItemFirst === true; });
       selectionButtons.forEach((selection) => { if (selection.classList.contains('upgrade-placement')) selection.disabled = false; });
-      list.querySelectorAll<HTMLButtonElement>('.upgrade-ban').forEach((ban) => { ban.disabled = payload.bansLeft <= 0; });
+      list.querySelectorAll<HTMLButtonElement>('.upgrade-ban').forEach((ban, index) => { ban.disabled = payload.bansLeft <= 0 || payload.candidates[index]?.canBan === false; });
     }, 150);
     const moveSelection = (direction: 1 | -1): void => {
       for (let offset = 1; offset <= selectionButtons.length; offset += 1) {
@@ -429,13 +442,45 @@ export class AppController {
       if (locked || reroll.disabled) return;
       locked = true;
       reroll.disabled = true;
-      this.gameHost.rerollUpgrade();
+      this.gameHost.rerollUpgrade(selectionId);
     });
     footer.append(reroll);
     dialog.append(footer); layer.append(dialog); shell.append(layer);
     this.trapFocus(dialog);
     window.setTimeout(() => { if (layer.isConnected) reroll.disabled = payload.rerollsLeft <= 0; }, 150);
     window.setTimeout(() => selectionButtons.find((choice) => !choice.disabled)?.focus(), 160);
+  }
+
+  private showUpgradeBreak(payload: UpgradePayload, shell: HTMLElement): void {
+    this.battleUpgradeOpen = true;
+    this.setBattleContentInert(shell, true);
+    const layer = element('div', 'modal-layer upgrade-layer');
+    const dialog = element('div', 'modal-dialog');
+    dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'upgrade-break-title'); dialog.tabIndex = -1;
+    dialog.append(element('p', 'eyebrow', '強化を保留')); const title = element('h2', '', '続けて成長しますか？'); title.id = 'upgrade-break-title'; dialog.append(title);
+    dialog.append(element('p', 'modal-copy', `未選択の強化が${payload.pendingCount}回あります。戦闘は停止したままです。`));
+    const actions = element('div', 'modal-footer');
+    let locked = false;
+    const continueButton = button(`続けて選ぶ（残り${payload.pendingCount}回）`, 'button button-primary button-large');
+    continueButton.addEventListener('click', () => {
+      if (locked) return;
+      locked = true;
+      continueButton.disabled = true;
+      deferButton.disabled = true;
+      this.gameHost.continueUpgrade(payload.selectionId);
+    });
+    const deferButton = button('残りを保留して戦闘へ戻る', 'button button-secondary button-large');
+    deferButton.addEventListener('click', () => {
+      if (locked) return;
+      locked = true;
+      continueButton.disabled = true;
+      deferButton.disabled = true;
+      this.gameHost.deferUpgrade(payload.selectionId);
+    });
+    actions.append(continueButton, deferButton);
+    dialog.append(actions); layer.append(dialog); shell.append(layer);
+    this.trapFocus(dialog);
+    window.setTimeout(() => continueButton.focus(), 0);
   }
 
   private openPause(fromVisibility: boolean, reason = ''): void {
@@ -465,8 +510,11 @@ export class AppController {
     const copy = element('p', 'modal-copy', '再開するまでゲーム時間と敵の動きを止めています。'); copy.id = 'pause-copy';
     dialog.setAttribute('aria-labelledby', titleNode.id); dialog.setAttribute('aria-describedby', copy.id);
     dialog.append(element('p', 'eyebrow', '一時停止'), titleNode, copy);
+    const pauseMenu = element('div', 'pause-menu');
+    const pauseView = element('div', 'pause-view');
+    pauseView.hidden = true;
     const resume = button('再開', 'button button-primary button-large'); resume.dataset.testid = 'resume-button';
-    resume.addEventListener('click', () => {
+    const resumeBattle = (): void => {
       if (resume.disabled) return;
       resume.disabled = true;
       layer.remove();
@@ -476,24 +524,37 @@ export class AppController {
         this.audio.cue('resume');
         this.restoreBattleFocus(shell);
       }
-    });
-    const rules = button('遊び方'); rules.addEventListener('click', () => this.showPauseRules(dialog));
-    const loadout = button('装置を確認'); loadout.addEventListener('click', () => this.showPauseLoadout(dialog));
-    const settings = button('音量と演出'); settings.addEventListener('click', () => this.showPauseSettings(dialog));
+    };
+    resume.addEventListener('click', resumeBattle);
+    const showMenu = (): void => {
+      pauseView.replaceChildren();
+      pauseView.hidden = true;
+      pauseMenu.hidden = false;
+      window.setTimeout(() => resume.focus(), 0);
+    };
+    const rules = button('遊び方'); rules.addEventListener('click', () => this.showPauseRules(pauseMenu, pauseView, showMenu, resumeBattle));
+    const loadout = button('装置を確認'); loadout.addEventListener('click', () => this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle));
+    const settings = button('音量と演出'); settings.addEventListener('click', () => this.showPauseSettings(pauseMenu, pauseView, showMenu, resumeBattle));
     const retire = button('リタイア', 'button button-danger'); retire.addEventListener('click', () => { if (window.confirm('このプレイを終了しますか？得点は確定しません。')) this.gameHost.retire(); });
     const home = button('ホームへ戻る'); home.addEventListener('click', () => { if (window.confirm('プレイを終了してホームへ戻りますか？')) { this.gameHost.stop(); this.runLifecycle.cancel(); this.render('home'); } });
-    dialog.append(resume, rules, loadout, settings, retire, home); layer.append(dialog); shell.append(layer);
+    pauseMenu.append(resume, rules, loadout, settings, retire, home);
+    dialog.append(pauseMenu, pauseView); layer.append(dialog); shell.append(layer);
     this.trapFocus(dialog);
     window.setTimeout(() => resume.focus(), 0);
   }
 
-  private showPauseRules(dialog: HTMLElement): void {
-    const copy = element('div', 'pause-rules'); copy.append(element('h3', '', '操作'), element('p', '', '戦場を1本指でドラッグすると、その方向を短時間優先します。強化候補は1回タップで選びます。'));
-    const close = button('一時停止へ戻る'); close.addEventListener('click', () => copy.remove()); copy.append(close); dialog.append(copy);
+  private showPauseRules(menu: HTMLElement, view: HTMLElement, back: () => void, resume: () => void): void {
+    menu.hidden = true;
+    view.hidden = false;
+    const copy = element('div', 'pause-rules');
+    copy.append(element('h3', '', '操作'), element('p', '', '戦場を1本指でドラッグすると、その方向を短時間優先します。強化候補は1回タップで選びます。'));
+    this.appendPauseViewActions(copy, back, resume);
+    view.append(copy);
   }
 
-  private showPauseLoadout(dialog: HTMLElement): void {
-    if (dialog.querySelector('.pause-loadout')) return;
+  private showPauseLoadout(menu: HTMLElement, view: HTMLElement, back: () => void, resume: () => void): void {
+    menu.hidden = true;
+    view.hidden = false;
     const copy = element('div', 'pause-rules pause-loadout');
     copy.dataset.testid = 'pause-loadout';
     copy.append(element('h3', '', '現在の装置'));
@@ -512,11 +573,13 @@ export class AppController {
     const list = element('ul', 'loadout-list');
     for (const item of loadout) list.append(element('li', '', item));
     copy.append(list);
-    const close = button('一時停止へ戻る'); close.addEventListener('click', () => copy.remove()); copy.append(close); dialog.append(copy);
+    this.appendPauseViewActions(copy, back, resume);
+    view.append(copy);
   }
 
-  private showPauseSettings(dialog: HTMLElement): void {
-    if (dialog.querySelector('.pause-settings')) return;
+  private showPauseSettings(menu: HTMLElement, view: HTMLElement, back: () => void, resume: () => void): void {
+    menu.hidden = true;
+    view.hidden = false;
     const box = element('div', 'pause-settings');
     box.append(element('h3', '', '音量と演出'));
     const label = element('label', 'setting-row', '効果音');
@@ -527,7 +590,19 @@ export class AppController {
       this.commitSave(next);
       this.audio.setVolume(next.settings.audio);
     });
-    label.append(input); box.append(label); dialog.append(box);
+    label.append(input); box.append(label);
+    this.appendPauseViewActions(box, back, resume);
+    view.append(box);
+  }
+
+  private appendPauseViewActions(container: HTMLElement, back: () => void, resume: () => void): void {
+    const actions = element('div', 'pause-view-actions');
+    const backButton = button('一時停止へ戻る', 'button button-secondary');
+    backButton.addEventListener('click', back);
+    const resumeButton = button('再開', 'button button-primary');
+    resumeButton.addEventListener('click', resume);
+    actions.append(backButton, resumeButton);
+    container.append(actions);
   }
 
   private shortResume(): void {
