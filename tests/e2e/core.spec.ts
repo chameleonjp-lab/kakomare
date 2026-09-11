@@ -481,49 +481,60 @@ test('320x480でも戦場を優先し、装置一覧は一時停止から確認�
 });
 
 test('320x568で文字を200%相当に拡大しても戦闘操作を画面内に保つ', async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 568 });
-  await enterBattle(page);
-  await page.addStyleTag({ content: ':root { font-size: 32px !important; }' });
-  const metrics = await page.evaluate(() => {
-    const rect = (selector: string): DOMRect => {
-      const node = document.querySelector<HTMLElement>(selector);
-      if (!node) throw new Error(`${selector} が見つかりません。`);
-      return node.getBoundingClientRect();
-    };
-    const panel = document.querySelector<HTMLElement>('.battle-panel');
-    if (!panel) throw new Error('.battle-panel が見つかりません。');
-    const canvasShell = document.querySelector<HTMLElement>('.battle-canvas-shell');
-    if (!canvasShell) throw new Error('.battle-canvas-shell が見つかりません。');
-    return {
-      viewportHeight: window.innerHeight,
-      documentHeight: document.documentElement.scrollHeight,
-      header: rect('.battle-header').toJSON(),
-      pause: rect('.pause-button').toJSON(),
-      canvas: rect('.battle-canvas-shell').toJSON(),
-      innerCanvas: rect('.game-mount canvas').toJSON(),
-      canvasShellClientWidth: canvasShell.clientWidth,
-      canvasShellClientHeight: canvasShell.clientHeight,
-      canvasShellScrollWidth: canvasShell.scrollWidth,
-      canvasShellScrollHeight: canvasShell.scrollHeight,
-      panel: rect('.battle-panel').toJSON(),
-      panelClientHeight: panel.clientHeight,
-      buildVisible: Boolean(panel.querySelector('.build-panel')?.getBoundingClientRect().width),
-    };
-  });
-  expect(metrics.documentHeight).toBeLessThanOrEqual(metrics.viewportHeight + 1);
-  expect(metrics.pause.top).toBeGreaterThanOrEqual(metrics.header.top - 1);
-  expect(metrics.pause.bottom).toBeLessThanOrEqual(metrics.header.bottom + 1);
-  expect(metrics.pause.bottom).toBeLessThanOrEqual(metrics.canvas.top + 1);
-  expect(metrics.canvas.width).toBeGreaterThanOrEqual(240);
-  expect(metrics.innerCanvas.top).toBeGreaterThanOrEqual(metrics.canvas.top - 1);
-  expect(metrics.innerCanvas.right).toBeLessThanOrEqual(metrics.canvas.right + 1);
-  expect(metrics.innerCanvas.bottom).toBeLessThanOrEqual(metrics.canvas.bottom + 1);
-  expect(metrics.innerCanvas.left).toBeGreaterThanOrEqual(metrics.canvas.left - 1);
-  expect(metrics.canvasShellScrollWidth).toBeLessThanOrEqual(metrics.canvasShellClientWidth + 1);
-  expect(metrics.canvasShellScrollHeight).toBeLessThanOrEqual(metrics.canvasShellClientHeight + 1);
-  expect(metrics.panel.bottom).toBeLessThanOrEqual(metrics.viewportHeight + 1);
-  expect(metrics.panelClientHeight).toBeGreaterThan(0);
-  expect(metrics.buildVisible).toBe(false);
+  for (const fontFamily of ['', 'monospace']) {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await enterBattle(page);
+    await page.addStyleTag({ content: `:root { font-size: 32px !important; ${fontFamily ? `font-family: ${fontFamily} !important;` : ''} }` });
+    const metrics = await page.evaluate(() => {
+      const rect = (selector: string): DOMRect => {
+        const node = document.querySelector<HTMLElement>(selector);
+        if (!node) throw new Error(`${selector} が見つかりません。`);
+        return node.getBoundingClientRect();
+      };
+      const panel = document.querySelector<HTMLElement>('.battle-panel');
+      if (!panel) throw new Error('.battle-panel が見つかりません。');
+      const canvasShell = document.querySelector<HTMLElement>('.battle-canvas-shell');
+      if (!canvasShell) throw new Error('.battle-canvas-shell が見つかりません。');
+      return {
+        viewportHeight: window.innerHeight,
+        documentHeight: document.documentElement.scrollHeight,
+        fontFamily: getComputedStyle(document.documentElement).fontFamily,
+        shell: rect('.battle-shell').toJSON(),
+        layout: rect('.battle-layout').toJSON(),
+        header: rect('.battle-header').toJSON(),
+        pause: rect('.pause-button').toJSON(),
+        pending: rect('.pending-upgrade-button').toJSON(),
+        canvas: rect('.battle-canvas-shell').toJSON(),
+        innerCanvas: rect('.game-mount canvas').toJSON(),
+        canvasShellClientWidth: canvasShell.clientWidth,
+        canvasShellClientHeight: canvasShell.clientHeight,
+        canvasShellScrollWidth: canvasShell.scrollWidth,
+        canvasShellScrollHeight: canvasShell.scrollHeight,
+        panel: rect('.battle-panel').toJSON(),
+        panelClientHeight: panel.clientHeight,
+        buildVisible: Boolean(panel.querySelector('.build-panel')?.getBoundingClientRect().width),
+      };
+    });
+    if (fontFamily) expect(metrics.fontFamily).toContain(fontFamily);
+    expect(metrics.documentHeight).toBeLessThanOrEqual(metrics.viewportHeight + 1);
+    expect(metrics.pause.top).toBeGreaterThanOrEqual(metrics.header.top - 1);
+    expect(metrics.pause.bottom).toBeLessThanOrEqual(metrics.header.bottom + 1);
+    expect(metrics.pause.bottom).toBeLessThanOrEqual(metrics.canvas.top + 1);
+    expect(metrics.pending.height).toBeGreaterThanOrEqual(48);
+    expect(metrics.canvas.width).toBeGreaterThanOrEqual(240);
+    expect(Math.abs(metrics.canvas.width - metrics.canvas.height)).toBeLessThanOrEqual(2);
+    expect(metrics.innerCanvas.top).toBeGreaterThanOrEqual(metrics.canvas.top - 1);
+    expect(metrics.innerCanvas.right).toBeLessThanOrEqual(metrics.canvas.right + 1);
+    expect(metrics.innerCanvas.bottom).toBeLessThanOrEqual(metrics.canvas.bottom + 1);
+    expect(metrics.innerCanvas.left).toBeGreaterThanOrEqual(metrics.canvas.left - 1);
+    expect(metrics.canvasShellScrollWidth).toBeLessThanOrEqual(metrics.canvasShellClientWidth + 1);
+    expect(metrics.canvasShellScrollHeight).toBeLessThanOrEqual(metrics.canvasShellClientHeight + 1);
+    expect(metrics.panel.bottom).toBeLessThanOrEqual(metrics.viewportHeight + 1);
+    expect(metrics.panel.bottom).toBeLessThanOrEqual(metrics.shell.bottom + 1);
+    expect(metrics.panel.bottom).toBeLessThanOrEqual(metrics.layout.bottom + 1);
+    expect(metrics.panelClientHeight).toBeGreaterThan(0);
+    expect(metrics.buildVisible).toBe(false);
+  }
 });
 
 test('タップ、二重タップ、長押しでは照準を勝手に切り替えない', async ({ page }) => {

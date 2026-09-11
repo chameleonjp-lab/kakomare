@@ -1,8 +1,34 @@
 # カコマレ 拡張実装進行記録
 
-更新日：2026-09-10（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
+更新日：2026-09-11（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
 
-## 対象と確認済み状態
+## 現在の再開作業：V0の配備検査失敗を補正
+
+- PR #17は2026-09-10T18:57:20Zにマージ済み。現在のmainは `46b1a5680f00f9d689c008820e24c659861ed165`。再開時点のopen PRと#17コメントは0件。
+- PR最終head `068d38e7d7a02677e06ad1aeabc2584ddacb2d08` の [Quality #48](https://github.com/chameleonjp-lab/kakomare/actions/runs/34510063115) は成功済み。ただしマージ後の [Deploy GitHub Pages](https://github.com/chameleonjp-lab/kakomare/actions/runs/34517482475) は失敗しており、公開完了ではない。
+- 失敗job `103006427054` は単体・結合161件成功、Chromium30件成功・1件失敗。320×568・文字200%のパネル下端が584.546875px、許容下端569pxを超過。初回・retry1・retry2で同値。WebKit・ビルド・アップロード・配備は未実行（skip）であり、成功には数えない。
+- Qualityは公式Playwrightコンテナ、Pagesはnative Ubuntu runnerだった。環境差は確認事実だが、フォントだけが原因であるとはログだけで断定しない。
+- 作業branch：`codex/v0-pages-recovery-20260911`。既存のローカルV0作業コピーは未コミット差分を保持して別worktreeで最新mainから開始した。#17はマージ済みのため、修正は新しい補正Draft PRで提出する。V1の制作工程を増やすものではない。
+- 範囲：小画面・文字拡大時のHUD/戦場レイアウト、回帰検査、配備と同じnative runnerのPR検査追加、進行同期。主要48px・文字サイズ・検査閾値・保留契約を弱めない。V1以降、新武器/補助/採点/保存/DBは変更しない。
+- 禁止事項は維持。mainへのpush/マージ/自動マージ/保護緩和、本番DB・実験場設定の変更、Pages配備の手動起動は行わない。配備確認は補正PRのユーザーマージ後に行う。
+
+### 今回の検査・担当・提出
+
+修正：600px以下の縦画面では、HUDの自然高をGridのauto行へ確保し、残りの行をsize containerとして戦場の正方形を収める。従来のviewportから固定remを引く計算だけではHUD実寸の差を吸収できなかった。320×568・文字200%は従来の既定フォント条件を残し、monospace条件・正方形・保留ボタン48pxも追加。既存の240px最小戦場と下端569pxの閾値を維持する。
+
+`npm ci` 成功（162パッケージ）。修正後の `npm run lint`、`npm run typecheck`、`npm run test`（22ファイル161件）、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` は成功。Viteの500kB超警告は残る。ローカルPlaywrightのブラウザ一覧は空で、Chromium取得は配布元502により失敗し、ローカルブラウザ検査は未実行。PRでは既存コンテナ検査に加えてPagesと同じnative Ubuntu/Node24/ブラウザ導入の検査jobを追加した。配備処理・権限は追加しない。
+Luna・Maxがレイアウト修正/回帰検査、親セッションが環境差確認/CI/文書/統合/提出、別のSol・Highがread-only独立レビューを担当した。独立レビューで「viewport内でも親shellでHUDが切れ得る」と指摘され、shell/layout下端との比較を追加した。静的レビューの他のblockerはなく、追加した厳密な判定も両環境のE2Eで成功。iPhone実機は未確認。
+
+[Draft PR #18](https://github.com/chameleonjp-lab/kakomare/pull/18) を作成。コード提出 `2ab16aadfe2adffa62245c1cf946f882e8f3509a` の [Quality #49](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552188622) は成功。通常git pushはローカルのGitHub認証未設定で失敗したため、接続済みGitHub APIで同じ差分を作業branchへ反映した。ローカルcommit `cefb95f` とコード提出commitのtreeはともに `2270027fad702e8c1289b7e4ea160d89d90b3c4f` で一致する。
+
+| Quality #49環境 | job / ログ | 単体・結合 | Chromium | WebKit | 静的・build・公開物検査 |
+|---|---|---|---|---|---|
+| 公式Playwrightコンテナ | [103117226737](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552188622/job/103117226737) | 22ファイル161成功 | 31成功 | 31成功 | 全成功 |
+| Pages同条件native Ubuntu | [103117226540](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552188622/job/103117226540) | 22ファイル161成功 | 31成功 | 31成功 | 全成功 |
+
+両jobのログに失敗・flaky・retryの記録なし。既存X01～X10/P16-01～08を含む全スイートを維持して実行した。旧Pages失敗をこの成功で消さず、公開配備完了とは扱わない。本記録だけを追加した提出headのCIも再確認し、正確な最終headとrunはPR #18本文・Checksへ記載する（自己参照SHAを文書へ書くための無限更新はしない）。次はユーザーの#18マージ後に最新mainとPages配備結果を確認する。V1は未着手で、開始指示を待つ。
+
+## V0初回提出時の確認状態（履歴）
 
 - 対象：V0「PR #16の未達修正と計画の更新」。V1以降はユーザーのマージ後。
 - 基準main：c34d1910e53ca7b75ff858cb1135070723d438a7。
@@ -16,8 +42,8 @@
 
 | 工程 | 状態 | 次の境界 |
 |---|---|---|
-| V0 | Draft提出・自動検査完了、ユーザーマージ待ち | 下記提出記録。V1へは進まない |
-| V1 | 未着手・V0マージ待ち | 全50設計/S/50×S/各2方向/D01～D07/型と定義検証器 |
+| V0 | #17マージ済み・配備検査失敗の補正中 | 上記の小画面修正と同環境検査。V1へは進まない |
+| V1 | 未着手 | V0残件対応後、開始指示に従い全50設計/S/50×S/各2方向/D01～D07/型と定義検証器 |
 | V2 | 未着手 | 8武器6補助で個体接続容量配置/乱数/入力基盤 |
 | V3 | 未着手 | 12武器/対応補助/連動弱点/初期混成。12は最終でない |
 | V4 | 未着手 | 25武器/補助/敵/競技無限採点/本戦初回 |
@@ -106,7 +132,7 @@ iPhone 17 Pro Safari、VoiceOver/片手/発熱/長時間識別、公開ページ
 
 ## 提出記録・再開
 
-- Draft PR：[#17](https://github.com/chameleonjp-lab/kakomare/pull/17)（open / Draft）。
+- 初回Draft PR：[#17](https://github.com/chameleonjp-lab/kakomare/pull/17)（2026-09-10にマージ済み、上記再開記録参照）。
 - 基準main：c34d1910e53ca7b75ff858cb1135070723d438a7。
 - 実装コードコミット：7be999050b4ae379eaedb8b2ff11856d9f9cad99。
 - 検査強化コミット：4b5e57a13c456cd2db8872d95e0745a4a4bfcc59（本番コード変更なし）。
@@ -133,4 +159,4 @@ iPhone 17 Pro Safari、VoiceOver/片手/発熱/長時間識別、公開ページ
 
 画面検査は本番ビルドをローカルpreviewで動かすChromium/WebKit。320×568、375×667、390×844、402×874、430×932/横画面、320×480、文字200%の既存検査も残し全件実行する。新テストのUI操作にBattleScene内部メソッドは使用していない。
 まずgit status、git log -1、本記録、PR状態/コメント/最新Actionsを読む。環境復旧時は未提出ローカルコピーをそのままpushせずGitHubの作業branchを取得し差分を照合する。
-V0はDraft提出後のユーザーマージ待ち。実マージ確認後にV1の全50台帳/S/適用連動/D01～D07/定義検証器へ進む。
+V0の初回提出はマージ済みだが配備検査が失敗したため、現在は冒頭の補正作業を優先する。V1の全50台帳/S/適用連動/D01～D07/定義検証器はまだ開始していない。
