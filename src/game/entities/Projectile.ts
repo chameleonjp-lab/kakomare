@@ -135,6 +135,55 @@ export class Projectile {
       sourceWeaponId: this.sourceWeaponId,
       sourceWeaponInstanceId: this.sourceWeaponInstanceId,
       boundaryRadius: this.boundaryRadius,
+      targetId: this.targetId,
+      hitCooldown: this.hitCooldown,
+      impactX: this.impactX,
+      impactY: this.impactY,
+      impactRadius: this.impactRadius,
+      impactAngle: this.impactAngle,
+      clusterSplitChild: this.clusterSplitChild,
+      impactWarningShown: this.impactWarningShown,
+      hitAt: [...this.hitAt.entries()],
     };
+  }
+
+  /** Restore a projectile without recalculating its source weapon stats. */
+  public restore(snapshot: ProjectileSnapshot): boolean {
+    if (snapshot.id !== this.id || !Number.isFinite(snapshot.x) || !Number.isFinite(snapshot.y) || !Number.isFinite(snapshot.vx) || !Number.isFinite(snapshot.vy)
+      || !Number.isFinite(snapshot.radius) || snapshot.radius < 0 || !Number.isFinite(snapshot.damage) || snapshot.damage < 0
+      || !Number.isFinite(snapshot.life) || snapshot.life < 0 || !Number.isFinite(snapshot.maxLife) || snapshot.maxLife <= 0 || snapshot.life > snapshot.maxLife
+      || !Number.isFinite(snapshot.piercing) || snapshot.piercing < 0 || !Number.isFinite(snapshot.bounces) || snapshot.bounces < 0
+      || !Number.isFinite(snapshot.boundaryRadius) || snapshot.boundaryRadius <= 0 || typeof snapshot.enemyProjectile !== 'boolean'
+      || (snapshot.targetId !== undefined && snapshot.targetId !== null && (!Number.isInteger(snapshot.targetId) || snapshot.targetId < 1))
+      || (snapshot.hitAt !== undefined && (!Array.isArray(snapshot.hitAt) || !snapshot.hitAt.every((pair) => Array.isArray(pair) && pair.length === 2 && Number.isInteger(pair[0]) && pair[0] >= 1 && Number.isFinite(pair[1]))))) return false;
+    this.kind = snapshot.kind;
+    this.x = snapshot.x;
+    this.y = snapshot.y;
+    this.vx = snapshot.vx;
+    this.vy = snapshot.vy;
+    this.radius = snapshot.radius;
+    this.damage = snapshot.damage;
+    this.life = snapshot.life;
+    this.maxLife = snapshot.maxLife;
+    this.piercing = snapshot.piercing;
+    this.enemyProjectile = snapshot.enemyProjectile;
+    this.sourceWeaponId = snapshot.sourceWeaponId;
+    this.sourceWeaponInstanceId = snapshot.sourceWeaponInstanceId;
+    this.boundaryRadius = snapshot.boundaryRadius;
+    this.bounces = snapshot.bounces;
+    this.targetId = snapshot.targetId ?? null;
+    this.hitCooldown = snapshot.hitCooldown ?? 0;
+    this.impactX = snapshot.impactX ?? null;
+    this.impactY = snapshot.impactY ?? null;
+    this.impactRadius = snapshot.impactRadius ?? 0;
+    this.impactAngle = snapshot.impactAngle ?? 0;
+    this.clusterSplitChild = snapshot.clusterSplitChild === true;
+    this.impactWarningShown = snapshot.impactWarningShown === true;
+    this.active = true;
+    this.hitAt.clear();
+    for (const pair of snapshot.hitAt ?? []) {
+      if (Array.isArray(pair) && pair.length === 2 && Number.isInteger(pair[0]) && Number.isFinite(pair[1])) this.hitAt.set(pair[0], pair[1]);
+    }
+    return true;
   }
 }

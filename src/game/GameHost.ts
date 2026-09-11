@@ -4,6 +4,7 @@ import type { BattleCallbacks, UpgradeCandidate } from '../types/game';
 import type { StageId } from '../types/content';
 import type { EffectsLevel } from './systems/EffectBudget';
 import type { ResearchEffects } from '../data/research';
+import type { RunSaveEnvelope } from '../types/runSave';
 
 const DEFAULT_RESEARCH_EFFECTS: ResearchEffects = {
   maxCore: 100,
@@ -40,6 +41,7 @@ export class GameHost {
     competitive?: boolean;
     runId: number;
     seed?: number;
+    resumeCheckpoint?: RunSaveEnvelope;
     callbacks: BattleCallbacks;
   }): void {
     this.stop();

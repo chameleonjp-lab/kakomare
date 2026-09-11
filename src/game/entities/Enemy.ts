@@ -239,7 +239,57 @@ export class Enemy {
       marked: this.markedUntil > elapsed,
       burning: this.burningUntil > elapsed,
       state,
+      age: this.age,
+      shotCooldown: this.shotCooldown,
+      specialCooldown: this.specialCooldown,
+      pressureCooldown: this.pressureCooldown,
+      splitDone: this.splitDone,
+      summoned: this.summoned,
+      summonedChildren: this.summonedChildren,
+      slowRemaining: Math.max(0, this.slowUntil - elapsed),
+      markedRemaining: Math.max(0, this.markedUntil - elapsed),
+      burningRemaining: Math.max(0, this.burningUntil - elapsed),
+      movementAngle: this.movementAngle,
+      movementDistance: this.movementDistance,
+      specialDamageTaken: this.specialDamageTaken,
     };
+  }
+
+  /** Restore the observable and timer state at a safe update boundary. */
+  public restore(snapshot: EnemySnapshot, elapsed: number, core: Point = { x: 0, y: 0 }): boolean {
+    if (snapshot.type !== this.type || snapshot.isBoss !== this.isBoss || !Number.isFinite(snapshot.x) || !Number.isFinite(snapshot.y)
+      || !Number.isFinite(snapshot.distanceToCore) || snapshot.distanceToCore < 0 || !Number.isFinite(snapshot.hp) || !Number.isFinite(snapshot.maxHp)
+      || snapshot.maxHp <= 0 || snapshot.hp < 0 || snapshot.hp > snapshot.maxHp || !Number.isFinite(snapshot.hitRadius) || snapshot.hitRadius < 0
+      || !Number.isFinite(snapshot.shieldHits) || snapshot.shieldHits < 0 || !Number.isFinite(snapshot.slowFactor) || snapshot.slowFactor <= 0) return false;
+    this.id = snapshot.id;
+    this.maxHp = snapshot.maxHp;
+    this.hp = snapshot.hp;
+    this.distanceToCore = snapshot.distanceToCore;
+    this.x = snapshot.x + core.x;
+    this.y = snapshot.y + core.y;
+    this.angle = Math.atan2(this.y - core.y, this.x - core.x);
+    const movementAngle = typeof snapshot.movementAngle === 'number' && Number.isFinite(snapshot.movementAngle) ? snapshot.movementAngle : this.angle;
+    const movementDistance = typeof snapshot.movementDistance === 'number' && Number.isFinite(snapshot.movementDistance) ? snapshot.movementDistance : snapshot.distanceToCore;
+    this.movementAngle = movementAngle;
+    this.movementDistance = Math.max(0, movementDistance);
+    this.shieldHits = Math.max(0, Math.floor(snapshot.shieldHits));
+    this.invulnerable = snapshot.invulnerable;
+    this.telegraph = snapshot.telegraph;
+    this.telegraphPhase = snapshot.telegraphPhase ?? 0;
+    this.shieldRotation = snapshot.shieldRotation ?? 0;
+    this.age = typeof snapshot.age === 'number' && Number.isFinite(snapshot.age) ? Math.max(0, snapshot.age) : 0;
+    this.shotCooldown = typeof snapshot.shotCooldown === 'number' && Number.isFinite(snapshot.shotCooldown) ? snapshot.shotCooldown : 0;
+    this.specialCooldown = typeof snapshot.specialCooldown === 'number' && Number.isFinite(snapshot.specialCooldown) ? snapshot.specialCooldown : 0;
+    this.pressureCooldown = typeof snapshot.pressureCooldown === 'number' && Number.isFinite(snapshot.pressureCooldown) ? snapshot.pressureCooldown : 0;
+    this.splitDone = snapshot.splitDone === true;
+    this.summoned = snapshot.summoned === true;
+    this.summonedChildren = Number.isInteger(snapshot.summonedChildren) ? Math.max(0, snapshot.summonedChildren!) : 0;
+    this.specialDamageTaken = typeof snapshot.specialDamageTaken === 'number' && Number.isFinite(snapshot.specialDamageTaken) ? Math.max(0, snapshot.specialDamageTaken) : 0;
+    this.slowUntil = elapsed + (typeof snapshot.slowRemaining === 'number' && Number.isFinite(snapshot.slowRemaining) ? Math.max(0, snapshot.slowRemaining) : snapshot.slowFactor < 1 ? 0.1 : 0);
+    this.markedUntil = elapsed + (typeof snapshot.markedRemaining === 'number' && Number.isFinite(snapshot.markedRemaining) ? Math.max(0, snapshot.markedRemaining) : snapshot.marked ? 0.1 : 0);
+    this.burningUntil = elapsed + (typeof snapshot.burningRemaining === 'number' && Number.isFinite(snapshot.burningRemaining) ? Math.max(0, snapshot.burningRemaining) : snapshot.burning ? 0.1 : 0);
+    this.active = true;
+    return true;
   }
 
   public get hitRadius(): number {

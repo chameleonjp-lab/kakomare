@@ -56,6 +56,23 @@ interface PendingSpecialWave {
   types: EnemyId[];
 }
 
+export interface SpawnDirectorSnapshot {
+  budget: number;
+  lastSector: number;
+  consecutiveSectorCount: number;
+  bossSent: boolean;
+  bossPending: boolean;
+  nextBossAt: number;
+  updateAccumulator: number;
+  simulatedElapsed: number;
+  pendingEnemy: EnemyId | null;
+  pendingSpecialWave: PendingSpecialWave | null;
+  nextSpecialWaveAt: number;
+  specialWaveCount: number;
+  endlessBossIndex: number;
+  rngState: number;
+}
+
 export class SpawnDirector {
   private static readonly UPDATE_STEP = 1 / 60;
   private static readonly STEP_EPSILON = 1e-10;
@@ -210,6 +227,71 @@ export class SpawnDirector {
 
   public get rngForEvents(): DeterministicRng {
     return this.rng;
+  }
+
+  public snapshot(): SpawnDirectorSnapshot {
+    return {
+      budget: this.budget,
+      lastSector: this.lastSector,
+      consecutiveSectorCount: this.consecutiveSectorCount,
+      bossSent: this.bossSent,
+      bossPending: this.bossPending,
+      nextBossAt: this.nextBossAt,
+      updateAccumulator: this.updateAccumulator,
+      simulatedElapsed: this.simulatedElapsed,
+      pendingEnemy: this.pendingEnemy,
+      pendingSpecialWave: this.pendingSpecialWave ? { ...this.pendingSpecialWave, types: [...this.pendingSpecialWave.types] } : null,
+      nextSpecialWaveAt: this.nextSpecialWaveAt,
+      specialWaveCount: this.specialWaveCount,
+      endlessBossIndex: this.endlessBossIndex,
+      rngState: this.rng.getState(),
+    };
+  }
+
+  public restore(snapshot: Partial<SpawnDirectorSnapshot>): boolean {
+    if (!snapshot || typeof snapshot !== 'object') return false;
+    const budget = typeof snapshot.budget === 'number' ? snapshot.budget : NaN;
+    const nextBossAt = typeof snapshot.nextBossAt === 'number' ? snapshot.nextBossAt : NaN;
+    const updateAccumulator = typeof snapshot.updateAccumulator === 'number' ? snapshot.updateAccumulator : NaN;
+    const simulatedElapsed = typeof snapshot.simulatedElapsed === 'number' ? snapshot.simulatedElapsed : NaN;
+    const nextSpecialWaveAt = typeof snapshot.nextSpecialWaveAt === 'number' ? snapshot.nextSpecialWaveAt : NaN;
+    const specialWaveCount = typeof snapshot.specialWaveCount === 'number' ? snapshot.specialWaveCount : -1;
+    const endlessBossIndex = typeof snapshot.endlessBossIndex === 'number' ? snapshot.endlessBossIndex : -1;
+    const rngState = typeof snapshot.rngState === 'number' ? snapshot.rngState : -1;
+    const lastSector = typeof snapshot.lastSector === 'number' ? snapshot.lastSector : -1;
+    const consecutiveSectorCount = typeof snapshot.consecutiveSectorCount === 'number' ? snapshot.consecutiveSectorCount : -1;
+    if (snapshot.bossSent !== undefined && typeof snapshot.bossSent !== 'boolean') return false;
+    if (snapshot.bossPending !== undefined && typeof snapshot.bossPending !== 'boolean') return false;
+    if (!Number.isFinite(budget) || budget < 0 || !Number.isFinite(nextBossAt) || nextBossAt < 0
+      || !Number.isFinite(updateAccumulator) || updateAccumulator < 0 || updateAccumulator >= SpawnDirector.UPDATE_STEP + SpawnDirector.STEP_EPSILON
+      || !Number.isFinite(simulatedElapsed) || simulatedElapsed < 0 || !Number.isFinite(nextSpecialWaveAt) || nextSpecialWaveAt < 0
+      || !Number.isInteger(lastSector) || lastSector < -1 || lastSector >= 6 || !Number.isInteger(consecutiveSectorCount) || consecutiveSectorCount < 0
+      || !Number.isInteger(specialWaveCount) || specialWaveCount < 0 || !Number.isInteger(endlessBossIndex) || endlessBossIndex < 0
+      || !Number.isSafeInteger(rngState) || rngState < 0 || rngState > 0xffffffff) return false;
+    const pendingEnemy = snapshot.pendingEnemy ?? null;
+    if (pendingEnemy !== null && !Object.prototype.hasOwnProperty.call(ENEMIES, pendingEnemy)) return false;
+    let pendingSpecialWave: PendingSpecialWave | null = null;
+    if (snapshot.pendingSpecialWave !== null && snapshot.pendingSpecialWave !== undefined) {
+      const pending = snapshot.pendingSpecialWave;
+      if (!Number.isFinite(pending.angle) || !Number.isFinite(pending.life) || pending.life < 0 || !Array.isArray(pending.types)
+        || pending.types.length < 1 || pending.types.length > SPECIAL_WAVE_SIZE || !pending.types.every((type) => Object.prototype.hasOwnProperty.call(ENEMIES, type))) return false;
+      pendingSpecialWave = { angle: pending.angle, life: pending.life, types: [...pending.types] };
+    }
+    this.budget = Math.max(0, budget);
+    this.lastSector = lastSector;
+    this.consecutiveSectorCount = consecutiveSectorCount;
+    this.bossSent = snapshot.bossSent ?? false;
+    this.bossPending = snapshot.bossPending ?? false;
+    this.nextBossAt = nextBossAt;
+    this.updateAccumulator = Math.max(0, updateAccumulator);
+    this.simulatedElapsed = Math.max(0, simulatedElapsed);
+    this.pendingEnemy = pendingEnemy;
+    this.pendingSpecialWave = pendingSpecialWave;
+    this.nextSpecialWaveAt = nextSpecialWaveAt;
+    this.specialWaveCount = specialWaveCount;
+    this.endlessBossIndex = endlessBossIndex;
+    this.rng.setState(rngState);
+    return true;
   }
 
   private availableEnemies(elapsed: number): EnemyId[] {

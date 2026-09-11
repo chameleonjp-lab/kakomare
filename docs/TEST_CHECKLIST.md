@@ -2,6 +2,29 @@
 
 > 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
 
+## V6実装：保存・結果・ランキング連携（2026-09-11）
+
+対象branchは `codex/v6-save-result-ranking-20260911`。基準mainは、ユーザーがマージしたPR #23のマージコミット `65801a7c9619aa988f787890716252d1342d923b`。V6では、進行保存v3、途中状態の安全境界復元、結果の一回精算、ゲーム側ランキングアダプターとmanifestを実装する。基本50武器・補助20・全1,000組はV5から維持し、V6で本番登録や内容縮小を行わない。
+
+- [x] `npm ci --ignore-scripts --no-audit --no-fund`
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm test -- --run --testTimeout=30000`（28ファイル、201件）
+- [x] `npm run generate:expansion-docs`／`npm run verify:expansion-docs`（生成文書5ファイル）
+- [x] `npm run build`（Viteの500 kB超チャンク警告あり）
+- [x] `npm run verify:dist`
+- [x] `npm run verify:originality`
+- [x] `npm run verify:ranking-manifest`
+- [x] `git diff --check`
+- [ ] ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（Playwright実行ファイル不在で起動前に失敗。テスト本体未実施）
+- [x] V6最終提出コミットのGitHub Actions（[Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24)、[Quality #72](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630923501)。`quality`／`pages-runner-quality` の両jobで静的・型・単体201件、Chromium32件、WebKit32件、文書・manifest・build・配布物検査が成功）
+- [ ] iPhone Safari実機、VoiceOver、片手操作、発熱、通常720試行、無限60試行、30/60/120回描画比較
+- [ ] 実験場の本番受付・DB・認証・権限・公開URL（ユーザー許可待ち。変更していない）
+
+V6固有の検査は、`tests/unit/run-save.test.ts` のv3安全境界・write-ahead復元・壊れた入力拒否、`tests/unit/result-ledger.test.ts` の一回精算、`tests/unit/ranking-client.test.ts` のstart_id再送・play_id保持・submission_idと得点内訳固定・未設定ゲートウェイ、`tests/unit/ranking-manifest.test.ts` のmanifest検証を含む。画面からの途中再開、実験場の実署名・返り値・受付側再計算は自動検査成功とは別に記録する。
+
+Quality #69はBattleSceneのblob切断による構文解析失敗、Quality #71はリタイア時の空ルール版バケット生成による既存E2E失敗だった。完全なBattleSceneの提出と、リタイア結果を全記録から除外する修正後、Quality #72で両jobの全step成功を確認した。
+
 ## V5実装：基本50武器・補助20・追加ステージ／ボス（2026-09-11）
 
 対象branchは `codex/v5-content-complete-20260911`。基準mainは、ユーザーがマージしたPR #22のマージコミット `4bb667784e6e7553034ca7682b088f027d95a118`。V5では、設計済みの残り25武器と12補助をruntimeへ移し、基本武器50、補助20、50×20=1,000組の適用表を維持する。追加25武器の個体別発射、有限な補助効果、stage-4〜6、射線門・織り手・三相炉、無限の6ボス循環を実装した。V5は保存v3、ランキング本番、長時間本戦、iPhone Safari実機を完了扱いにしない。

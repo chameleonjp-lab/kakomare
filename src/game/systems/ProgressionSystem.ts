@@ -10,6 +10,10 @@ export interface ProgressionInitialState {
   experience?: number;
 }
 
+export const MAX_PROGRESSION_LEVEL = 10_000;
+export const MAX_PROGRESSION_EXPERIENCE = 1_000_000_000;
+export const MAX_PENDING_CHOICES = 10_000;
+
 /**
  * Owns the run-local level and experience ledger.
  *
@@ -31,7 +35,7 @@ export class ProgressionSystem {
   public get nextExperience(): number { return experienceRequiredForLevel(this._level); }
 
   public addExperience(amount: number): void {
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!Number.isFinite(amount) || amount <= 0 || this._experience + amount > MAX_PROGRESSION_EXPERIENCE) return;
     this._experience += amount;
   }
 
@@ -48,6 +52,7 @@ export class ProgressionSystem {
       experience -= experienceRequiredForLevel(level);
       level += 1;
       choices += 1;
+      if (choices > MAX_PENDING_CHOICES || level > MAX_PROGRESSION_LEVEL) return MAX_PENDING_CHOICES + 1;
     }
     return choices;
   }
@@ -71,9 +76,27 @@ export class ProgressionSystem {
       pendingChoices: this.pendingChoices,
     };
   }
+
+  /** Restore only a validated safe-boundary snapshot. */
+  public restore(snapshot: ProgressionSnapshot): boolean {
+    if (!snapshot || !Number.isSafeInteger(snapshot.level) || snapshot.level < 1 || snapshot.level > MAX_PROGRESSION_LEVEL || !Number.isSafeInteger(snapshot.experience) || snapshot.experience < 0 || snapshot.experience > MAX_PROGRESSION_EXPERIENCE
+      || snapshot.nextExperience !== experienceRequiredForLevel(snapshot.level) || !Number.isSafeInteger(snapshot.pendingChoices) || snapshot.pendingChoices < 0 || snapshot.pendingChoices > MAX_PENDING_CHOICES) return false;
+    let expectedChoices = 0;
+    let level = snapshot.level;
+    let experience = snapshot.experience;
+    while (experience >= experienceRequiredForLevel(level)) {
+      experience -= experienceRequiredForLevel(level);
+      level += 1;
+      expectedChoices += 1;
+      if (expectedChoices > snapshot.pendingChoices || expectedChoices > MAX_PENDING_CHOICES || level > MAX_PROGRESSION_LEVEL) return false;
+    }
+    if (expectedChoices !== snapshot.pendingChoices) return false;
+    this._level = snapshot.level;
+    this._experience = snapshot.experience;
+    return true;
+  }
 }
 
 export function experienceRequiredForLevel(level: number): number {
   return 16 + Math.max(1, Math.floor(level)) * 9;
 }
-

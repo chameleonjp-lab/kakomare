@@ -65,7 +65,7 @@ test('初回の名前入力からホームへ進み、再読込で名前を保�
   await page.goto('./?test=1');
   await expect(page.locator('.name-input')).toBeVisible();
   await page.getByRole('button', { name: 'この名前で始める' }).click();
-  await expect(page.locator('.form-error')).toContainText('1〜12文字');
+  await expect(page.locator('.form-error')).toContainText('1〜20文字');
   await page.locator('.name-input').fill('ひかり');
   await page.getByRole('button', { name: 'この名前で始める' }).click();
   await expect(page.getByText('ひかりさん、コアを守りましょう。')).toBeVisible();

@@ -1,6 +1,9 @@
 import { createAppState, type AppState } from './AppState';
 import type { AppView } from './routes';
 import { SaveService } from '../services/SaveService';
+import { RunSaveService } from '../services/RunSaveService';
+import { ResultLedger } from '../services/ResultLedger';
+import { RankingClient } from '../services/RankingClient';
 import { AudioService, audioCueForStatus } from '../services/AudioService';
 import { ShareService } from '../services/ShareService';
 import { LifecycleService } from '../services/LifecycleService';
@@ -20,9 +23,12 @@ import { STAGES, stageIsUnlocked } from '../data/stages';
 import { SUPPORTS } from '../data/supports';
 import { WEAPONS } from '../data/weapons';
 import type { StageId } from '../types/content';
+import type { RankingSnapshot } from '../types/ranking';
+import type { RunSaveEnvelope } from '../types/runSave';
 import { isLocalTestHost } from './testMode';
 import { RunLifecycleGuard } from './RunLifecycleGuard';
 import { MAX_DEVICE_SLOT_COUNT, DEVICE_SLOT_COUNT, itemAtExpandedSlot } from '../game/deviceLayout';
+import { COMPETITIVE_RULES } from '../data/competitiveRules';
 
 function stageLabel(stageId: StageId): string {
   return stageId === 'endless' ? 'ENDLESS' : stageId.replace('stage-', 'STAGE ');
@@ -30,8 +36,21 @@ function stageLabel(stageId: StageId): string {
 
 const FIRST_CLEAR_PART_BONUS = 25;
 
+function runStageIsCompatible(checkpoint: RunSaveEnvelope, save: SaveData): boolean {
+  const endless = checkpoint.stageId === 'endless';
+  const expectedRuleVersion = endless ? COMPETITIVE_RULES.version : 'runtime-v0';
+  return stageIsUnlocked(checkpoint.stageId, save.progress.unlockedStages)
+    && checkpoint.contentVersion === 'catalog-v5'
+    && checkpoint.ruleVersion === expectedRuleVersion
+    && checkpoint.competitive === endless
+    && checkpoint.snapshot.isEndless === endless;
+}
+
 export class AppController {
   private readonly saveService = new SaveService();
+  private readonly runSaveService = new RunSaveService();
+  private readonly resultLedger = new ResultLedger();
+  private readonly rankingClient = new RankingClient({ onChange: () => this.refreshRankingResult() });
   private readonly audio = new AudioService();
   private readonly shareService = new ShareService();
   private readonly gameHost = new GameHost();
@@ -46,6 +65,8 @@ export class AppController {
   private battleRunSequence = 0;
   private upgradeInterrupted = false;
   private latestBattleSnapshot: BattleSnapshot | null = null;
+  private pendingResumeCheckpoint: RunSaveEnvelope | null = null;
+  private rankingStartPromise: Promise<RankingSnapshot> | null = null;
 
   public constructor(private readonly root: HTMLElement) {}
 
@@ -142,6 +163,7 @@ export class AppController {
   private homeView(): HTMLElement {
     const view = createHomeView(this.state.save, {
       start: () => this.render('stage-select'),
+      resume: this.runSaveService.hasSavedRun() ? () => this.resumeSavedRun() : undefined,
       stages: () => this.render('stage-select'),
       settings: () => this.render('settings'),
       rules: () => this.render('rules'),
@@ -176,7 +198,7 @@ export class AppController {
   private startStage(stageId: StageId): void {
     if (this.runLifecycle.active || !stageIsUnlocked(stageId, this.state.save.progress.unlockedStages)) return;
     if (!isValidPlayerName(this.state.save.profile.name)) {
-      this.state.notice = 'プレイを始める前に、1〜12文字の名前を入力してください。';
+      this.state.notice = 'プレイを始める前に、1〜20文字の名前を入力してください。';
       this.render('name-entry');
       return;
     }
@@ -187,8 +209,43 @@ export class AppController {
     };
     this.commitSave(next);
     this.state.selectedStage = stageId;
+    this.pendingResumeCheckpoint = null;
+    this.rankingStartPromise = stageId === 'endless'
+      ? this.rankingClient.begin(this.state.save.profile.name)
+      : null;
     void this.audio.start();
     this.render('countdown');
+  }
+
+  private resumeSavedRun(): void {
+    if (this.runLifecycle.active) return;
+    const loaded = this.runSaveService.load();
+    if (!loaded.data) {
+      this.state.notice = loaded.message || '再開できる途中状態がありません。';
+      this.render('home');
+      return;
+    }
+    if (!isValidPlayerName(this.state.save.profile.name)) {
+      this.state.notice = 'プレイを再開する前に、1〜20文字の名前を入力してください。';
+      this.render('name-entry');
+      return;
+    }
+    if (!runStageIsCompatible(loaded.data, this.state.save)) {
+      this.state.notice = 'この途中状態は現在の保存内容と互換性がありません。';
+      this.render('home');
+      return;
+    }
+    if (!this.runLifecycle.start()) return;
+    this.pendingResumeCheckpoint = loaded.data;
+    this.rankingStartPromise = loaded.data.stageId === 'endless'
+      ? loaded.data.rankingSession
+        ? Promise.resolve(this.rankingClient.restoreSession(loaded.data.rankingSession, this.state.save.profile.name))
+        : this.rankingClient.start(this.state.save.profile.name)
+      : null;
+    this.state.selectedStage = loaded.data.stageId;
+    this.state.notice = loaded.message;
+    void this.audio.start();
+    this.render('battle');
   }
 
   private renderCountdown(): void {
@@ -217,6 +274,8 @@ export class AppController {
 
   private renderBattle(): void {
     const runId = ++this.battleRunSequence;
+    const resumeCheckpoint = this.pendingResumeCheckpoint;
+    this.pendingResumeCheckpoint = null;
     this.upgradeInterrupted = false;
     this.latestBattleSnapshot = null;
     const shell = element('section', 'battle-shell');
@@ -294,6 +353,8 @@ export class AppController {
       testUpgrade: testMode && query.get('upgrade') === '1',
       testUpgradeExperience: testMode && Number.isInteger(requestedTestExperience) && requestedTestExperience > 0 && requestedTestExperience <= 10000 ? requestedTestExperience : undefined,
       seed: testMode && requestedSeed !== undefined && Number.isFinite(requestedSeed) ? requestedSeed : undefined,
+      competitive: this.state.selectedStage === 'endless',
+      resumeCheckpoint: resumeCheckpoint ?? undefined,
       callbacks: {
         onSnapshot: (snapshot) => {
           if (runId !== this.battleRunSequence || !shell.isConnected) return;
@@ -305,8 +366,20 @@ export class AppController {
         onStatus: (message) => { if (runId !== this.battleRunSequence || !shell.isConnected) return; status.textContent = message; this.announce(message); this.audio.cue(audioCueForStatus(message)); },
         onAudioCue: (cue) => { if (runId === this.battleRunSequence && shell.isConnected) this.audio.cue(cue); },
         onPauseRequest: () => this.openPause(false, '', runId),
+        onCheckpoint: (checkpoint) => {
+          if (runId !== this.battleRunSequence || !this.runLifecycle.active) return;
+          // A server-issued play belongs only to the competitive endless run
+          // that started it. Do not copy a completed/stale session into a
+          // normal-stage checkpoint.
+          const rankingSession = checkpoint.competitive ? this.rankingClient.snapshot().session : null;
+          const checkpointWithRanking = rankingSession ? { ...checkpoint, rankingSession } : checkpoint;
+          if (!this.runSaveService.persist(checkpointWithRanking)) this.state.notice = '途中状態を保存できませんでした。現在のプレイは端末内で続けられます。';
+        },
       },
     });
+    if (resumeCheckpoint) window.setTimeout(() => {
+      if (runId === this.battleRunSequence && this.state.view === 'battle') this.openPause(false, '途中状態を復元しました', runId);
+    }, 0);
   }
 
   private hudItem(label: string, value: string, testid: string): HTMLElement {
@@ -515,14 +588,14 @@ export class AppController {
 
   private openPause(fromVisibility: boolean, reason = '', runId = this.battleRunSequence): void {
     if (runId !== this.battleRunSequence || !this.runLifecycle.active || this.state.view !== 'battle') return;
+    const shell = this.root.querySelector<HTMLElement>('.battle-shell');
+    if (!shell) return;
     // Keep the exact dialog and RNG while interrupted. On leaving the batch,
     // require explicit recovery without adding a countdown to normal choices.
-    if (this.battleUpgradeOpen || this.gameHost.isUpgrading()) {
+    if (this.battleUpgradeOpen || (this.gameHost.isUpgrading() && shell.querySelector('.upgrade-layer'))) {
       if (fromVisibility) this.upgradeInterrupted = true;
       return;
     }
-    const shell = this.root.querySelector<HTMLElement>('.battle-shell');
-    if (!shell) return;
     const interruptedResume = this.resumeCountdownTimer !== null;
     if (interruptedResume) {
       this.clearResumeCountdown();
@@ -760,11 +833,47 @@ export class AppController {
     const firstClear = !result.retired && result.outcome === 'victory'
       && unlocksFromResult.some((stageId) => !this.state.save.progress.unlockedStages.includes(stageId));
     const finalResult = firstClear ? { ...result, partsEarned: result.partsEarned + FIRST_CLEAR_PART_BONUS } : result;
+    const resultId = finalResult.resultId ?? `${finalResult.stageId}:${finalResult.runSeed}:${Math.round(finalResult.survivalTime * 60)}:${Math.round(finalResult.score)}:${finalResult.retired ? 'retired' : finalResult.outcome}`;
+    const settledParts = finalResult.retired ? 0 : finalResult.partsEarned;
+    try {
+      const settlement = this.resultLedger.settle({
+        resultId,
+        // A server-issued ranking play belongs only to an endless result. A
+        // completed endless session may still be retained for result display
+        // while the player finishes a normal stage, so never attach that
+        // stale identifier to a non-competitive settlement.
+        playId: finalResult.playId ?? (finalResult.stageId === 'endless' ? this.rankingClient.snapshot().session?.playId ?? null : null),
+        stageId: finalResult.stageId,
+        outcome: finalResult.outcome,
+        retired: finalResult.retired,
+        score: Math.max(0, Math.round(finalResult.score)),
+        partsEarned: Math.max(0, Math.round(settledParts)),
+      });
+      if (!settlement.accepted) {
+        // Another tab or a replayed callback already committed this result.
+        // Keep the result visible, but do not apply profile counters or parts
+        // a second time.
+        this.lastResult = finalResult;
+        this.gameHost.stop();
+        this.runSaveService.clear();
+        this.state.notice = 'この結果は既に精算済みです。';
+        this.render('result');
+        return;
+      }
+    } catch {
+      // Do not apply parts/counters without a durable idempotency record. The
+      // checkpoint is intentionally kept so the player can retry after making
+      // storage available again; the visible result is still preserved.
+      this.state.notice = '結果の精算台帳を保存できませんでした。表示は続けます。';
+      this.lastResult = finalResult;
+      this.gameHost.stop();
+      this.render('result');
+      return;
+    }
     this.lastResult = finalResult;
     this.gameHost.stop();
     const nextBest = !result.retired && (result.stageId === 'endless' ? result.score > this.state.save.records.endlessBest : !previous || result.score > previous.bestScore);
     const settledKills = result.retired ? 0 : result.kills;
-    const settledParts = finalResult.retired ? 0 : finalResult.partsEarned;
     const weaponUsage = { ...this.state.save.statistics.weaponUsage };
     if (!result.retired) for (const [id, amount] of Object.entries(result.weaponDamage)) weaponUsage[id as keyof typeof weaponUsage] = (weaponUsage[id as keyof typeof weaponUsage] ?? 0) + Math.round(amount ?? 0);
     const supportUsage = { ...this.state.save.statistics.supportUsage };
@@ -784,6 +893,28 @@ export class AppController {
         if (!unlockedStages.includes(stageId)) unlockedStages.push(stageId);
       }
     }
+    const ruleVersion = result.ruleVersion ?? 'runtime-v0';
+    // A retired run is deliberately excluded from every durable record. In
+    // particular, do not create an otherwise empty ruleset bucket just because
+    // the current runtime version was attached to the transient result.
+    const ruleVersions = result.retired ? this.state.save.records.ruleVersions : (() => {
+      const priorRule = this.state.save.records.ruleVersions[ruleVersion] ?? { endlessBest: 0, stageBest: {} };
+      const ruleStageBest = result.stageId === 'endless' ? priorRule.stageBest : {
+        ...priorRule.stageBest,
+        [result.stageId]: {
+          bestScore: Math.max(priorRule.stageBest[result.stageId]?.bestScore ?? 0, Math.round(result.score)),
+          bestCore: Math.max(priorRule.stageBest[result.stageId]?.bestCore ?? 0, Math.round(result.coreRemaining)),
+          bestTime: Math.max(priorRule.stageBest[result.stageId]?.bestTime ?? 0, result.survivalTime),
+        },
+      };
+      return {
+        ...this.state.save.records.ruleVersions,
+        [ruleVersion]: {
+          endlessBest: result.stageId === 'endless' ? Math.max(priorRule.endlessBest, Math.round(result.score)) : priorRule.endlessBest,
+          stageBest: ruleStageBest,
+        },
+      };
+    })();
     const next: SaveData = {
       ...this.state.save,
       progress: { ...this.state.save.progress, parts: this.state.save.progress.parts + settledParts, unlockedStages },
@@ -801,6 +932,7 @@ export class AppController {
         enemyKills,
         weaponBestDamage,
         sectorDamage: result.retired ? this.state.save.records.sectorDamage : { ...this.state.save.records.sectorDamage, [result.stageId]: sectorDamage },
+        ruleVersions,
       },
       statistics: {
         ...this.state.save.statistics,
@@ -815,10 +947,12 @@ export class AppController {
         },
       },
     };
+    this.runSaveService.clear();
     if (this.commitSave(next)) this.state.notice = nextBest ? '自己最高記録を更新しました。' : '';
     this.render('result');
     this.audio.cue(result.retired ? 'pause' : result.outcome === 'victory' ? 'victory' : 'defeat');
     this.announce(result.retired ? 'プレイを終了しました' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗');
+    void this.submitRanking(finalResult);
   }
 
   private resultView(result: BattleResult): HTMLElement {
@@ -827,8 +961,41 @@ export class AppController {
       next: () => { if (result.newUnlock) this.startStage(result.newUnlock); },
       home: () => this.render('home'),
       share: () => { void this.shareResult(result); },
+      ranking: this.rankingClient.snapshot(),
+      retryRanking: () => { void this.retryRanking(result); },
     });
     this.addNotice(view); return view;
+  }
+
+  private async submitRanking(result: BattleResult): Promise<void> {
+    if (result.stageId !== 'endless' || result.retired) return;
+    if (this.rankingStartPromise) await this.rankingStartPromise;
+    const rankingState = this.rankingClient.snapshot();
+    if (!rankingState.session) return;
+    const session = rankingState.session;
+    const submitted = await this.rankingClient.finish({
+      displayName: this.state.save.profile.name,
+      playId: session?.playId ?? result.playId ?? null,
+      result,
+    });
+    if (submitted.status === 'retryable_failed') this.state.notice = 'ランキング送信に失敗しました。結果画面から再送できます。';
+  }
+
+  private async retryRanking(result: BattleResult): Promise<void> {
+    const snapshot = this.rankingClient.snapshot();
+    if (snapshot.status !== 'retryable_failed') return;
+    if (!snapshot.submission) {
+      await this.rankingClient.retryStart(this.state.save.profile.name);
+      const session = this.rankingClient.snapshot().session;
+      if (session) await this.rankingClient.finish({ displayName: this.state.save.profile.name, playId: session.playId, result });
+      return;
+    }
+    await this.rankingClient.retry(result);
+  }
+
+  private refreshRankingResult(): void {
+    if (this.state.view !== 'result' || !this.lastResult) return;
+    this.render('result');
   }
 
   private researchView(): HTMLElement {

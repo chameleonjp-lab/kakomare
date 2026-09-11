@@ -7,6 +7,7 @@ import { Core } from '../entities/Core';
 import { DROPPER_SHOT_INTERVAL_SECONDS, Enemy } from '../entities/Enemy';
 import { Projectile } from '../entities/Projectile';
 import { SUPPORT_EFFECT_CAPS, SupportModule, supportEffectsFor } from '../entities/SupportModule';
+import { SUPPORTS } from '../../data/supports';
 import { Weapon } from '../entities/Weapon';
 import { EnemyPool } from '../pools/EnemyPool';
 import { ParticlePool } from '../pools/ParticlePool';
@@ -22,13 +23,14 @@ import { FixedStepClock } from '../systems/FixedStepClock';
 import { RunRecorder } from '../systems/RunRecorder';
 import { collideEnemyProjectiles, collideProjectiles } from '../systems/CollisionSystem';
 import { createUpgradeCandidateList, applyUpgradeCandidate, type ContinuousUpgradeId } from '../systems/UpgradeSystem';
-import { DeterministicRng, seedFromStage, SpawnDirector, type SpawnWaveWarning } from '../systems/SpawnDirector';
+import { DeterministicRng, seedFromStage, SpawnDirector, type SpawnDirectorSnapshot, type SpawnWaveWarning } from '../systems/SpawnDirector';
 import { MANUAL_AIM_HALF_ANGLE, selectTarget } from '../systems/TargetingSystem';
 import { impactAngleFromSource, impactAngleFromVelocity } from '../systems/ImpactDirection';
 import { advanceOrbitAngle } from '../systems/OrbitSystem';
 import { ProgressionSystem } from '../systems/ProgressionSystem';
 import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
 import type { BattleCallbacks, BattleResult, BattleSnapshot, Point, UpgradeCandidate, UpgradePayload } from '../../types/game';
+import type { RunSaveEnvelope } from '../../types/runSave';
 import type { ResearchEffects } from '../../data/research';
 import { RunLifecycleGuard } from '../../app/RunLifecycleGuard';
 import { BuildGraph } from '../build/BuildGraph';
@@ -53,6 +55,10 @@ export interface BattleSceneOptions {
   testUpgradeExperience?: number;
   /** Enables the V1 common initial conditions without enabling ranking I/O. */
   competitive?: boolean;
+  /** Stable local run identity; it is not a server play_id. */
+  runId?: string | number;
+  /** Safe-boundary state restored after a browser restart. */
+  resumeCheckpoint?: RunSaveEnvelope;
   callbacks: BattleCallbacks;
 }
 
@@ -110,6 +116,72 @@ const CLUSTER_SPLIT_DAMAGE_MULTIPLIER = 0.3;
 const CLUSTER_SPLIT_DISTANCE = 58;
 const CLUSTER_SPLIT_SPEED = 240;
 
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function createRunIdentity(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  } catch { /* fall through to a best-effort local identity */ }
+  return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function arrayOfRecords(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecordValue) : [];
+}
+
+function isGravityField(value: unknown): value is GravityField {
+  if (!isRecordValue(value)) return false;
+  return finiteNumber(value.x) && finiteNumber(value.y) && finiteNumber(value.life) && finiteNumber(value.maxLife)
+    && finiteNumber(value.radius) && finiteNumber(value.damage) && finiteNumber(value.pullStrength) && finiteNumber(value.safeDistance)
+    && finiteNumber(value.damageTimer) && typeof value.collapse === 'boolean' && finiteNumber(value.collapseDamage)
+    && finiteNumber(value.slowDuration) && (value.sourceWeaponInstanceId === null || typeof value.sourceWeaponInstanceId === 'string');
+}
+
+function isMineField(value: unknown): value is MineField {
+  if (!isRecordValue(value)) return false;
+  return Number.isInteger(value.id) && (value.id as number) > 0 && finiteNumber(value.x) && finiteNumber(value.y)
+    && finiteNumber(value.life) && finiteNumber(value.maxLife) && finiteNumber(value.radius) && finiteNumber(value.damage)
+    && typeof value.sourceWeaponInstanceId === 'string' && typeof value.triggered === 'boolean';
+}
+
+function isDroneUnit(value: unknown): value is DroneUnit {
+  if (!isRecordValue(value)) return false;
+  return Number.isInteger(value.index) && (value.index as number) >= 0 && finiteNumber(value.x) && finiteNumber(value.y)
+    && finiteNumber(value.angle) && finiteNumber(value.cooldown) && finiteNumber(value.life) && finiteNumber(value.maxLife)
+    && typeof value.sourceWeaponInstanceId === 'string';
+}
+
+function waveFromRuntime(value: unknown): { angle: number; life: number; maxLife: number } | null {
+  if (!isRecordValue(value) || !finiteNumber(value.angle) || !finiteNumber(value.life) || !finiteNumber(value.maxLife)
+    || value.maxLife <= 0 || value.life < 0) return null;
+  return { angle: value.angle, life: value.life, maxLife: value.maxLife };
+}
+
+function restoreNumberMap(target: Map<string, number>, value: unknown, integer = false): void {
+  target.clear();
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    if (!Array.isArray(item) || item.length !== 2 || typeof item[0] !== 'string' || !finiteNumber(item[1])) continue;
+    if (integer && !Number.isInteger(item[1])) continue;
+    target.set(item[0], item[1]);
+  }
+}
+
+function restoreNumericKeyMap(target: Map<number, number>, value: unknown): void {
+  target.clear();
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    if (!Array.isArray(item) || item.length !== 2 || !Number.isInteger(item[0]) || !finiteNumber(item[1])) continue;
+    target.set(item[0], item[1]);
+  }
+}
+
 export class BattleScene extends Phaser.Scene {
   private readonly options: BattleSceneOptions;
   private readonly core: Core;
@@ -150,6 +222,8 @@ export class BattleScene extends Phaser.Scene {
   private readonly competitive: boolean;
   private readonly ruleVersion: string;
   private readonly combatResearchEffects: ResearchEffects;
+  private readonly runId: string;
+  private readonly resumeCheckpoint?: RunSaveEnvelope;
   private created = false;
   private backgroundGraphics!: Phaser.GameObjects.Graphics;
   private deviceGraphics!: Phaser.GameObjects.Graphics;
@@ -182,6 +256,7 @@ export class BattleScene extends Phaser.Scene {
   private testUpgradeOpened = false;
   private testOutcomeTimer: number | null = null;
   private lastSnapshotAt = -Infinity;
+  private lastCheckpointAt = -Infinity;
   private lastEnemyNotice = '';
   private endlessMilestone = 0;
   private designerWave: { angle: number; life: number; maxLife: number } | null = null;
@@ -197,14 +272,19 @@ export class BattleScene extends Phaser.Scene {
   public constructor(options: BattleSceneOptions) {
     super({ key: 'KakomareBattleScene' });
     this.options = options;
-    this.runSeed = options.seed ?? seedFromStage(options.stageId, Date.now(), 1);
+    this.resumeCheckpoint = options.resumeCheckpoint;
+    // `options.runId` is a short UI callback guard and resets after a reload;
+    // it must not be used as the durable result id. A resumed checkpoint keeps
+    // its original identity, while a fresh play receives a unique local id.
+    this.runId = options.resumeCheckpoint?.runId ?? createRunIdentity();
+    this.runSeed = options.resumeCheckpoint?.runSeed ?? options.seed ?? seedFromStage(options.stageId, Date.now(), 1);
     this.competitive = options.competitive === true;
     this.ruleVersion = this.competitive ? COMPETITIVE_RULES.version : 'runtime-v0';
     this.combatResearchEffects = this.competitive
       ? { ...options.researchEffects, maxCore: COMPETITIVE_RULES.initial.coreHp, powerMultiplier: 1, projectileSpeedMultiplier: 1, partMultiplier: 1 }
       : options.researchEffects;
     this.core = new Core(this.combatResearchEffects.maxCore);
-    this.recorder = new RunRecorder(options.stageId, STAGES[options.stageId].boss, this.runSeed, this.ruleVersion);
+    this.recorder = new RunRecorder(options.stageId, STAGES[options.stageId].boss, this.runSeed, this.ruleVersion, this.runId);
     this.randomStreams = createCompetitiveRandomStreams(this.runSeed);
     // V0's normal mode historically shared one scene RNG for candidates and
     // boss-side effects. Keep that sequence for existing seeded UI tests and
@@ -218,6 +298,7 @@ export class BattleScene extends Phaser.Scene {
     this.effectBudget = new EffectBudget(options.effectsLevel);
     this.rerollsLeft = this.competitive ? COMPETITIVE_RULES.initial.rerolls : 1 + Math.min(2, this.combatResearchEffects.rerolls);
     this.bansLeft = this.competitive ? COMPETITIVE_RULES.initial.exclusions : 1 + Math.min(2, this.combatResearchEffects.bans);
+    if (this.resumeCheckpoint) this.restoreCheckpoint(this.resumeCheckpoint);
   }
 
   public create(): void {
@@ -240,9 +321,18 @@ export class BattleScene extends Phaser.Scene {
       if (this.state === 'upgrade') return;
       this.options.callbacks.onPauseRequest();
     });
-    this.scheduleTestOutcome();
+    if (!this.resumeCheckpoint) this.scheduleTestOutcome();
     this.options.callbacks.onStatus('戦闘開始');
     this.emitSnapshot(true);
+    if (this.resumeCheckpoint) {
+      // A restored run always starts behind an explicit pause notice. Do not
+      // render the upgrade layer before that pause is acknowledged: the view
+      // would otherwise own the focus while the scene is still `paused`, and
+      // the HUD/pause action could no longer provide the intentional resume
+      // boundary. `resume()` re-emits the saved payload after the user has
+      // explicitly resumed.
+      this.options.callbacks.onStatus('途中状態を復元しました。再開するまで戦闘は停止しています');
+    }
   }
 
   public update(time: number, delta: number): void {
@@ -416,6 +506,7 @@ export class BattleScene extends Phaser.Scene {
       this.pauseReturnState = this.state;
       this.state = 'paused';
       this.releaseAimInput();
+      this.emitSnapshot(true);
       this.options.callbacks.onStatus('一時停止中');
     }
   }
@@ -426,6 +517,7 @@ export class BattleScene extends Phaser.Scene {
       this.releaseAimInput();
       this.state = this.pauseReturnState;
       this.options.callbacks.onStatus('戦闘再開');
+      if (this.state === 'upgrade' && this.upgradePayload) this.options.callbacks.onUpgrade({ ...this.upgradePayload, candidates: [...this.upgradePayload.candidates] });
     }
   }
 
@@ -1792,6 +1884,8 @@ export class BattleScene extends Phaser.Scene {
       graph: this.buildGraph.snapshot(),
       capacity: this.buildCapacity.snapshot(),
     };
+    result.weaponInstances = this.weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, nodeId: weapon.nodeId, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch, evolutionId: weapon.evolutionId, evolutionName: weapon.evolutionDefinition?.name, cooldownRemaining: weapon.cooldown, precisionBonus: weapon.precisionBonus, shotsFired: weapon.shotsFired }));
+    result.supportInstances = this.supports.map((support) => ({ id: support.id, instanceId: support.instanceId, nodeId: support.nodeId, level: support.level, slot: support.slot }));
     this.options.callbacks.onFinish(result);
   }
 
@@ -2018,9 +2112,23 @@ export class BattleScene extends Phaser.Scene {
   private emitSnapshot(force: boolean): void {
     if (!force && this.elapsed - this.lastSnapshotAt < 0.1) return;
     this.lastSnapshotAt = this.elapsed;
+    const snapshot = this.createSnapshot();
+    this.options.callbacks.onSnapshot(snapshot);
+    const shouldCheckpoint = force
+      ? this.state === 'paused' || this.state === 'upgrade' || this.pendingUpgradeDeferred
+      : this.elapsed - this.lastCheckpointAt >= 5;
+    if (shouldCheckpoint) this.emitCheckpoint(this.createSnapshot(true));
+  }
+
+  private createSnapshot(includeAllProjectiles = false): BattleSnapshot {
     const visibleEnemies = this.visibleEnemies();
-    const visibleProjectiles = this.visibleProjectiles();
-    const snapshot: BattleSnapshot = {
+    const snapshotEnemies = includeAllProjectiles
+      ? this.enemies.filter((enemy) => enemy.active)
+      : visibleEnemies;
+    const visibleProjectiles = includeAllProjectiles
+      ? this.projectiles.filter((projectile) => projectile.active)
+      : this.visibleProjectiles();
+    return {
       elapsed: this.elapsed,
       timeLimit: STAGES[this.options.stageId].timeLimit,
       isEndless: STAGES[this.options.stageId].isEndless === true,
@@ -2033,9 +2141,9 @@ export class BattleScene extends Phaser.Scene {
       pendingUpgradeSelectionId: this.pendingUpgradeDeferred ? this.upgradeSequence : null,
       score: Math.round(this.recorder.score + this.elapsed * 5 + this.core.health * 20),
       kills: this.recorder.kills,
-      enemies: visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),
+      enemies: snapshotEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),
       projectiles: visibleProjectiles.map((projectile) => projectile.snapshot()),
-      weapons: this.weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, nodeId: weapon.nodeId, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch, evolutionId: weapon.evolutionId, evolutionName: weapon.evolutionDefinition?.name })),
+      weapons: this.weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, nodeId: weapon.nodeId, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch, evolutionId: weapon.evolutionId, evolutionName: weapon.evolutionDefinition?.name, cooldownRemaining: weapon.cooldown, precisionBonus: weapon.precisionBonus, shotsFired: weapon.shotsFired })),
       supports: this.supports.map((support) => ({ id: support.id, instanceId: support.instanceId, nodeId: support.nodeId, level: support.level, slot: support.slot })),
       aimAngle: this.aimAngle,
       manualAim: this.manualAim,
@@ -2049,7 +2157,213 @@ export class BattleScene extends Phaser.Scene {
         capacity: this.buildCapacity.snapshot(),
       },
     };
-    this.options.callbacks.onSnapshot(snapshot);
+  }
+
+  private emitCheckpoint(snapshot: BattleSnapshot): void {
+    if (!this.options.callbacks.onCheckpoint || this.state === 'finished') return;
+    this.lastCheckpointAt = this.elapsed;
+    const phase = this.state === 'upgrade' || (this.state === 'paused' && this.pauseReturnState === 'upgrade') ? 'upgrade' : 'paused';
+    const checkpoint: RunSaveEnvelope = {
+      version: 3,
+      runId: this.runId,
+      runSeed: this.runSeed,
+      stageId: this.options.stageId,
+      ruleVersion: this.ruleVersion,
+      contentVersion: 'catalog-v5',
+      competitive: this.competitive,
+      phase,
+      savedAt: new Date().toISOString(),
+      tick: this.inputTick(),
+      // Endless mode uses Infinity for the live HUD, which JSON cannot carry.
+      // A zero limit is the explicit persisted representation of “no limit”.
+      snapshot: { ...snapshot, timeLimit: snapshot.isEndless ? 0 : snapshot.timeLimit },
+      inputLog: this.recorder.inputRecorder.snapshot(),
+      randomState: {
+        'enemy-spawn': this.randomStreams.enemySpawn.getState(),
+        // V0 normal mode intentionally shares one scene RNG for candidate
+        // draws and combat effects. Persist that stream in both purpose
+        // slots so a v3 checkpoint can restore the legacy sequence exactly.
+        'candidate-draw': this.competitive ? this.randomStreams.candidateDraw.getState() : this.rng.getState(),
+        'combat-effect': this.competitive ? this.randomStreams.combatEffect.getState() : this.rng.getState(),
+        presentation: this.randomStreams.presentation.getState(),
+      },
+      spawnState: this.spawnDirector.snapshot() as unknown as Record<string, unknown>,
+      runtimeState: {
+        state: phase,
+        pauseReturnState: this.pauseReturnState,
+        pendingUpgradeDeferred: this.pendingUpgradeDeferred,
+        upgradeRequestQueued: this.upgradeRequestQueued,
+        banned: [...this.banned],
+        rerollsLeft: this.rerollsLeft,
+        bansLeft: this.bansLeft,
+        repairsUsed: this.repairsUsed,
+        upgradeSequence: this.upgradeSequence,
+        choicesSinceBreak: this.choicesSinceBreak,
+        weaponPolishStacks: this.weaponPolishStacks,
+        pendingPartsBonus: this.pendingPartsBonus,
+        bossDefeated: this.bossDefeated,
+        endlessMilestone: this.endlessMilestone,
+        testUpgradeOpened: this.testUpgradeOpened,
+        lastEnemyNotice: this.lastEnemyNotice,
+        nextMineId: this.nextMineId,
+        enemyPoolNextId: this.enemyPool.nextIdentifier,
+        projectilePoolNextId: this.projectilePool.nextIdentifier,
+        pendingSporeSplits: [...this.pendingSporeSplits],
+        upgradePayload: this.upgradePayload ? JSON.parse(JSON.stringify(this.upgradePayload)) as UpgradePayload : null,
+        recorder: this.recorder.snapshotState(),
+        clock: this.clock.snapshot(),
+        gravityFields: this.gravityFields.map((field) => ({ ...field })),
+        mines: this.mines.map((mine) => ({ ...mine })),
+        drones: [...this.drones.entries()].map(([instanceId, units]) => ({ instanceId, units: units.map((unit) => ({ ...unit })) })),
+        lanceCharge: [...this.lanceCharge.entries()],
+        orbitAngles: [...this.orbitAngles.entries()],
+        orbitHits: [...this.orbitHits.entries()],
+        targetLocks: [...this.targetLocks.entries()],
+        supportPulseAt: [...this.supportPulseAt.entries()],
+        igniteTriggered: [...this.igniteTriggered],
+        discTrailAt: [...this.discTrailAt.entries()],
+        designerWave: this.designerWave ? { ...this.designerWave } : null,
+        echoWave: this.echoWave ? { ...this.echoWave } : null,
+        crownPressure: this.crownPressure ? { ...this.crownPressure } : null,
+        specialWaveWarning: this.specialWaveWarning ? { ...this.specialWaveWarning } : null,
+        lastDesignerSector: this.lastDesignerSector,
+        crownWavesTriggered: this.crownWavesTriggered,
+      },
+    };
+    this.options.callbacks.onCheckpoint(checkpoint);
+  }
+
+  private restoreCheckpoint(checkpoint: RunSaveEnvelope): void {
+    if (checkpoint.stageId !== this.options.stageId || checkpoint.ruleVersion !== this.ruleVersion || checkpoint.competitive !== this.competitive) return;
+    const snapshot = checkpoint.snapshot;
+    if (!this.progression.restore({ level: snapshot.level, experience: snapshot.experience, nextExperience: snapshot.nextExperience, pendingChoices: snapshot.pendingUpgrades })) return;
+    this.elapsed = snapshot.elapsed;
+    this.core.maxHealth = snapshot.maxCore;
+    this.core.health = Math.max(0, Math.min(snapshot.maxCore, snapshot.core));
+    this.aimAngle = snapshot.aimAngle;
+    this.manualAim = snapshot.manualAim;
+    if (!this.recorder.inputRecorder.restore(checkpoint.inputLog)) return;
+    this.recorder.kills = snapshot.kills;
+    this.recorder.score = Math.max(0, snapshot.score - snapshot.elapsed * 5 - snapshot.core * 20);
+    this.recorder.survivalTime = snapshot.elapsed;
+    this.bossDefeated = snapshot.bossDefeated;
+    this.recorder.bossDefeated = snapshot.bossDefeated;
+    const runtime = checkpoint.runtimeState;
+    if (runtime) {
+      if (Array.isArray(runtime.banned)) for (const id of runtime.banned) if (typeof id === 'string') this.banned.add(id);
+      if (Number.isInteger(runtime.rerollsLeft)) this.rerollsLeft = Math.max(0, runtime.rerollsLeft as number);
+      if (Number.isInteger(runtime.bansLeft)) this.bansLeft = Math.max(0, runtime.bansLeft as number);
+      if (Number.isInteger(runtime.repairsUsed)) this.repairsUsed = Math.max(0, runtime.repairsUsed as number);
+      if (Number.isInteger(runtime.upgradeSequence)) this.upgradeSequence = Math.max(0, runtime.upgradeSequence as number);
+      if (Number.isInteger(runtime.choicesSinceBreak)) this.choicesSinceBreak = Math.max(0, runtime.choicesSinceBreak as number);
+      if (finiteNumber(runtime.weaponPolishStacks)) this.weaponPolishStacks = Math.max(0, runtime.weaponPolishStacks);
+      if (finiteNumber(runtime.pendingPartsBonus)) this.pendingPartsBonus = Math.max(0, runtime.pendingPartsBonus);
+      if (Number.isInteger(runtime.endlessMilestone)) this.endlessMilestone = Math.max(0, runtime.endlessMilestone as number);
+      this.pendingUpgradeDeferred = runtime.pendingUpgradeDeferred === true;
+      this.upgradeRequestQueued = runtime.upgradeRequestQueued === true;
+      this.testUpgradeOpened = runtime.testUpgradeOpened === true;
+      if (typeof runtime.lastEnemyNotice === 'string') this.lastEnemyNotice = runtime.lastEnemyNotice;
+      if (Number.isInteger(runtime.nextMineId) && (runtime.nextMineId as number) > 0) this.nextMineId = runtime.nextMineId as number;
+    }
+    if (runtime && isRecordValue(runtime.recorder)) this.recorder.restoreState(runtime.recorder as unknown as Parameters<RunRecorder['restoreState']>[0]);
+    if (runtime && isRecordValue(runtime.clock)) this.clock.restore(runtime.clock as unknown as Parameters<FixedStepClock['restore']>[0]);
+    else this.clock.restore({ accumulatorTicks: 0, totalSteps: Math.max(0, Math.round(this.elapsed / FixedStepClock.STEP)) });
+    this.restoreRuntimeFields(runtime);
+    this.restoreWeapons(snapshot);
+    this.restoreSupports(snapshot);
+    if (snapshot.build) {
+      if (!this.buildGraph.restore(snapshot.build.graph) || !this.buildCapacity.restore(snapshot.build.capacity)) return;
+    }
+    this.enemies.length = 0;
+    for (const enemySnapshot of snapshot.enemies) {
+      const enemy = this.enemyPool.restore(enemySnapshot, this.elapsed, STAGES[this.options.stageId].isEndless ? 1.4 : 1.25);
+      if (enemy && !this.enemies.includes(enemy)) this.enemies.push(enemy);
+    }
+    this.projectiles.length = 0;
+    for (const projectileSnapshot of snapshot.projectiles) {
+      const projectile = this.projectilePool.restore(projectileSnapshot);
+      if (projectile && !this.projectiles.includes(projectile)) this.projectiles.push(projectile);
+    }
+    if (runtime) {
+      if (Number.isSafeInteger(runtime.enemyPoolNextId) && (runtime.enemyPoolNextId as number) >= 1) this.enemyPool.restoreNextIdentifier(runtime.enemyPoolNextId as number);
+      if (Number.isSafeInteger(runtime.projectilePoolNextId) && (runtime.projectilePoolNextId as number) >= 1) this.projectilePool.restoreNextIdentifier(runtime.projectilePoolNextId as number);
+    }
+    if (checkpoint.spawnState) this.spawnDirector.restore(checkpoint.spawnState as Partial<SpawnDirectorSnapshot>);
+    this.randomStreams.enemySpawn.setState(checkpoint.randomState['enemy-spawn']);
+    this.randomStreams.candidateDraw.setState(checkpoint.randomState['candidate-draw']);
+    this.randomStreams.combatEffect.setState(checkpoint.randomState['combat-effect']);
+    this.randomStreams.presentation.setState(checkpoint.randomState.presentation);
+    if (!this.competitive) this.rng.setState(checkpoint.randomState['candidate-draw']);
+    if (runtime && isRecordValue(runtime.upgradePayload)) {
+      const payload = runtime.upgradePayload;
+      if ((payload.phase === 'selection' || payload.phase === 'break' || payload.phase === undefined)
+        && Number.isInteger(payload.selectionId) && (payload.selectionId as number) > 0 && Array.isArray(payload.candidates)
+        && payload.candidates.every((candidate) => isRecordValue(candidate) && typeof candidate.id === 'string')) {
+        this.upgradePayload = JSON.parse(JSON.stringify(payload)) as UpgradePayload;
+      }
+    }
+    // A restarted tab always enters an explicit pause. This is the safe
+    // boundary: it never advances time while the user is reading the resume
+    // notice, even when the last periodic checkpoint was taken while playing.
+    this.pauseReturnState = checkpoint.phase === 'upgrade' || runtime?.pauseReturnState === 'upgrade' ? 'upgrade' : 'playing';
+    this.state = 'paused';
+    this.lastCheckpointAt = this.elapsed;
+  }
+
+  private restoreRuntimeFields(runtime: Record<string, unknown> | undefined): void {
+    if (!runtime) return;
+    const fields = arrayOfRecords(runtime.gravityFields).filter(isGravityField) as unknown as GravityField[];
+    const mines = arrayOfRecords(runtime.mines).filter(isMineField) as unknown as MineField[];
+    this.gravityFields.splice(0, this.gravityFields.length, ...fields);
+    this.mines.splice(0, this.mines.length, ...mines);
+    this.drones.clear();
+    if (Array.isArray(runtime.drones)) {
+      for (const item of runtime.drones) {
+        if (!isRecordValue(item) || typeof item.instanceId !== 'string' || !Array.isArray(item.units)) continue;
+        const units = item.units.filter(isDroneUnit).map((unit) => ({ ...unit }));
+        if (units.length > 0) this.drones.set(item.instanceId, units);
+      }
+    }
+    restoreNumberMap(this.lanceCharge, runtime.lanceCharge);
+    restoreNumberMap(this.orbitAngles, runtime.orbitAngles);
+    restoreNumberMap(this.orbitHits, runtime.orbitHits);
+    restoreNumberMap(this.targetLocks, runtime.targetLocks, true);
+    restoreNumberMap(this.supportPulseAt, runtime.supportPulseAt);
+    this.igniteTriggered.clear();
+    if (Array.isArray(runtime.igniteTriggered)) for (const id of runtime.igniteTriggered) if (Number.isInteger(id) && id >= 0) this.igniteTriggered.add(id);
+    restoreNumericKeyMap(this.discTrailAt, runtime.discTrailAt);
+    this.pendingSporeSplits.splice(0, this.pendingSporeSplits.length, ...(Array.isArray(runtime.pendingSporeSplits) ? runtime.pendingSporeSplits.filter((value): value is number => finiteNumber(value)) : []));
+    this.designerWave = waveFromRuntime(runtime.designerWave);
+    this.echoWave = waveFromRuntime(runtime.echoWave);
+    this.crownPressure = waveFromRuntime(runtime.crownPressure);
+    this.specialWaveWarning = waveFromRuntime(runtime.specialWaveWarning);
+    if (Number.isInteger(runtime.lastDesignerSector)) this.lastDesignerSector = runtime.lastDesignerSector as number;
+    if (Number.isInteger(runtime.crownWavesTriggered)) this.crownWavesTriggered = Math.max(0, runtime.crownWavesTriggered as number);
+  }
+
+  private restoreWeapons(snapshot: BattleSnapshot): void {
+    this.weapons.splice(0, this.weapons.length);
+    for (const item of snapshot.weapons) {
+      const weapon = new Weapon(item.id, item.slot, item.instanceId);
+      weapon.level = Math.max(1, Math.min(WEAPONS[item.id].levels.length, Math.floor(item.level)));
+      weapon.damageDealt = Math.max(0, item.damageDealt);
+      weapon.branch = item.branch;
+      weapon.finalBranch = item.finalBranch;
+      weapon.evolutionId = item.evolutionId;
+      weapon.cooldown = Math.max(0, item.cooldownRemaining ?? 0);
+      weapon.precisionBonus = Math.max(0, item.precisionBonus ?? 0);
+      weapon.shotsFired = Math.max(0, Math.floor(item.shotsFired ?? 0));
+      this.weapons.push(weapon);
+    }
+  }
+
+  private restoreSupports(snapshot: BattleSnapshot): void {
+    this.supports.splice(0, this.supports.length);
+    for (const item of snapshot.supports) {
+      const support = new SupportModule(item.id, item.slot, item.instanceId);
+      support.level = Math.max(1, Math.min(SUPPORTS[item.id].levels.length, Math.floor(item.level)));
+      this.supports.push(support);
+    }
   }
 
   private renderScene(): void {

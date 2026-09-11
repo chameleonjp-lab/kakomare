@@ -17,9 +17,10 @@
     "generate:og": "node scripts/generate-og-image.mjs",
     "generate:expansion-docs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/generate-expansion-docs.mjs",
     "verify:expansion-docs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/generate-expansion-docs.mjs --check",
+    "verify:ranking-manifest": "node scripts/verify-ranking-manifest.mjs",
     "verify:dist": "node scripts/verify-static-build.mjs",
     "verify:originality": "node scripts/verify-originality.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run verify:expansion-docs && npm run test:e2e && npm run build && npm run verify:dist && npm run verify:originality"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run verify:expansion-docs && npm run verify:ranking-manifest && npm run test:e2e && npm run build && npm run verify:dist && npm run verify:originality"
   },
   "dependencies": {
     "phaser": "^3.90.0"
