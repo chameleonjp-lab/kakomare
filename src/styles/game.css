@@ -229,6 +229,25 @@
   .battle-panel > .battle-controls { display: none; }
 }
 
+/* On short portrait screens, size the field from the space left by the HUD.
+   The HUD's intrinsic height changes with the user's font, so a viewport/rem
+   subtraction cannot reserve enough room reliably. */
+@media (max-width: 760px) and (max-height: 600px) and (orientation: portrait) {
+  .battle-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 1fr) auto;
+    overflow: visible;
+  }
+  .arena-column {
+    min-height: 0;
+    container-type: size;
+    overflow: visible;
+  }
+  .battle-canvas-shell { width: min(100%, 100cqh); }
+  .battle-panel { max-height: none; }
+}
+
 @media (max-width: 760px) and (max-height: 500px) and (orientation: portrait) {
   .battle-header { flex-basis: 48px; min-height: 48px; }
   .battle-canvas-shell { width: min(100%, 280px); }
