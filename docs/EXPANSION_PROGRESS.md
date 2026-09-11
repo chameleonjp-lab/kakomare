@@ -12,7 +12,8 @@
 ### V4の検査状態
 
 - `npm run typecheck`、`npm run lint`、`npm test -- --testTimeout=30000`（24ファイル・178件）、`npm run generate:expansion-docs` は成功した。既存テストの12→25武器、8→12敵、25×8=200組への更新を含む。
-- これから提出先端でbuild、配布物、文書整合性、Chromium/WebKit CIを確認する。iPhone Safari、長時間本戦、無限60試行、補助20全件、全50×20実戦網羅、保存v3、ランキング受付・本番DBはV4の完了条件ではなく未確認のまま残す。
+- `npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` も成功した（Viteの500 kB超チャンク警告は継続）。ローカルChromium/WebKitは実行ファイル不足で未実施だが、提出コミットの [Quality #63](https://github.com/chameleonjp-lab/kakomare/actions/runs/34594754202) は公式PlaywrightコンテナとPages同条件runnerの両jobで全step成功した。静的・単体24ファイル178件、Chromium32件、WebKit32件、文書・build・配布物検証を含む。
+- iPhone Safari、長時間本戦、無限60試行、補助20全件、全50×20実戦網羅、保存v3、ランキング受付・本番DBはV4の完了条件ではなく未確認のまま残す。
 
 ## V3の12武器・8補助・発展と配置変更（履歴）
 
