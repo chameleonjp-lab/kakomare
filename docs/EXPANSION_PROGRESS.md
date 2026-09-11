@@ -2,7 +2,24 @@
 
 更新日：2026-09-11（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
 
-## 現在の再開作業：V0の配備検査失敗を補正
+## 現在の作業：V1の競技仕様と50武器全体設計
+
+- V0の補正Draft PR #18は2026-09-11T02:08:01Zにマージ済み。GitHub APIと `git fetch origin main` の双方で、現在のmainが `7ba253c4304cf719b96c738974af5fe821236371` であることを確認した。PR #18の [Quality #50](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552685647) は公式PlaywrightコンテナとPages同条件native Ubuntuの両jobで成功し、V0の配備検査補正を完了とする。Pagesの公開結果、iPhone Safari、本番ランキングは別の未確認事項である。
+- V1作業branchは `codex/v1-competitive-catalog-20260911`。基準mainは上記 `7ba253c4`。この工程では設計台帳、型、検証器、競技ルール案、生成文書だけを追加し、設計のみの武器・補助を戦闘・図鑑・抽選の実行時登録へ混ぜない。
+- 設計数は基本武器50（現行実装8＋最初の追加4＋残る新規38）、補助S=20（現行実装6＋設計14）、武器×補助の適用セル1,000、各武器2方向の相乗効果100件。現行runtime registryは武器8・補助6のままで、50種類を実装済みとは数えない。
+- 追加した主な成果物は `src/types/expansion.ts`、`src/data/expansionCatalog.ts`、`src/data/competitiveRules.ts`、`src/validation/expansionCatalog.ts`、`tests/unit/expansion-catalog.test.ts`、`scripts/generate-expansion-docs.mjs` と、生成された `WEAPON_CATALOG.md`、`SUPPORT_CATALOG.md`、`SYNERGY_MATRIX.md`、`COMPETITIVE_RULES.md`、`BALANCE_REPORT.md`。文書は台帳データから生成し、`verify:expansion-docs` で同期を検査する。Qualityの両runnerへ同検査を追加した。
+- D01〜D07（50/S、通常Lv8・分岐・特別発展の出発点、容量6、候補重み、採点案、敵・負荷の観測基準、ランキング版・識別子・送信境界）は `docs/BALANCE_REPORT.md` と `docs/COMPETITIVE_RULES.md` に根拠付きで記録した。D08（長時間の数値範囲・性能予算・保存頻度）はV2で決める。
+- [Draft PR #19](https://github.com/chameleonjp-lab/kakomare/pull/19) を作成。カタログ提出headは `9899ab6e129559a528c349fe235df4e40ff802b2`、進行記録追補headは `f7af609e7d74c83d3cf9b6c17f668964ce4e834c`。PRはDraft/openを維持し、mainへのpush・マージ・自動マージは行っていない。
+
+### V1の検査状態
+
+- `npm ci --ignore-scripts --no-audit --no-fund` は162パッケージで成功。`npm run lint`、`npm run typecheck`、`npm run test`（23ファイル・165件）、`npm run verify:expansion-docs`（5ファイル）、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` は、提出差分を含む作業ツリーで成功した。Viteの500kB超チャンク警告は残るが、V1の設計検証失敗とは扱わない。
+- ローカルのPlaywrightブラウザ一覧は空で、Chromium/WebKitの画面検査は未実行。ただし進行記録追補head `f7af609e` に対する [Quality #52](https://github.com/chameleonjp-lab/kakomare/actions/runs/34555509964) は成功した。公式Playwrightコンテナのjob `103127252840` とPages同条件native Ubuntuのjob `103127252800` は、各23ファイル・165件、Chromium31件、WebKit31件、文書整合性、静的、ビルド、配布物、独自名称の全stepに成功している。これは自動ブラウザ検査であり、iPhone 17 Pro Safari、VoiceOver、片手操作、発熱、公開配備一致、本番DB・受付・ランキングの確認ではない。
+- V1の受入境界は、設計済み台帳・適用表・相乗効果・競技契約・検証器が揃うこと。50武器の戦闘実装、抽選到達、容量実測、長時間本戦、ランキング送信、DB変更はV2〜V7へ残す。mainへのpush/マージ、自動マージ、保護緩和、本番DB・実験場の有効化は行わない。
+
+進行記録自身のSHAを自己参照で更新し続けないため、以後のdocs-only追補とそのCIの最新状態はPR #19のChecksと本文へ記載する。ユーザーのV1マージ後に、計画どおりV2の競技基盤へ進む。
+
+## V0の配備検査失敗を補正した履歴（PR #18）
 
 - PR #17は2026-09-10T18:57:20Zにマージ済み。現在のmainは `46b1a5680f00f9d689c008820e24c659861ed165`。再開時点のopen PRと#17コメントは0件。
 - PR最終head `068d38e7d7a02677e06ad1aeabc2584ddacb2d08` の [Quality #48](https://github.com/chameleonjp-lab/kakomare/actions/runs/34510063115) は成功済み。ただしマージ後の [Deploy GitHub Pages](https://github.com/chameleonjp-lab/kakomare/actions/runs/34517482475) は失敗しており、公開完了ではない。
@@ -26,7 +43,7 @@ Luna・Maxがレイアウト修正/回帰検査、親セッションが環境差
 | 公式Playwrightコンテナ | [103117226737](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552188622/job/103117226737) | 22ファイル161成功 | 31成功 | 31成功 | 全成功 |
 | Pages同条件native Ubuntu | [103117226540](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552188622/job/103117226540) | 22ファイル161成功 | 31成功 | 31成功 | 全成功 |
 
-両jobのログに失敗・flaky・retryの記録なし。既存X01～X10/P16-01～08を含む全スイートを維持して実行した。旧Pages失敗をこの成功で消さず、公開配備完了とは扱わない。本記録だけを追加した提出headのCIも再確認し、正確な最終headとrunはPR #18本文・Checksへ記載する（自己参照SHAを文書へ書くための無限更新はしない）。次はユーザーの#18マージ後に最新mainとPages配備結果を確認する。V1は未着手で、開始指示を待つ。
+両jobのログに失敗・flaky・retryの記録なし。既存X01～X10/P16-01～08を含む全スイートを維持して実行した。旧Pages失敗をこの成功で消さず、公開配備完了とは扱わない。本記録だけを追加した提出headのCIも再確認し、正確な最終headとrunはPR #18本文・Checksへ記載する（自己参照SHAを文書へ書くための無限更新はしない）。次はユーザーの#18マージ後に最新mainとPages配備結果を確認する、という状態だった（V1開始前の履歴）。
 
 ## V0初回提出時の確認状態（履歴）
 
@@ -38,12 +55,12 @@ Luna・Maxがレイアウト修正/回帰検査、親セッションが環境差
 
 提出コミット・Draft PR・現コミット検査は提出欄へ記録する。main直接push・マージ・自動マージ・保護緩和・本番DB変更・実験場有効化は行わない。
 
-## 工程とF要件
+## 工程とF要件（V0完了時点の履歴）
 
 | 工程 | 状態 | 次の境界 |
 |---|---|---|
 | V0 | #17マージ済み・配備検査失敗の補正中 | 上記の小画面修正と同環境検査。V1へは進まない |
-| V1 | 未着手 | V0残件対応後、開始指示に従い全50設計/S/50×S/各2方向/D01～D07/型と定義検証器 |
+| V1 | 未着手（当時） | V0残件対応後、開始指示に従い全50設計/S/50×S/各2方向/D01～D07/型と定義検証器 |
 | V2 | 未着手 | 8武器6補助で個体接続容量配置/乱数/入力基盤 |
 | V3 | 未着手 | 12武器/対応補助/連動弱点/初期混成。12は最終でない |
 | V4 | 未着手 | 25武器/補助/敵/競技無限採点/本戦初回 |
