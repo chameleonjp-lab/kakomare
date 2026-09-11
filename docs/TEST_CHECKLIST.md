@@ -17,7 +17,7 @@
 - [x] `npm run verify:ranking-manifest`
 - [x] `git diff --check`
 - [ ] ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（Playwright実行ファイル不在で起動前に失敗。テスト本体未実施）
-- [ ] V6提出コミットのGitHub Actions
+- [ ] V6提出コミットのGitHub Actions（[Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24)、[Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) は確認中）
 - [ ] iPhone Safari実機、VoiceOver、片手操作、発熱、通常720試行、無限60試行、30/60/120回描画比較
 - [ ] 実験場の本番受付・DB・認証・権限・公開URL（ユーザー許可待ち。変更していない）
 

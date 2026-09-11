@@ -39,3 +39,5 @@
 ## 検査の証拠
 
 保存、結果台帳、ランキングの偽ゲートウェイ、manifest検証は28ファイル・201件の単体／統合検査で確認した。文書生成・配布物・独自名称・差分検査も成功している（Viteの500 kB超チャンク警告あり）。ローカルのChromium／WebKitは実行ファイル不在により起動前で停止するため、画面操作の成功とは数えない。Draft PR提出後のGitHub Actions、実機、受付側検査はこの文書へ追記し、未確認のまま完了とは報告しない。
+
+提出先は [Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24)、提出コミットは `e779be6f42bf6a2e88b243ba505695e28e092202`。提出コミットの [Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) は記録時点で実行中であり、完了後の静的・単体・ブラウザ・配布物検査をこの欄へ追記する。CI成功、実機、実験場の本番受付確認を同一の証拠として扱わない。

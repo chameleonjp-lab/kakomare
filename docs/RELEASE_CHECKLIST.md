@@ -12,7 +12,7 @@
 - [x] 結果・部品の一回精算とリタイア除外を実装
 - [x] 進行保存v3と、敵・弾・候補・容量・乱数・入力台帳を含む途中状態のwrite-ahead保存を実装
 - [x] 最終差分のlint、型、単体／統合（28ファイル・201件）、build、配布物、独自名称、manifest検査（Viteの500 kB超チャンク警告あり）
-- [ ] V6提出コミットのGitHub Actions（Draft PR作成後に確認）
+- [ ] V6提出コミットのGitHub Actions（[Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24)、[Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) は確認中）
 - [ ] 実験場の実際のRPC署名、登録値、認証、権限、受付側検証（別許可と実環境確認が必要）
 - [ ] 公開配備、iPhone Safari実機、VoiceOver、片手操作、発熱、長時間本戦（V7／公開前）
 

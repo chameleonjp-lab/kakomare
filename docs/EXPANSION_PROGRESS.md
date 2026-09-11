@@ -9,13 +9,15 @@
 - ランキングは既定では未接続ゲートウェイ。接続時も、ゲーム生成の `start_id` →受付発行の `play_id` → `finish_game_play_v1` →一つの `submission_id` による `submit_score_idempotent_v1` の順で、応答喪失後は同じ識別子・確定得点・内訳を再送する。本番Supabase／実験場の登録、RPC署名・権限・認証・受付動作は未確認であり、DB変更・ランキング有効化は行わない。
 - `ResultLedger` は `resultId` ごとに部品・記録の精算を一回に限定し、リタイアをランキングへ送らない。ルール版・コンテンツ版・クライアント版を保存と結果で区別する。
 
-### V6の検査状態（ローカル検査完了・Draft提出前）
+### V6の検査状態（Draft提出済み・CI確認中）
 
 - `npm test -- --run --testTimeout=30000` は28ファイル・201件が成功。保存v3移行、途中状態のwrite-ahead復元、入力・時計・結果台帳、ランキングの開始再送・得点内訳固定・未設定ゲートウェイ、manifest検証、完全なBuildGraph／runtime検証を含む。
 - `npm run lint`、`npm run typecheck`、`npm run generate:expansion-docs`、`npm run verify:expansion-docs`、`npm run verify:ranking-manifest`、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` は成功（Viteの500 kB超チャンク警告は継続）。
 - 途中保存は runSeed、固定時計、入力台帳、目的別乱数、出現状態、敵・弾・機雷・重力領域・子機・予告・候補・配置・容量を一体で検証し、無限モードの制限時間は保存時だけ有限の0へ正規化する。BuildGraphの重複ノード・親・接続、runtimeの入れ子・map・候補も復元前に拒否し、正規キーの読み戻しを確認する。
 - ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit` は、Playwright実行ファイル（Chromium `chromium_headless_shell-1234`、WebKit `webkit-2336/pw_run.sh`）不在により起動前に失敗し、テスト本体は未実施。提出コミットのGitHub Actions結果とiPhone Safari実機を別に記録する。
-- 未確認：GitHub ActionsのV6提出コミット、iPhone Safari・VoiceOver・片手操作・発熱、通常720試行／無限60試行、30/60/120回描画比較、実験場本番受付・DB・公開URL。これらをV6のゲーム側検査成功へ繰り上げない。
+- [Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24) を `codex/v6-save-result-ranking-20260911` から提出した。ゲーム側提出コミットは `e779be6f42bf6a2e88b243ba505695e28e092202`（ローカル対応コミット `5d9352b`）で、基準main `65801a7c9619aa988f787890716252d1342d923b` から1コミット先である。PRはopen/Draft、mainへの直接push・マージ・自動マージ・保護設定変更・本番DB／実験場設定変更は行っていない。
+- 提出コミットの [Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) は記録時点で `in_progress`。完了後に両jobの結果を確認し、以前の工程の成功runをV6へ流用しない。
+- 未確認：iPhone Safari・VoiceOver・片手操作・発熱、通常720試行／無限60試行、30/60/120回描画比較、実験場本番受付・DB・公開URL。これらをV6のゲーム側検査成功へ繰り上げない。
 
 ### V6の変更境界
 
