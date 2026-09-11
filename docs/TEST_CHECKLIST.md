@@ -2,6 +2,24 @@
 
 > 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
 
+## V1設計：50武器・補助・競技契約（2026-09-11）
+
+対象branchは `codex/v1-competitive-catalog-20260911`。V1では設計済みの基本武器50、補助20、適用1,000セル、相乗効果100件、競技ルール案を検証し、設計のみの内容をruntime registryへ追加しない。実装・長時間本戦・ランキング送信・本番DBは後続工程です。
+
+- [x] `npm ci --ignore-scripts --no-audit --no-fund`（162パッケージ）
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm run test`（23ファイル、165件）
+- [x] `npm run verify:expansion-docs`（生成文書5ファイル）
+- [x] `npm run build`（Viteの500 kB超警告あり）
+- [x] `npm run verify:dist`
+- [x] `npm run verify:originality`
+- [x] `git diff --check`
+- [ ] `npm run test:e2e:chromium`（ローカルにブラウザ実行ファイルがなく未実行。Draft PRのCIで確認）
+- [ ] `npm run test:e2e:webkit`（ローカルにブラウザ実行ファイルがなく未実行。Draft PRのCIで確認）
+
+新しい検証IDは、全50列挙・重複監査・50×20適用表・各武器2方向の相乗効果・設計のみのruntime非混入を `tests/unit/expansion-catalog.test.ts` で確認する。CIの結果、iPhone Safari実機、公開配備、本番ランキング受付は [EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md) に対象コミットとともに記録します。
+
 ## PR-Aの品質検査
 
 対象ブランチ: `codex/quality-a-20260908`
