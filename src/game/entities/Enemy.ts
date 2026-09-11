@@ -195,6 +195,14 @@ export class Enemy {
   }
 
   public snapshot(core: Point, elapsed = 0): EnemySnapshot {
+    const slowFactor = this.slowUntil > elapsed ? 0.55 : 1;
+    const state: EnemySnapshot['state'] = this.invulnerable
+      ? 'invulnerable'
+      : this.telegraph
+        ? 'telegraph'
+        : this.shieldHits > 0
+          ? 'shielded'
+          : slowFactor < 1 ? 'slowed' : 'normal';
     return {
       id: this.id,
       type: this.type,
@@ -209,8 +217,9 @@ export class Enemy {
       invulnerable: this.invulnerable,
       telegraph: this.telegraph,
       telegraphPhase: this.type === 'phase' ? this.telegraphPhase : undefined,
-      slowFactor: this.slowUntil > elapsed ? 0.55 : 1,
+      slowFactor,
       shieldRotation: this.isBoss ? this.shieldRotation : undefined,
+      state,
     };
   }
 

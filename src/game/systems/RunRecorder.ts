@@ -14,6 +14,7 @@ export class RunRecorder {
   public readonly branches: string[] = [];
   public readonly controlSeconds = { slowed: 0, pushed: 0, pulled: 0 };
   public readonly weaponInstanceDamage: Record<string, number> = {};
+  public readonly weaponEvents: Partial<Record<WeaponId, { shots: number; intercepts: number; detonations: number }>> = {};
   public readonly inputRecorder = new InputRecorder();
   public readonly ruleVersion: string;
   public kills = 0;
@@ -34,6 +35,12 @@ export class RunRecorder {
     if (amount <= 0) return;
     this.weaponDamage[id] = (this.weaponDamage[id] ?? 0) + amount;
     if (instanceId) this.weaponInstanceDamage[instanceId] = (this.weaponInstanceDamage[instanceId] ?? 0) + amount;
+  }
+
+  public recordWeaponEvent(id: WeaponId, event: 'shots' | 'intercepts' | 'detonations'): void {
+    const current = this.weaponEvents[id] ?? { shots: 0, intercepts: 0, detonations: 0 };
+    current[event] += 1;
+    this.weaponEvents[id] = current;
   }
 
   public recordInput(input: NormalizedRunInput): void { this.inputRecorder.record(input); }
@@ -82,6 +89,7 @@ export class RunRecorder {
       ruleVersion: this.ruleVersion,
       inputLog: this.inputRecorder.snapshot(),
       weaponInstanceDamage: { ...this.weaponInstanceDamage },
+      weaponEvents: Object.fromEntries(Object.entries(this.weaponEvents).map(([id, value]) => [id, { ...value }])) as BattleResult['weaponEvents'],
     };
   }
 }

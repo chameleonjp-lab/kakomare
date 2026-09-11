@@ -29,6 +29,14 @@ export const SUPPORTS: Record<SupportId, SupportDefinition> = {
     id: 'brake', name: '制動環', description: '押し戻しの距離を伸ばし、敵の進行を遅くします。', role: '減速・押し戻し', color: 0x76e6a7, maxLevel: 3,
     levels: [{ value: 0.1, label: '制動効果 +10%' }, { value: 0.18, label: '+18%' }, { value: 0.28, label: '+28%' }],
   },
+  relay: {
+    id: 'relay', name: '継電環', description: '同じ層から内側の武器へ、効果を一経路だけ中継します。', role: '接続中継', color: 0xff9f68, maxLevel: 3,
+    levels: [{ value: 0.05, label: '内側へ出力 +5%' }, { value: 0.08, label: '内側へ出力 +8%' }, { value: 0.12, label: '内側へ出力 +12%' }],
+  },
+  repair: {
+    id: 'repair', name: '整備環', description: '接続武器が迎撃や状態解除を行うと、コアを少し回復します。', role: '条件付き防衛', color: 0x9be7ff, maxLevel: 3,
+    levels: [{ value: 1, label: '条件成立時に耐久 +1' }, { value: 2, label: '条件成立時に耐久 +2' }, { value: 3, label: '条件成立時に耐久 +3' }],
+  },
 };
 
-export const SUPPORT_ORDER: SupportId[] = ['output', 'rhythm', 'branch', 'focus', 'observe', 'brake'];
+export const SUPPORT_ORDER: SupportId[] = ['output', 'rhythm', 'branch', 'focus', 'observe', 'brake', 'relay', 'repair'];

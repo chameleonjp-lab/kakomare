@@ -1,6 +1,6 @@
 import { SUPPORTS } from '../../data/supports';
 import type { SupportId } from '../../types/content';
-import { adjacentWeaponSlots, nodeIdForSlot } from '../deviceLayout';
+import { adjacentWeaponSlots, layerForSlot, nodeIdForSlot, sectorForSlot } from '../deviceLayout';
 
 export const SUPPORT_EFFECT_CAPS: Record<SupportId, { primary: number; secondary: number }> = {
   output: { primary: 0.4, secondary: 0.4 },
@@ -13,6 +13,13 @@ export const SUPPORT_EFFECT_CAPS: Record<SupportId, { primary: number; secondary
   focus: { primary: 0.35, secondary: 0.44 },
   observe: { primary: 0.45, secondary: 0.45 },
   brake: { primary: 0.45, secondary: 0.45 },
+  // Relay is intentionally a small additive bridge rather than a second
+  // global output multiplier. Its extra target is resolved by the placement
+  // rule below and is capped like the other additive effects.
+  relay: { primary: 0.3, secondary: 0.3 },
+  // Repair is a conditional count/value, not a damage stat. The value is
+  // consumed by the event that actually intercepts or controls an attack.
+  repair: { primary: 9, secondary: 9 },
 };
 
 export class SupportModule {
@@ -45,8 +52,21 @@ export class SupportModule {
   }
 
   public affectsWeaponSlot(weaponSlot: number): boolean {
-    return adjacentWeaponSlots(this.slot).includes(weaponSlot as 0 | 1 | 2);
+    return supportWeaponSlots(this.id, this.slot).includes(weaponSlot);
   }
+}
+
+/** Resolve the visible connection contract in one place for combat and UI. */
+export function supportWeaponSlots(id: SupportId, supportSlot: number): number[] {
+  const adjacent = adjacentWeaponSlots(supportSlot);
+  if (id !== 'relay') return adjacent;
+  const layer = layerForSlot(supportSlot);
+  const sector = sectorForSlot(supportSlot);
+  if (layer === null || sector === null || layer <= 1) return adjacent;
+  // A relay can reach the matching sector of the immediately inner layer,
+  // but never chains through another relay. This keeps the bridge finite and
+  // makes the drawn connection equal to the calculation target.
+  return [...adjacent, (layer - 2) * 3 + sector];
 }
 
 export function supportEffectsFor(supports: readonly SupportModule[], id: SupportId, weaponSlot: number): { primary: number; secondary: number } {

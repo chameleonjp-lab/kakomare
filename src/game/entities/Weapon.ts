@@ -12,6 +12,8 @@ export class Weapon {
   public precisionBonus = 0;
   public branch: WeaponBranch | null = null;
   public finalBranch: WeaponFinalBranch | null = null;
+  /** One-time Lv8 form; kept separate from the two normal branch choices. */
+  public evolutionId: string | null = null;
   public shotsFired = 0;
   public slot: number;
 
@@ -35,11 +37,13 @@ export class Weapon {
   }
 
   public get damageMultiplier(): number {
-    return (1 + this.precisionBonus * 0.06) * (this.finalBranchDefinition?.damageMultiplier ?? 1);
+    return (1 + this.precisionBonus * 0.06)
+      * (this.finalBranchDefinition?.damageMultiplier ?? 1)
+      * (this.evolutionDefinition?.damageMultiplier ?? 1);
   }
 
   public get cooldownMultiplier(): number {
-    return this.finalBranchDefinition?.cooldownMultiplier ?? 1;
+    return (this.finalBranchDefinition?.cooldownMultiplier ?? 1) * (this.evolutionDefinition?.cooldownMultiplier ?? 1);
   }
 
   public get branchDefinition() {
@@ -48,6 +52,10 @@ export class Weapon {
 
   public get finalBranchDefinition() {
     return this.definition.branches.find((branch) => branch.atLevel === 5 && branch.id === this.finalBranch);
+  }
+
+  public get evolutionDefinition() {
+    return this.definition.evolutions.find((evolution) => evolution.id === this.evolutionId);
   }
 
   public advance(seconds: number, intervalMultiplier: number): boolean {

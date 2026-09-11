@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { SUPPORTS, SUPPORT_ORDER } from '../../src/data/supports';
 import { WEAPONS, WEAPON_ORDER } from '../../src/data/weapons';
-import { SupportModule, SUPPORT_EFFECT_CAPS, supportEffectsFor } from '../../src/game/entities/SupportModule';
+import { SupportModule, SUPPORT_EFFECT_CAPS, supportEffectsFor, supportWeaponSlots } from '../../src/game/entities/SupportModule';
 import { audioCueForStatus } from '../../src/services/AudioService';
 
-describe('PR-B の実効値と表現', () => {
-  it('8武器は5段階の正の基礎値とレベル3・5の分岐を持つ', () => {
+describe('V3 の実効値と表現', () => {
+  it('12武器は8段階の正の基礎値とレベル3・5・8の成長を持つ', () => {
     for (const id of WEAPON_ORDER) {
       const weapon = WEAPONS[id];
       expect(weapon.levels).toHaveLength(weapon.maxLevel);
@@ -17,10 +17,11 @@ describe('PR-B の実効値と表現', () => {
       expect(weapon.branches.filter((branch) => branch.atLevel === 3)).toHaveLength(2);
       expect(weapon.branches.filter((branch) => branch.atLevel === 5)).toHaveLength(2);
       expect(new Set(weapon.branches.map((branch) => branch.id)).size).toBe(weapon.branches.length);
+      expect(weapon.evolutions).toHaveLength(1);
     }
   });
 
-  it('8武器×6補助の48組すべてで隣接効果を計算できる', () => {
+  it('12武器×8補助の96組すべてで隣接効果を計算できる', () => {
     const expectedAtLevelThree = {
       output: { primary: 0.2, secondary: 0.2 },
       rhythm: { primary: 0.16, secondary: 0.16 },
@@ -28,6 +29,8 @@ describe('PR-B の実効値と表現', () => {
       focus: { primary: 0.18, secondary: 0.22 },
       observe: { primary: 0.28, secondary: 0.28 },
       brake: { primary: 0.28, secondary: 0.28 },
+      relay: { primary: 0.12, secondary: 0.12 },
+      repair: { primary: 3, secondary: 3 },
     } as const;
     let combinations = 0;
     for (const weaponId of WEAPON_ORDER) {
@@ -39,7 +42,7 @@ describe('PR-B の実効値と表現', () => {
         combinations += 1;
       }
     }
-    expect(combinations).toBe(48);
+    expect(combinations).toBe(96);
   });
 
   it('補助2基の上限は成長値を隠さず、射程と弾速を別々に制限する', () => {
@@ -82,5 +85,14 @@ describe('PR-B の実効値と表現', () => {
       expect(definition.levels).toHaveLength(definition.maxLevel);
       for (const level of definition.levels) expect(level.label.length).toBeGreaterThan(0);
     }
+  });
+
+  it('継電環は第2層から内側へ一経路だけ届き、循環しない', () => {
+    const relay = new SupportModule('relay', 3);
+    relay.level = 3;
+    expect(supportWeaponSlots('relay', 3)).toEqual([3, 4, 0]);
+    expect(relay.affectsWeaponSlot(0)).toBe(true);
+    expect(relay.affectsWeaponSlot(5)).toBe(false);
+    expect(supportEffectsFor([relay], 'relay', 0)).toEqual({ primary: 0.12, secondary: 0.12 });
   });
 });

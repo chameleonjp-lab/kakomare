@@ -21,7 +21,10 @@ export function effectiveWeaponStats(
   projectileSpeedMultiplier = 1,
   polishStacks = 0,
 ): EffectiveWeaponStats {
-  const outputBonus = supportEffectsFor(supports, 'output', weapon.slot).primary;
+  const outputBonus = Math.min(0.4,
+    supportEffectsFor(supports, 'output', weapon.slot).primary
+    + supportEffectsFor(supports, 'relay', weapon.slot).primary,
+  );
   const intervalBonus = supportEffectsFor(supports, 'rhythm', weapon.slot).primary;
   const rangeBonus = supportEffectsFor(supports, 'focus', weapon.slot).primary;
   const speedBonus = supportEffectsFor(supports, 'focus', weapon.slot).secondary;

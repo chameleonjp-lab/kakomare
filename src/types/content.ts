@@ -1,7 +1,12 @@
 export type StageId = 'stage-1' | 'stage-2' | 'stage-3' | 'endless';
 
-export type WeaponId = 'needle' | 'ray' | 'cluster' | 'repulse' | 'chain' | 'orbit' | 'disc' | 'gravity';
-export type SupportId = 'output' | 'rhythm' | 'branch' | 'focus' | 'observe' | 'brake';
+/** Runtime V3 weapon set.  The expansion catalogue keeps the remaining 38
+ * designs separate, so adding an id here means it is intentionally playable
+ * and eligible for in-run acquisition. */
+export type WeaponId =
+  | 'needle' | 'ray' | 'cluster' | 'repulse' | 'chain' | 'orbit' | 'disc' | 'gravity'
+  | 'grid' | 'mine' | 'lance' | 'drone';
+export type SupportId = 'output' | 'rhythm' | 'branch' | 'focus' | 'observe' | 'brake' | 'relay' | 'repair';
 export type EnemyId = 'shard' | 'runner' | 'shell' | 'lattice' | 'spore' | 'marker' | 'dropper' | 'phase';
 export type BossId = 'crown' | 'designer' | 'echo';
 
@@ -23,7 +28,12 @@ export type WeaponBranch =
   | 'strong-push'
   | 'delayed'
   | 'long'
-  | 'collapse';
+  | 'collapse'
+  | 'narrow'
+  | 'multi-direction'
+  | 'near'
+  | 'remote'
+  | 'shatter';
 
 export type WeaponFinalBranch = 'power' | 'tempo';
 
@@ -47,6 +57,17 @@ export interface WeaponStats {
   pullRadius?: number;
   pullStrength?: number;
   safeDistance?: number;
+  /** Minimum charge time used by蓄圧槍; ignored by other attack modes. */
+  chargeTime?: number;
+}
+
+export interface WeaponEvolutionDefinition {
+  id: string;
+  name: string;
+  description: string;
+  /** Optional final-branch adjustments are kept additive to the unique path. */
+  damageMultiplier?: number;
+  cooldownMultiplier?: number;
 }
 
 export interface WeaponDefinition {
@@ -66,6 +87,8 @@ export interface WeaponDefinition {
     damageMultiplier?: number;
     cooldownMultiplier?: number;
   }>;
+  /** A level-eight, one-time form change.  This is not another basic weapon. */
+  evolutions: WeaponEvolutionDefinition[];
 }
 
 export interface SupportDefinition {

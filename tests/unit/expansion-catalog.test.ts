@@ -11,9 +11,9 @@ describe('V1 expansion design contract', () => {
     expect(result.ok, result.errors.join('\n')).toBe(true);
     expect(result.weaponCount).toBe(50);
     expect(new Set(EXPANSION_WEAPONS.map((weapon) => weapon.id)).size).toBe(50);
-    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'implemented')).toHaveLength(8);
-    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only')).toHaveLength(42);
-    expect(WEAPON_ORDER).toHaveLength(8);
+    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'implemented')).toHaveLength(12);
+    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only')).toHaveLength(38);
+    expect(WEAPON_ORDER).toHaveLength(12);
     expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only').every((weapon) => !WEAPON_ORDER.includes(weapon.id as typeof WEAPON_ORDER[number]))).toBe(true);
   });
 

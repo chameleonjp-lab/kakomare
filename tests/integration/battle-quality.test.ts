@@ -5,10 +5,12 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import type { BattleResult, UpgradeCandidate, UpgradePayload } from '../../src/types/game';
+import { SUPPORT_ORDER } from '../../src/data/supports';
+import { WEAPON_ORDER } from '../../src/data/weapons';
 
 type BattleModule = {
   BattleScene: new (options: Record<string, unknown>) => unknown;
-  GameHost: new () => { startBattle(mount: unknown, options: Record<string, unknown>): void; requestPendingUpgrade(id: number, runId: number): void; chooseUpgrade(candidate: UpgradeCandidate, id: number, runId: number): void; pause(runId: number): void; retire(runId: number): void; stop(): void };
+  GameHost: new () => { startBattle(mount: unknown, options: Record<string, unknown>): void; requestPendingUpgrade(id: number, runId: number): void; chooseUpgrade(candidate: UpgradeCandidate, id: number, runId: number): void; pause(runId: number): void; retire(runId: number): void; moveDevice(instanceId: string, toSlot: number, runId: number): boolean; swapDevices(firstInstanceId: string, secondInstanceId: string, runId: number): boolean; stop(): void };
   Enemy: new (id: number, type: string, angle: number, distance: number) => unknown;
   Weapon: new (id: string, slot: number) => { id: string; level: number; precisionBonus: number; slot: number };
   SupportModule: new (id: string, slot: number) => { id: string; level: number; slot: number };
@@ -322,8 +324,8 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
       .filter((candidate) => candidate.canBan !== false);
     const banned = privateValue<Set<string>>(scene, 'banned');
     for (const candidate of ordinary) banned.add(candidate.id);
-    for (const id of ['needle', 'ray', 'cluster', 'repulse', 'chain', 'orbit', 'disc', 'gravity']) banned.add(`weapon:${id}:new`);
-    for (const id of ['output', 'rhythm', 'branch', 'focus', 'observe', 'brake']) banned.add(`support:${id}:new`);
+    for (const id of WEAPON_ORDER) banned.add(`weapon:${id}:new`);
+    for (const id of SUPPORT_ORDER) banned.add(`support:${id}:new`);
     banned.add('weapon:needle:level');
     banned.add('weapon:needle:focus');
     (scene as unknown as { bansLeft: number }).bansLeft = 99;
@@ -595,5 +597,76 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     retiredScene.retire();
     expect(retiredResults).toHaveLength(1);
     expect(retiredResults[0]?.partsEarned).toBe(0);
+  });
+
+  it('V3の追加4武器はそれぞれ固有の実戦オブジェクトを生成する', () => {
+    const scene = new moduleUnderTest.BattleScene(options());
+    const weapons = privateValue<Array<{ id: string; level: number; slot: number; instanceId: string }>>(scene, 'weapons');
+    const fireWeapon = privateValue<(weapon: unknown) => void>(scene, 'fireWeapon').bind(scene);
+    const lanceCharge = privateValue<Map<string, number>>(scene, 'lanceCharge');
+    const projectiles = privateValue<Array<{ kind: string; sourceWeaponId: string | null }>>(scene, 'projectiles');
+    const mines = privateValue<unknown[]>(scene, 'mines');
+    const drones = privateValue<Map<string, unknown[]>>(scene, 'drones');
+    for (const id of ['grid', 'mine', 'lance', 'drone']) {
+      const weapon = new moduleUnderTest.Weapon(id, 1) as unknown as { id: string; level: number; slot: number; instanceId: string };
+      weapon.level = 8;
+      weapons.push(weapon);
+      if (id === 'lance') lanceCharge.set(weapon.instanceId, 1);
+      fireWeapon(weapon);
+    }
+    expect(projectiles.some((projectile) => projectile.kind === 'grid' && projectile.sourceWeaponId === 'grid')).toBe(true);
+    expect(projectiles.some((projectile) => projectile.kind === 'lance' && projectile.sourceWeaponId === 'lance')).toBe(true);
+    expect(mines).toHaveLength(1);
+    expect(drones.get(weapons.find((weapon) => weapon.id === 'drone')?.instanceId ?? '')).toHaveLength(2);
+  });
+
+  it('迎撃格子は方向上限内の敵弾を消し、機雷は侵入時に一度だけ爆発する', () => {
+    const scene = new moduleUnderTest.BattleScene(options());
+    const weapons = privateValue<Array<{ id: string; level: number; slot: number }>>(scene, 'weapons');
+    const grid = new moduleUnderTest.Weapon('grid', 1) as unknown as { id: string; level: number; slot: number };
+    grid.level = 8;
+    weapons.push(grid);
+    const origin = privateValue<(weapon: unknown) => { x: number; y: number }>(scene, 'weaponOrigin').bind(scene)(grid);
+    const addProjectile = privateValue<(config: Record<string, unknown>) => unknown>(scene, 'addProjectile').bind(scene);
+    addProjectile({ kind: 'enemy', x: origin.x, y: origin.y - 120, vx: 0, vy: 0, radius: 9, damage: 1, life: 2, piercing: 0, enemyProjectile: true });
+    privateValue<(weapon: unknown) => void>(scene, 'fireWeapon').bind(scene)(grid);
+    expect(privateValue<Array<{ active: boolean }>>(scene, 'projectiles').some((projectile) => projectile.active === false)).toBe(true);
+    const mine = new moduleUnderTest.Weapon('mine', 2) as unknown as { id: string; level: number; slot: number };
+    mine.level = 8;
+    weapons.push(mine);
+    privateValue<(weapon: unknown) => void>(scene, 'fireWeapon').bind(scene)(mine);
+    const fields = privateValue<Array<{ x: number; y: number; life: number }>>(scene, 'mines');
+    expect(fields.length).toBeGreaterThan(0);
+    const enemy = new moduleUnderTest.Enemy(77, 'shard', 0, Math.hypot(fields[0]!.x, fields[0]!.y));
+    enemy.x = fields[0]!.x; enemy.y = fields[0]!.y;
+    privateValue<unknown[]>(scene, 'enemies').push(enemy);
+    privateValue<(seconds: number) => void>(scene, 'updateMines').bind(scene)(1 / 60);
+    expect(fields).toHaveLength(0);
+  });
+
+  it('停止中の移設・入替は個体のレベルと待ち時間を保ち、入力台帳へ一度ずつ記録する', () => {
+    const snapshots: unknown[] = [];
+    const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
+      onStatus() {}, onUpgrade() {}, onFinish() {}, onPauseRequest() {}, onSnapshot: (snapshot: unknown) => snapshots.push(snapshot),
+    } }));
+    const weapons = privateValue<Array<{ id: string; instanceId: string; slot: number; level: number; cooldown: number }>>(scene, 'weapons');
+    const graph = privateValue<{ install(instanceId: string, kind: 'weapon', slot: number): boolean }>(scene, 'buildGraph');
+    const first = weapons[0]!;
+    first.level = 4; first.cooldown = 1.25;
+    const second = new moduleUnderTest.Weapon('ray', 1) as unknown as { id: string; instanceId: string; slot: number; level: number; cooldown: number };
+    second.level = 3; second.cooldown = 0.75;
+    weapons.push(second);
+    expect(graph.install(second.instanceId, 'weapon', 1)).toBe(true);
+    (scene as Record<string, unknown>).state = 'paused';
+    expect((scene as unknown as { moveDevice(id: string, slot: number): boolean }).moveDevice(first.instanceId, 2)).toBe(true);
+    expect(first.slot).toBe(2);
+    expect(first.cooldown).toBe(1.25);
+    expect((scene as unknown as { swapDevices(first: string, second: string): boolean }).swapDevices(first.instanceId, second.instanceId)).toBe(true);
+    expect(first.slot).toBe(1);
+    expect(second.slot).toBe(2);
+    expect(privateValue<{ inputRecorder: { snapshot(): unknown[] } }>(scene, 'recorder').inputRecorder.snapshot().filter((event: { kind: string }) => event.kind === 'build')).toHaveLength(2);
+    expect(snapshots.length).toBeGreaterThanOrEqual(2);
+    (scene as Record<string, unknown>).state = 'playing';
+    expect((scene as unknown as { moveDevice(id: string, slot: number): boolean }).moveDevice(first.instanceId, 0)).toBe(false);
   });
 });

@@ -19,6 +19,10 @@ const paths = {
 
 const escapeCell = (value) => String(value).replaceAll('|', '\\|').replaceAll('\n', '<br>');
 const statusLabel = (status) => status === 'implemented' ? '現行実装' : '設計済み・未実装';
+const implementedWeaponCount = EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'implemented').length;
+const designOnlyWeaponCount = EXPANSION_WEAPONS.length - implementedWeaponCount;
+const implementedSupportCount = EXPANSION_SUPPORTS.filter((support) => support.status === 'implemented').length;
+const designOnlySupportCount = EXPANSION_SUPPORTS.length - implementedSupportCount;
 const applicabilitySymbol = { direct: 'D', conditional: 'C', placement: 'P', 'not-applicable': '—' };
 
 const supportSummary = (weapon) => {
@@ -35,7 +39,7 @@ const supportSummary = (weapon) => {
 
 const weapons = `# 基本武器カタログ（V1設計正本）
 
-ルール版：\`${EXPANSION_RULE_VERSION}\`。この台帳は、基本武器を分岐・レベル・進化・色違いと混同せず50種類で設計するためのものです。現行で戦闘に登録されているのは「現行実装」の8件だけです。「設計済み・未実装」の42件は、本番の抽選・図鑑・公開レジストリへ出しません。V3〜V5で実装と検査を完了し、抽選から到達できることを確認するまで、実装済み数へ加えません。
+ルール版：\`${EXPANSION_RULE_VERSION}\`。この台帳は、基本武器を分岐・レベル・進化・色違いと混同せず50種類で設計するためのものです。現行で戦闘に登録されているのは「現行実装」の${implementedWeaponCount}件です。「設計済み・未実装」の${designOnlyWeaponCount}件は、本番の抽選・図鑑・公開レジストリへ出しません。V3〜V5で実装と検査を完了し、抽選から到達できることを確認するまで、実装済み数へ加えません。
 
 各行には、近い武器との差を2つ、通常成長、弱点、上限、補助の20組、相乗効果を2方向記載しています。相乗効果は数値倍率を2つ並べたものではなく、発動条件・代替経路・弱点を持つ構造として設計します。
 
@@ -54,12 +58,12 @@ ${EXPANSION_WEAPONS.flatMap((weapon) => weapon.synergies.map((synergy, index) =>
 - 設計数は50（現行8＋最初の追加4＋残る38）です。
 - 分岐、通常レベル、特別発展は基本武器の中へ重複して数えません。
 - 50件すべてに、攻撃経路・対象選択・発動条件・位置の意味・制約の組み合わせで、近い武器と異なる2つ以上の差分を記録しています。
-- 実装状態、検査状態、公開受入状態は別に管理します。V1完了時点では設計済み50、実装済み8、公開受入済み0です。
+- 実装状態、検査状態、公開受入状態は別に管理します。V3時点では設計済み50、実装済み${implementedWeaponCount}、公開受入済み0です。
 `;
 
 const supports = `# 補助カタログ（V1設計正本）
 
-補助総数Sは **20** と決定します。既存6件だけでは、50武器へ攻撃変更・条件発動・接続・防衛・代償を分担させる台帳が不足します。14件を追加して、同じ威力倍率を全武器へ配るだけにならないよう役割を分けます。追加補助は設計済みですが、V3〜V5で実装・上限・負荷・相乗効果を検査するまでは本番候補へ出しません。
+補助総数Sは **20** と決定します。既存6件だけでは、50武器へ攻撃変更・条件発動・接続・防衛・代償を分担させる台帳が不足します。14件を追加して、同じ威力倍率を全武器へ配るだけにならないよう役割を分けます。V3時点で戦闘に登録されているのは${implementedSupportCount}件で、残る${designOnlySupportCount}件は設計済みですが未実装です。本番候補へ出す範囲は実装・上限・負荷・相乗効果の検査後に更新します。
 
 | # | supportId | 名称 | 状態 | 役割 | 発動条件 | 効果 | 容量 | 上限・代償 | 記録する値 |
 |---:|---|---|---|---|---|---|---|---|---|

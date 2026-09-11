@@ -23,11 +23,13 @@ export interface EnemySnapshot {
   telegraphPhase?: number;
   slowFactor: number;
   shieldRotation?: number;
+  /** A non-colour status cue for telegraph/invulnerable/slow readability. */
+  state?: 'normal' | 'telegraph' | 'invulnerable' | 'slowed' | 'shielded';
 }
 
 export interface ProjectileSnapshot {
   id: number;
-  kind: 'needle' | 'cluster' | 'disc' | 'enemy';
+  kind: 'needle' | 'cluster' | 'disc' | 'lance' | 'grid' | 'drone' | 'enemy';
   x: number;
   y: number;
   vx: number;
@@ -54,6 +56,8 @@ export interface WeaponSnapshot {
   damageDealt: number;
   branch: WeaponBranch | null;
   finalBranch: WeaponFinalBranch | null;
+  evolutionId: string | null;
+  evolutionName?: string;
 }
 
 export interface SupportSnapshot {
@@ -157,6 +161,9 @@ export interface BattleResult {
   ruleVersion?: string;
   inputLog?: NormalizedRunInput[];
   weaponInstanceDamage?: Record<string, number>;
+  /** V3 event counts keep interception, deployment, and detonation distinct
+   * from damage so support contributions are not inferred from raw damage. */
+  weaponEvents?: Partial<Record<WeaponId, { shots: number; intercepts: number; detonations: number }>>;
   build?: BuildSnapshot;
 }
 

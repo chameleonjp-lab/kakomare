@@ -565,7 +565,7 @@ export class AppController {
       window.setTimeout(() => resume.focus(), 0);
     };
     const rules = button('遊び方'); rules.addEventListener('click', () => this.showPauseRules(pauseMenu, pauseView, showMenu, resumeBattle));
-    const loadout = button('装置を確認'); loadout.addEventListener('click', () => this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle));
+    const loadout = button('装置を確認'); loadout.addEventListener('click', () => this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle, runId));
     const settings = button('音量と演出'); settings.addEventListener('click', () => this.showPauseSettings(pauseMenu, pauseView, showMenu, resumeBattle));
     const retire = button('リタイア', 'button button-danger'); retire.addEventListener('click', () => { if (window.confirm('このプレイを終了しますか？得点は確定しません。')) this.gameHost.retire(runId); });
     const home = button('ホームへ戻る'); home.addEventListener('click', () => { if (runId === this.battleRunSequence && layer.isConnected && window.confirm('プレイを終了してホームへ戻りますか？')) { this.gameHost.stop(); this.runLifecycle.cancel(); this.render('home'); } });
@@ -584,9 +584,10 @@ export class AppController {
     view.append(copy);
   }
 
-  private showPauseLoadout(menu: HTMLElement, view: HTMLElement, back: () => void, resume: () => void): void {
+  private showPauseLoadout(menu: HTMLElement, view: HTMLElement, back: () => void, resume: () => void, runId: number): void {
     menu.hidden = true;
     view.hidden = false;
+    view.replaceChildren();
     const copy = element('div', 'pause-rules pause-loadout');
     copy.dataset.testid = 'pause-loadout';
     copy.append(element('h3', '', '現在の装置'));
@@ -605,6 +606,58 @@ export class AppController {
     const list = element('ul', 'loadout-list');
     for (const item of loadout) list.append(element('li', '', item));
     copy.append(list);
+    if (snapshot) {
+      const graph = snapshot.build?.graph;
+      const installed = [
+        ...snapshot.weapons.map((item) => ({ ...item, kind: 'weapon' as const })),
+        ...snapshot.supports.map((item) => ({ ...item, kind: 'support' as const })),
+      ];
+      const controls = element('div', 'loadout-controls');
+      controls.append(element('h4', '', '配置を調整（停止中のみ）'));
+      controls.append(element('p', 'battle-help', '移設は空いている同種の面へ、入替は同種の装置同士で行います。レベル・待ち時間は保持します。'));
+      const refresh = (): void => this.showPauseLoadout(menu, view, back, resume, runId);
+      for (const item of installed) {
+        const row = element('div', 'loadout-control-row');
+        const label = item.kind === 'weapon' ? this.weaponName(item.id) : this.supportName(item.id);
+        const evolution = item.kind === 'weapon' && item.evolutionName ? `・${item.evolutionName}` : '';
+        row.append(element('span', 'loadout-control-label', `${item.kind === 'weapon' ? '武器' : '補助'}面${item.slot + 1} ${label} Lv${item.level}${evolution}`));
+        const actions = element('div', 'loadout-control-actions');
+        const freeSlots = graph?.nodes
+          .filter((node) => node.kind === item.kind && node.unlocked && !node.occupiedInstanceId)
+          .map((node) => node.slot)
+          .sort((first, second) => first - second) ?? [];
+        const moveTarget = freeSlots[0];
+        const move = button(moveTarget === undefined ? '空き面なし' : `面${moveTarget + 1}へ移設`, 'button button-small');
+        move.disabled = moveTarget === undefined;
+        move.dataset.testid = `move-${item.kind}-${item.instanceId}`;
+        move.addEventListener('click', () => {
+          if (moveTarget !== undefined && this.gameHost.moveDevice(item.instanceId, moveTarget, runId)) refresh();
+        });
+        actions.append(move);
+
+        const others = installed.filter((other) => other.kind === item.kind && other.instanceId !== item.instanceId);
+        const swapSelect = document.createElement('select');
+        swapSelect.className = 'loadout-swap-select';
+        swapSelect.setAttribute('aria-label', `${label}の入替先`);
+        for (const other of others) {
+          const option = document.createElement('option');
+          const otherLabel = other.kind === 'weapon' ? this.weaponName(other.id) : this.supportName(other.id);
+          option.value = other.instanceId;
+          option.textContent = `面${other.slot + 1} ${otherLabel}`;
+          swapSelect.append(option);
+        }
+        const swap = button('入れ替え', 'button button-small');
+        swap.disabled = others.length === 0;
+        swap.dataset.testid = `swap-${item.kind}-${item.instanceId}`;
+        swap.addEventListener('click', () => {
+          if (swapSelect.value && this.gameHost.swapDevices(item.instanceId, swapSelect.value, runId)) refresh();
+        });
+        actions.append(swapSelect, swap);
+        row.append(actions);
+        controls.append(row);
+      }
+      copy.append(controls);
+    }
     this.appendPauseViewActions(copy, back, resume);
     view.append(copy);
   }

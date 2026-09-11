@@ -29,6 +29,10 @@ describe('V2 competitive foundation', () => {
     expect(graph.move('output-a', 'support', 7, 8)).toBe(true);
     expect(graph.instanceAt('support', 7)).toBeNull();
     expect(graph.instanceAt('support', 8)).toBe('output-a');
+    expect(graph.install('needle-b', 'weapon', 1)).toBe(true);
+    expect(graph.swap('ray-a', 'needle-b', 'weapon')).toBe(true);
+    expect(graph.instanceAt('weapon', 1)).toBe('ray-a');
+    expect(graph.instanceAt('weapon', 3)).toBe('needle-b');
     expect(graph.nodeFor('weapon', 99)).toBeUndefined();
   });
 

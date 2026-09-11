@@ -3,7 +3,7 @@ import type { ProjectileSnapshot } from '../../types/game';
 
 export interface ProjectileOptions {
   id: number;
-  kind: 'needle' | 'cluster' | 'disc' | 'enemy';
+  kind: 'needle' | 'cluster' | 'disc' | 'lance' | 'grid' | 'drone' | 'enemy';
   x: number;
   y: number;
   vx: number;
@@ -29,7 +29,7 @@ export interface ProjectileOptions {
 
 export class Projectile {
   public readonly id: number;
-  public kind: 'needle' | 'cluster' | 'disc' | 'enemy';
+  public kind: 'needle' | 'cluster' | 'disc' | 'lance' | 'grid' | 'drone' | 'enemy';
   public x: number;
   public y: number;
   public vx: number;
