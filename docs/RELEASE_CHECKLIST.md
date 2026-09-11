@@ -2,6 +2,22 @@
 
 > 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
 
+## V6 Draft提出ゲート（2026-09-11）
+
+対象branchは `codex/v6-save-result-ranking-20260911`。V6はゲーム側の保存・結果・ランキング送信準備までをDraft PRへ提出する工程であり、mainへのpush・マージ、自動マージ、本番DB／Supabase RPC／実験場登録の変更・有効化は行わない。
+
+- [x] `ranking-manifest.json` の正式URL、game_id、公開版、採点順序、終了種別を検証するスクリプトを追加
+- [x] 既定のランキングゲートウェイを未接続にし、公開キー以外の秘密情報をクライアントへ置かない
+- [x] start_id／サーバー発行play_id／submission_idを分離し、finish→submitの順序と同一内容再送を実装
+- [x] 結果・部品の一回精算とリタイア除外を実装
+- [x] 進行保存v3と、敵・弾・候補・容量・乱数・入力台帳を含む途中状態のwrite-ahead保存を実装
+- [x] 最終差分のlint、型、単体／統合（28ファイル・201件）、build、配布物、独自名称、manifest検査（Viteの500 kB超チャンク警告あり）
+- [ ] V6提出コミットのGitHub Actions（Draft PR作成後に確認）
+- [ ] 実験場の実際のRPC署名、登録値、認証、権限、受付側検証（別許可と実環境確認が必要）
+- [ ] 公開配備、iPhone Safari実機、VoiceOver、片手操作、発熱、長時間本戦（V7／公開前）
+
+未設定ゲートウェイでランキングへ接続できない場合も、結果画面・再戦・共有・ホーム・ローカル記録を維持し、再送資格を表示する。Draft PRのCI成功を本番公開や実機受入の証拠へ繰り上げない。
+
 PR-Aの公開確認です。コードと自動検査の結果は [QUALITY_A_REPORT.md](QUALITY_A_REPORT.md) を参照します。以前のPRの検査数やActions実行URLは現在の合格根拠に使いません。
 
 対象ブランチ: `codex/quality-a-20260908`

@@ -3,6 +3,7 @@ import { STAGES } from '../data/stages';
 import { SUPPORTS, SUPPORT_ORDER } from '../data/supports';
 import { WEAPONS, WEAPON_ORDER } from '../data/weapons';
 import type { BattleResult } from '../types/game';
+import type { RankingSnapshot } from '../types/ranking';
 import { button, card, element, heading, pageShell } from './viewUtils';
 
 export interface ResultActions {
@@ -10,6 +11,18 @@ export interface ResultActions {
   next: () => void;
   home: () => void;
   share: () => void;
+  ranking?: RankingSnapshot;
+  retryRanking?: () => void;
+}
+
+function rankingStatusLabel(snapshot: RankingSnapshot): string {
+  if (snapshot.status === 'submitting') return 'ランキングへ送信中…';
+  if (snapshot.status === 'submitted') return 'ランキングへ登録しました。';
+  if (snapshot.status === 'retryable_failed') return 'ランキング送信を再試行できます。';
+  if (snapshot.status === 'permanent_failed') return snapshot.diagnosticCode === 'ranking_endpoint_unconfigured'
+    ? 'ランキング受付が未設定のため、今回の記録は送信していません。'
+    : 'ランキングへ登録できませんでした。結果と再戦は利用できます。';
+  return 'ランキング受付を確認しています。';
 }
 
 export function createResultView(result: BattleResult, actions: ResultActions): HTMLElement {
@@ -20,6 +33,19 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
   scoreCard.append(heading(result.retired ? '記録は未確定です' : `${result.score.toLocaleString('ja-JP')} 点`, 2));
   scoreCard.append(element('p', 'result-highlight', `${Math.floor(result.survivalTime)}秒生存 / 撃破 ${result.kills} / ${BOSSES[result.bossId].name}`));
   shell.append(scoreCard);
+  if (result.stageId === 'endless' && actions.ranking) {
+    const rankingCard = card('result-ranking-card');
+    rankingCard.dataset.testid = 'ranking-status';
+    rankingCard.append(heading('ランキング', 2), element('p', 'summary-line', rankingStatusLabel(actions.ranking)));
+    if (actions.ranking.session) rankingCard.append(element('p', 'summary-line', `受付ID: ${actions.ranking.session.playId}`));
+    if (actions.ranking.status === 'retryable_failed' && actions.retryRanking) {
+      const retry = button('ランキングへ再送', 'button button-secondary');
+      retry.dataset.testid = 'ranking-retry';
+      retry.addEventListener('click', actions.retryRanking);
+      rankingCard.append(retry);
+    }
+    shell.append(rankingCard);
+  }
   const details = card('result-details');
   details.append(heading('今回の記録', 2));
   const rows: Array<[string, string]> = [
@@ -39,23 +65,59 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
   const weaponCard = card('result-details');
   weaponCard.dataset.testid = 'result-device-records';
   weaponCard.append(heading('装置の働き', 2));
-  weaponCard.append(element('h3', '', '武器ごとの総与ダメージ'));
-  for (const id of WEAPON_ORDER) {
+  weaponCard.append(element('h3', '', '今回使った武器'));
+  const usedWeaponIds = new Set((result.weaponInstances ?? []).map((weapon) => weapon.id));
+  const renderedWeaponIds = new Set<string>();
+  const renderWeapon = (id: typeof WEAPON_ORDER[number], instanceId?: string): HTMLElement => {
     const amount = result.weaponDamage[id] ?? 0;
     const entry = element('article', 'result-device-entry');
-    entry.append(element('h4', '', WEAPONS[id].name));
+    entry.append(element('h4', '', `${WEAPONS[id].name}${instanceId ? `（${instanceId}）` : ''}`));
     entry.append(element('p', 'result-device-role', WEAPONS[id].role));
-    entry.append(element('strong', 'result-device-value', `${Math.round(amount)}ダメージ`));
-    weaponCard.append(entry);
+    const instanceAmount = instanceId ? result.weaponInstanceDamage?.[instanceId] : undefined;
+    entry.append(element('strong', 'result-device-value', `${Math.round(instanceAmount ?? amount)}ダメージ`));
+    return entry;
+  };
+  const usedInstances = result.weaponInstances ?? [];
+  for (const weapon of usedInstances) {
+    weaponCard.append(renderWeapon(weapon.id, weapon.instanceId));
+    renderedWeaponIds.add(weapon.id);
+  }
+  // Older result fixtures do not carry instance snapshots. Positive damage is
+  // still a reliable used-set for those records.
+  for (const id of WEAPON_ORDER.filter((weaponId) => (result.weaponDamage[weaponId] ?? 0) > 0 && !renderedWeaponIds.has(weaponId))) {
+    weaponCard.append(renderWeapon(id));
+    renderedWeaponIds.add(id);
+  }
+  if (renderedWeaponIds.size === 0) weaponCard.append(renderWeapon('needle'));
+  const unusedWeapons = WEAPON_ORDER.filter((id) => !usedWeaponIds.has(id) && !renderedWeaponIds.has(id));
+  if (unusedWeapons.length > 0) {
+    const unused = document.createElement('details');
+    unused.className = 'result-unused-details';
+    unused.append(element('summary', '', `未使用の武器（${unusedWeapons.length}）`));
+    for (const id of unusedWeapons) unused.append(renderWeapon(id));
+    weaponCard.append(unused);
   }
   weaponCard.append(element('h3', '', '補助装置の接続'));
-  for (const id of SUPPORT_ORDER) {
+  const usedSupportIds = new Set(SUPPORT_ORDER.filter((id) => (result.supportUsage[id] ?? 0) > 0));
+  for (const id of SUPPORT_ORDER.filter((supportId) => usedSupportIds.has(supportId))) {
     const count = result.supportUsage[id] ?? 0;
     const entry = element('article', 'result-device-entry');
     entry.append(element('h4', '', SUPPORTS[id].name));
     entry.append(element('p', 'result-device-role', SUPPORTS[id].role));
     entry.append(element('strong', 'result-device-value', count > 0 ? `${count}面で採用` : '未採用'));
     weaponCard.append(entry);
+  }
+  const unusedSupports = SUPPORT_ORDER.filter((id) => !usedSupportIds.has(id));
+  if (unusedSupports.length > 0) {
+    const unused = document.createElement('details');
+    unused.className = 'result-unused-details';
+    unused.append(element('summary', '', `未使用の補助（${unusedSupports.length}）`));
+    for (const id of unusedSupports) {
+      const entry = element('article', 'result-device-entry');
+      entry.append(element('h4', '', SUPPORTS[id].name), element('p', 'result-device-role', SUPPORTS[id].role), element('strong', 'result-device-value', '未採用'));
+      unused.append(entry);
+    }
+    weaponCard.append(unused);
   }
   if (result.upgrades.length > 0) weaponCard.append(element('p', 'summary-line', `強化順: ${result.upgrades.join(' → ')}`));
   if (result.branches.length > 0) weaponCard.append(element('p', 'summary-line', `発展分岐: ${result.branches.join(' / ')}`));

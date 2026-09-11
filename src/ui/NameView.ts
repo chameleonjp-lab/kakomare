@@ -4,17 +4,17 @@ export function createNameView(onSubmit: (name: string) => void): HTMLElement {
   const shell = pageShell('カコマレ', '名前を決めると、端末内に進行と記録を保存できます。');
   const card = element('div', 'name-card card');
   card.append(heading('プレイヤー名', 2));
-  const label = element('label', 'field-label', '1〜12文字');
+  const label = element('label', 'field-label', '1〜20文字');
   const input = element('input', 'name-input') as HTMLInputElement;
   input.id = 'player-name';
   label.htmlFor = input.id;
   input.type = 'text';
   input.name = 'player-name';
   input.setAttribute('autocomplete', 'nickname');
-  input.maxLength = 12;
+  input.maxLength = 20;
   input.placeholder = '名前を入力';
   input.setAttribute('aria-describedby', 'name-help name-error');
-  const help = element('p', 'field-help', '前後の空白は取り除きます。外部へ送信しません。');
+  const help = element('p', 'field-help', '前後の空白は取り除きます。ランキングへ送信する場合も、この名前だけを使います。');
   help.id = 'name-help';
   const error = element('p', 'form-error');
   error.id = 'name-error';
@@ -23,7 +23,7 @@ export function createNameView(onSubmit: (name: string) => void): HTMLElement {
   const submit = (): void => {
     const value = input.value.trim();
     if (!isValidPlayerName(value)) {
-      error.textContent = '1〜12文字で入力してください。';
+      error.textContent = '1〜20文字で入力してください。';
       input.focus();
       return;
     }

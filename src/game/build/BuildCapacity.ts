@@ -59,4 +59,26 @@ export class BuildCapacity {
       allocations: [...this.allocations.entries()].map(([instanceId, allocation]) => ({ instanceId, ...allocation })),
     };
   }
+
+  /** Restore allocations without trusting the serialized used/remaining totals. */
+  public restore(snapshot: CapacitySnapshot): boolean {
+    if (!snapshot || ![1, 2, 3].includes(snapshot.unlockedLayer) || !Array.isArray(snapshot.allocations)
+      || !Number.isInteger(snapshot.maximum) || !Number.isInteger(snapshot.used) || !Number.isInteger(snapshot.remaining)
+      || snapshot.maximum !== BUILD_CAPACITY_BY_LAYER[snapshot.unlockedLayer]
+      || snapshot.used < 0 || snapshot.remaining < 0 || snapshot.remaining !== snapshot.maximum - snapshot.used) return false;
+    const next = new Map<string, Allocation>();
+    let used = 0;
+    for (const allocation of snapshot.allocations) {
+      if (!allocation || typeof allocation.instanceId !== 'string' || allocation.instanceId.length === 0 || next.has(allocation.instanceId)
+        || !Number.isInteger(allocation.cost) || allocation.cost <= 0 || (allocation.kind !== 'weapon' && allocation.kind !== 'support')) return false;
+      used += allocation.cost;
+      if (used > snapshot.maximum) return false;
+      next.set(allocation.instanceId, { cost: allocation.cost, kind: allocation.kind });
+    }
+    if (used !== snapshot.used) return false;
+    this._unlockedLayer = snapshot.unlockedLayer;
+    this.allocations.clear();
+    for (const [instanceId, allocation] of next) this.allocations.set(instanceId, allocation);
+    return true;
+  }
 }

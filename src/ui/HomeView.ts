@@ -3,6 +3,7 @@ import { button, card, element, heading, pageShell } from './viewUtils';
 
 export interface HomeActions {
   start: () => void;
+  resume?: () => void;
   stages: () => void;
   settings: () => void;
   rules: () => void;
@@ -19,6 +20,12 @@ export function createHomeView(save: SaveData, actions: HomeActions): HTMLElemen
   start.dataset.testid = 'start-game';
   start.addEventListener('click', actions.start);
   hero.append(title, element('p', 'hero-copy', `${save.profile.name}さん、コアを守りましょう。`), start);
+  if (actions.resume) {
+    const resume = button('中断したプレイを再開', 'button button-secondary button-large');
+    resume.dataset.testid = 'resume-saved-run';
+    resume.addEventListener('click', actions.resume);
+    hero.append(resume);
+  }
   shell.append(hero);
 
   const stats = card('summary-card');

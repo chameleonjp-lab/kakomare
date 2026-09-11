@@ -34,7 +34,7 @@ describe('SaveService', () => {
     legacy.profile.name = '旧版利用者';
     const v1 = { ...legacy, version: 1, progress: { ...legacy.progress, unlockedStages: ['stage-1'], parts: 12 }, records: { ...legacy.records, stageBest: { 'stage-1': { bestScore: 80, bestCore: 70, bestTime: 40 } } } };
     const migrated = service.validateImport(JSON.stringify(v1));
-    expect(migrated?.version).toBe(2);
+    expect(migrated?.version).toBe(3);
     expect(migrated?.progress.parts).toBe(12);
     expect(migrated?.records.stageBest['stage-1']?.bestScore).toBe(80);
   });
@@ -120,5 +120,14 @@ describe('SaveService', () => {
     };
     expect(new SaveService(storage).persist(createDefaultSave())).toBe(false);
     expect(new SaveService(null).persist(createDefaultSave())).toBe(false);
+  });
+
+  it('fails closed when a storage adapter does not return the written v3 value', () => {
+    const storage: StorageLike = {
+      getItem: () => '{different}',
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    };
+    expect(new SaveService(storage).persist(createDefaultSave())).toBe(false);
   });
 });

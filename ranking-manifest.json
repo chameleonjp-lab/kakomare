@@ -1,0 +1,50 @@
+{
+  "schema_version": "chameleonjp-ranking-manifest-v1",
+  "game_id": "kakomare",
+  "title": "カコマレ",
+  "description": "六方向から迫る敵を防ぎ、装置を組み上げる全方位防衛ゲームです。",
+  "share_text": "カコマレで無限の構成と危険を競おう。",
+  "canonical_url": "https://chameleonjp-lab.github.io/kakomare/",
+  "release_date": "2026-09-11",
+  "client_version": "kakomare-web-v6",
+  "submission_mode": "shared",
+  "lab": {
+    "representative_slug": "kakomare_endless"
+  },
+  "player_name": {
+    "required_before_start": true,
+    "min_length": 1,
+    "max_length": 20,
+    "storage_key": "kakomare-player-name"
+  },
+  "play_count": {
+    "count_at": "start",
+    "rpc": "start_game_play_v1",
+    "idempotency": true
+  },
+  "submission": {
+    "rpc": "submit_score_idempotent_v1",
+    "automatic": true,
+    "idempotency": true,
+    "timeout_ms": 8000
+  },
+  "ranking_entries": [
+    {
+      "mode_id": "endless",
+      "game_slug": "kakomare_endless",
+      "title": "カコマレ 無限モード",
+      "display_order": 34,
+      "top_ranking_type": "best",
+      "score_order": "desc",
+      "score_unit": "点",
+      "score_scale": 1,
+      "score_decimals": 0,
+      "score_label": "スコア",
+      "first_score_label": "初回スコア",
+      "best_score_label": "最高スコア",
+      "score_min": 0,
+      "score_max": 2147483647,
+      "ranked_results": ["game_over", "clear"]
+    }
+  ]
+}

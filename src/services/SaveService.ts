@@ -7,9 +7,12 @@ import {
   createDefaultSave,
   DAMAGED_SAVE_KEY,
   LEGACY_SAVE_KEY,
+  PREVIOUS_SAVE_KEY,
   SAVE_KEY,
+  SAVE_VERSION,
   type SaveData,
   type ResearchId,
+  type StageRecord,
 } from '../types/save';
 import type { StageId, SupportId, WeaponId } from '../types/content';
 
@@ -43,7 +46,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isName(value: unknown): value is string {
-  if (typeof value !== 'string' || [...value.trim()].length < 1 || [...value.trim()].length > 12) return false;
+  // The ranking contract allows up to 20 user-visible characters. Keep the
+  // same validation for local saves so a name can be used for an optional
+  // ranking start without silently truncating it.
+  if (typeof value !== 'string' || [...value.trim()].length < 1 || [...value.trim()].length > 20) return false;
   return ![...value].some((char) => { const code = char.codePointAt(0) ?? 0; return code <= 0x1f || code === 0x7f; });
 }
 
@@ -57,6 +63,10 @@ function isCounter(value: unknown): value is number {
 
 function isFraction(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value));
 }
 
 function isNumberRecord(value: unknown): value is Record<string, number> {
@@ -86,8 +96,16 @@ function isResearchLevels(value: unknown): value is Partial<Record<ResearchId, n
   });
 }
 
-function isValidSave(value: unknown): value is SaveData {
-  if (!isRecord(value) || value.version !== 2 || !isRecord(value.profile) || !isStoredName(value.profile.name)) return false;
+function isRuleVersions(value: unknown): value is SaveData['records']['ruleVersions'] {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((item) => {
+    if (!isRecord(item) || !isCounter(item.endlessBest) || !isRecord(item.stageBest)) return false;
+    return Object.entries(item.stageBest).every(([stageId, record]) => STAGE_ORDER.includes(stageId as StageId) && isStageRecord(record));
+  });
+}
+
+function isValidSaveShape(value: Record<string, unknown>, version: 2 | 3): boolean {
+  if (value.version !== version || !isRecord(value.profile) || !isStoredName(value.profile.name)) return false;
   if (!isRecord(value.progress) || !isSequentialStageUnlocks(value.progress.unlockedStages) || !isCounter(value.progress.parts) || !isResearchLevels(value.progress.researchLevels)) return false;
   if (!isRecord(value.records) || !isRecord(value.records.stageBest) || !Object.values(value.records.stageBest).every((item) => isStageRecord(item)) || !isCounter(value.records.endlessBest)) return false;
   if (!isNumberRecord(value.records.enemyKills) || !isNumberRecord(value.records.weaponBestDamage) || !isRecord(value.records.sectorDamage) || !Object.values(value.records.sectorDamage).every((item) => isSectorRecord(item))) return false;
@@ -97,7 +115,53 @@ function isValidSave(value: unknown): value is SaveData {
   if (!['standard', 'strong'].includes(value.settings.aimAssist as string)) return false;
   if (!isRecord(value.statistics) || !isCounter(value.statistics.playCount) || !isCounter(value.statistics.clearCount) || !isCounter(value.statistics.totalKills) || !isNumberRecord(value.statistics.weaponUsage) || !isNumberRecord(value.statistics.supportUsage)) return false;
   if (!isRecord(value.statistics.controlSeconds) || !isFraction(value.statistics.controlSeconds.slowed) || !isFraction(value.statistics.controlSeconds.pushed) || !isFraction(value.statistics.controlSeconds.pulled)) return false;
-  return typeof value.updatedAt === 'string';
+  return isTimestamp(value.updatedAt);
+}
+
+function isValidSave(value: unknown): value is SaveData {
+  if (!isRecord(value) || !isValidSaveShape(value, SAVE_VERSION)) return false;
+  const records = value.records;
+  if (!isRecord(records) || !isRuleVersions(records.ruleVersions)) return false;
+  if (!isRecord(value.migration) || ![1, 2, 3].includes(value.migration.sourceVersion as number) || !isTimestamp(value.migration.migratedAt)) return false;
+  return true;
+}
+
+function copyRuleVersions(value: unknown): SaveData['records']['ruleVersions'] {
+  if (!isRuleVersions(value)) return {};
+  return Object.fromEntries(Object.entries(value).map(([version, record]) => [version, {
+    endlessBest: record.endlessBest,
+    stageBest: Object.fromEntries(Object.entries(record.stageBest).map(([stageId, stage]) => [stageId, { ...stage }])),
+  }])) as SaveData['records']['ruleVersions'];
+}
+
+function migrateLegacyV2(value: Record<string, unknown>): SaveData | null {
+  if (!isValidSaveShape(value, 2)) return null;
+  const records = value.records as Record<string, unknown>;
+  const migrated = createDefaultSave();
+  migrated.profile = { name: (value.profile as { name: string }).name };
+  migrated.progress = {
+    unlockedStages: [...(value.progress as { unlockedStages: StageId[] }).unlockedStages],
+    parts: (value.progress as { parts: number }).parts,
+    researchLevels: { ...(value.progress as { researchLevels: SaveData['progress']['researchLevels'] }).researchLevels },
+  };
+  migrated.records = {
+    stageBest: Object.fromEntries(Object.entries(records.stageBest as Record<string, unknown>).map(([id, stage]) => [id, { ...(stage as StageRecord) }])) as SaveData['records']['stageBest'],
+    endlessBest: records.endlessBest as number,
+    enemyKills: copyNumberRecord(records.enemyKills) as SaveData['records']['enemyKills'],
+    weaponBestDamage: copyNumberRecord(records.weaponBestDamage) as SaveData['records']['weaponBestDamage'],
+    sectorDamage: Object.fromEntries(Object.entries(records.sectorDamage as Record<string, unknown>).map(([id, sector]) => [id, [...(sector as number[])]])) as SaveData['records']['sectorDamage'],
+    ruleVersions: copyRuleVersions(records.ruleVersions),
+  };
+  migrated.settings = { ...(value.settings as SaveData['settings']) };
+  migrated.statistics = {
+    ...(value.statistics as SaveData['statistics']),
+    controlSeconds: { ...(value.statistics as SaveData['statistics']).controlSeconds },
+    weaponUsage: { ...(value.statistics as SaveData['statistics']).weaponUsage },
+    supportUsage: { ...(value.statistics as SaveData['statistics']).supportUsage },
+  };
+  migrated.migration = { sourceVersion: 2, migratedAt: new Date().toISOString() };
+  migrated.updatedAt = new Date().toISOString();
+  return migrated;
 }
 
 function copyNumberRecord(value: unknown): Record<string, number> {
@@ -173,6 +237,7 @@ function migrateLegacyV1(value: Record<string, unknown>): SaveData | null {
       pulled: value.statistics.controlSeconds.pulled as number,
     };
   }
+  migrated.migration = { sourceVersion: 1, migratedAt: new Date().toISOString() };
   migrated.updatedAt = new Date().toISOString();
   return migrated;
 }
@@ -180,6 +245,8 @@ function migrateLegacyV1(value: Record<string, unknown>): SaveData | null {
 export function migrateSave(value: unknown): SaveData | null {
   if (!isRecord(value)) return null;
   if (isValidSave(value)) return value;
+  const v2 = migrateLegacyV2(value);
+  if (v2) return v2;
   const legacy = migrateLegacyV1(value);
   if (legacy) return legacy;
 
@@ -192,6 +259,7 @@ export function migrateSave(value: unknown): SaveData | null {
     migrated.profile.name = value.profile.name.trim();
     if (isRecord(value.statistics) && isCounter(value.statistics.playCount)) migrated.statistics.playCount = value.statistics.playCount;
     if (isRecord(value.statistics) && isCounter(value.statistics.totalKills)) migrated.statistics.totalKills = value.statistics.totalKills;
+    migrated.migration = { sourceVersion: 1, migratedAt: new Date().toISOString() };
     migrated.updatedAt = new Date().toISOString();
     return migrated;
   }
@@ -208,31 +276,51 @@ export class SaveService {
   public load(): LoadResult {
     const fallback = createDefaultSave();
     if (!this.storage) return { data: fallback, recovered: false, message: '' };
-    let raw: string | null;
-    let currentSave: string | null;
+    const sources: Array<{ key: string; raw: string | null }> = [];
     try {
-      currentSave = this.storage.getItem(SAVE_KEY);
-      raw = currentSave ?? this.storage.getItem(LEGACY_SAVE_KEY);
+      for (const key of [SAVE_KEY, PREVIOUS_SAVE_KEY, LEGACY_SAVE_KEY]) sources.push({ key, raw: this.storage.getItem(key) });
     } catch {
       return { data: fallback, recovered: true, message: '保存領域を読み込めなかったため、初期状態で開始しました。' };
     }
-    if (!raw) return { data: fallback, recovered: false, message: '' };
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      const migrated = migrateSave(parsed);
-      if (!migrated) throw new Error('保存形式が不正です。');
-      if (parsed !== migrated || currentSave === null) this.persist(migrated);
-      return { data: migrated, recovered: false, message: '' };
-    } catch {
-      try { this.storage.setItem(DAMAGED_SAVE_KEY, raw); } catch { /* Storage may be full or unavailable. */ }
-      return { data: fallback, recovered: true, message: '保存データを読み込めなかったため、初期状態で開始しました。' };
+    let recovered = false;
+    for (const source of sources) {
+      if (!source.raw) continue;
+      try {
+        const parsed: unknown = JSON.parse(source.raw);
+        const migrated = migrateSave(parsed);
+        if (!migrated) throw new Error('保存形式が不正です。');
+        if (source.key !== SAVE_KEY || parsed !== migrated || migrated.version !== SAVE_VERSION) this.persist(migrated);
+        return {
+          data: migrated,
+          recovered,
+          message: recovered ? '新しい保存データを読み込めなかったため、以前の保存から復元しました。' : '',
+        };
+      } catch {
+        recovered = true;
+        try { this.storage.setItem(DAMAGED_SAVE_KEY, source.raw); } catch { /* Storage may be full or unavailable. */ }
+      }
     }
+    return { data: fallback, recovered, message: recovered ? '保存データを読み込めなかったため、初期状態で開始しました。' : '' };
   }
 
   public persist(data: SaveData): boolean {
     if (!this.storage) return false;
     try {
-      this.storage.setItem(SAVE_KEY, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }));
+      const current: SaveData = {
+        ...data,
+        version: SAVE_VERSION,
+        migration: data.migration ?? { sourceVersion: SAVE_VERSION, migratedAt: new Date().toISOString() },
+        updatedAt: new Date().toISOString(),
+      };
+      if (!isValidSave(current)) return false;
+      const canonical = JSON.stringify(current);
+      this.storage.setItem(SAVE_KEY, canonical);
+      const readBack = this.storage.getItem(SAVE_KEY);
+      if (readBack !== canonical || !readBack || !isValidSave(JSON.parse(readBack))) return false;
+      // Keep a deliberately marked v2-compatible mirror while old deployed
+      // clients still read the previous key. It is never preferred on load.
+      const mirror = JSON.stringify({ ...current, version: 2 });
+      this.storage.setItem(PREVIOUS_SAVE_KEY, mirror);
       return true;
     } catch {
       // Storage may be unavailable or full. Play can continue in memory.

@@ -139,6 +139,23 @@ export class BuildGraph {
     };
   }
 
+  /** Restore unlocks and occupancy from a validated run checkpoint. */
+  public restore(snapshot: BuildGraphSnapshot): boolean {
+    if (!snapshot || ![1, 2, 3].includes(snapshot.unlockedLayer) || !Array.isArray(snapshot.nodes)) return false;
+    const nextOccupied = new Map<BuildNodeId, string>();
+    for (const node of snapshot.nodes) {
+      if (!node.occupiedInstanceId) continue;
+      const local = this.node(node.nodeId);
+      if (!local || local.kind !== node.kind || local.slot !== node.slot || local.layer !== node.layer || node.layer > snapshot.unlockedLayer
+        || !node.occupiedInstanceId || nextOccupied.has(node.nodeId) || [...nextOccupied.values()].includes(node.occupiedInstanceId)) return false;
+      nextOccupied.set(node.nodeId, node.occupiedInstanceId);
+    }
+    this.setUnlockedLayer(snapshot.unlockedLayer);
+    this.occupied.clear();
+    for (const [nodeId, instanceId] of nextOccupied) this.occupied.set(nodeId, instanceId);
+    return true;
+  }
+
   /** Reset occupancy while preserving the chosen layer unlock. */
   public clearDevices(): void { this.occupied.clear(); }
 

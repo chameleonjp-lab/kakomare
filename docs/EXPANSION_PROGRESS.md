@@ -2,9 +2,33 @@
 
 更新日：2026-09-11（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
 
-## 現在の作業：V5の基本50武器・補助20・追加面とボス
+## 現在の作業：V6の保存・結果・ランキング連携（ゲーム側）
 
-- PR #22（V4）はユーザーによりマージ済み。`git fetch origin main` で確認した現在のmain先端はマージコミット `4bb667784e6e7553034ca7682b088f027d95a118`、開始時のopen PRは0件だった。これを基準に作業branch `codex/v5-content-complete-20260911` を作成した。
+- PR #23（V5）はユーザーによりマージ済み。`git fetch origin main` で確認した現在のmain先端はマージコミット `65801a7c9619aa988f787890716252d1342d923b`（PR #23のhead `e51b779...`）で、作業開始時のopen PRは0件だった。このmainから作業branch `codex/v6-save-result-ranking-20260911` を作成した。
+- V6では、進行保存v3への移行（v1/v2を保持）、安全な更新境界での途中保存と再開、敵・弾・候補・配置・容量・乱数・入力台帳の復元、結果の一回精算、無限モード結果のゲーム側ランキングアダプター、manifest検査、結果画面の送信状態を実装する。基本武器50・補助20・全1,000組はV5の内容を維持し、V6で縮小しない。
+- ランキングは既定では未接続ゲートウェイ。接続時も、ゲーム生成の `start_id` →受付発行の `play_id` → `finish_game_play_v1` →一つの `submission_id` による `submit_score_idempotent_v1` の順で、応答喪失後は同じ識別子・確定得点・内訳を再送する。本番Supabase／実験場の登録、RPC署名・権限・認証・受付動作は未確認であり、DB変更・ランキング有効化は行わない。
+- `ResultLedger` は `resultId` ごとに部品・記録の精算を一回に限定し、リタイアをランキングへ送らない。ルール版・コンテンツ版・クライアント版を保存と結果で区別する。
+
+### V6の検査状態（ローカル検査完了・Draft提出前）
+
+- `npm test -- --run --testTimeout=30000` は28ファイル・201件が成功。保存v3移行、途中状態のwrite-ahead復元、入力・時計・結果台帳、ランキングの開始再送・得点内訳固定・未設定ゲートウェイ、manifest検証、完全なBuildGraph／runtime検証を含む。
+- `npm run lint`、`npm run typecheck`、`npm run generate:expansion-docs`、`npm run verify:expansion-docs`、`npm run verify:ranking-manifest`、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` は成功（Viteの500 kB超チャンク警告は継続）。
+- 途中保存は runSeed、固定時計、入力台帳、目的別乱数、出現状態、敵・弾・機雷・重力領域・子機・予告・候補・配置・容量を一体で検証し、無限モードの制限時間は保存時だけ有限の0へ正規化する。BuildGraphの重複ノード・親・接続、runtimeの入れ子・map・候補も復元前に拒否し、正規キーの読み戻しを確認する。
+- ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit` は、Playwright実行ファイル（Chromium `chromium_headless_shell-1234`、WebKit `webkit-2336/pw_run.sh`）不在により起動前に失敗し、テスト本体は未実施。提出コミットのGitHub Actions結果とiPhone Safari実機を別に記録する。
+- 未確認：GitHub ActionsのV6提出コミット、iPhone Safari・VoiceOver・片手操作・発熱、通常720試行／無限60試行、30/60/120回描画比較、実験場本番受付・DB・公開URL。これらをV6のゲーム側検査成功へ繰り上げない。
+
+### V6の変更境界
+
+|項目|V6で行うこと|行わないこと|
+|---|---|---|
+|保存|進行v3移行、途中run save、安全境界の復元、破損退避|既存データの削除、任意時点の無検証復元|
+|結果|`resultId`単位の一回精算、個体別結果、終了種別の保持|リタイアの部品・ランキング加点|
+|ランキング|manifest、ゲーム側adapter、start/play/submission識別、再送状態|本番DB／RPC登録・権限変更・有効化|
+|内容|V5の基本50武器・補助20・相乗効果・敵編成を維持|武器・補助・敵の削減、V7本戦の前倒し|
+
+## V5の基本50武器・補助20・追加面とボス（履歴）
+
+- PR #22（V4）はユーザーによりマージ済み。V5開始時のmain先端はマージコミット `4bb667784e6e7553034ca7682b088f027d95a118`、開始時のopen PRは0件だった。これを基準に作業branch `codex/v5-content-complete-20260911` を作成した。
 - V5では、V1で確定した設計台帳をruntimeへ移し、基本武器を50種類、補助を20種類へ拡張した。全50武器は8レベル、Lv3/Lv5分岐、Lv8発展を持ち、補助との適用表は50×20=1,000組を維持する。登録数は完成証明ではなく、抽選到達・相乗効果・個体別記録を別に検査する。
 - V5の戦闘経路には、追加25武器の個体別発射、破砕・導電・誘爆・背水・定着・薄幕・脈動・蓄勢・格子・軌道・触媒の有限効果、追加ステージ4〜6、射線門・織り手・三相炉を接続した。stage-3クリア時は従来の無限解放を保ちつつ、stage-4を分岐解放する。無限ボスは6種を循環させる。
 - V5の範囲外は、V6の保存v3・途中再開・結果精算・ランキング受付、本番DB／実験場設定変更、V7の長時間本戦・独立レビュー・iPhone Safari実機・公開受入である。これらをV5の成功へ繰り上げない。
@@ -19,7 +43,7 @@
 - 初回提出コミット `e034157e8d8f5e0492d4a0a2499afa8b6a765e48` の [Quality #65](https://github.com/chameleonjp-lab/kakomare/actions/runs/34611107511) は、静的・単体は成功したが、Chromium 32件中31件成功・1件失敗で停止した。失敗は `tests/e2e/core.spec.ts:179` の候補装着検査が、V5で補助候補も追加された後に「武器面2」を固定していたためである。WebKitと後続build検査を未実行のまま成功扱いにせず、同じブランチで候補タイトルと実際の新規装着面を照合する条件へ修正した。
 - 修正コミット `34189758d957426b4848f203503e66495b1470be` では、上記E2Eの固定武器名を廃し、`aria-disabled` の新規候補カードから候補名を取得して、装着後の構成一覧に同じ名前が現れることを確認する。修正後に静的・型・単体／統合検査（24ファイル・181件）を再実行した。
 - 修正後提出コミットに対する [Quality #66](https://github.com/chameleonjp-lab/kakomare/actions/runs/34611876158) は、公式Playwrightコンテナ `quality` とPages同条件 `pages-runner-quality` の両jobで全step成功した。各jobで静的・単体24ファイル181件、Chromium 32件、WebKit 32件、文書生成・整合性、build、`verify:dist`、`verify:originality` を確認した。これはGitHub Actionsの自動検査であり、iPhone Safari実機、長時間本戦、V6の保存・ランキング本番受入を意味しない。
-- [Draft PR #23](https://github.com/chameleonjp-lab/kakomare/pull/23) は `codex/v5-content-complete-20260911` から `main` へ提出中で、追補後のリモート先端は `f47481bdb1613c9205be4c0163c07e49a3f64960`（3コミット）である。PRはopen/Draftを維持し、mainへの直接push・マージ・自動マージ・保護設定変更・本番DB／実験場設定変更は行っていない。
+- [PR #23](https://github.com/chameleonjp-lab/kakomare/pull/23) は `e51b779...` をheadとしてユーザーによりマージ済み。マージコミットは `65801a7c9619aa988f787890716252d1342d923b`、提出head対応の [Quality #68](https://github.com/chameleonjp-lab/kakomare/actions/runs/34613473599) は静的・単体／統合181件、Chromium32件、WebKit32件、文書・build・配布物検査の全step成功を確認した。これはV5のCI証拠であり、V6の保存・ランキング受入ではない。
 
 ## V4の25武器・競技無限進行・敵コンテンツ
 
@@ -141,7 +165,7 @@ Luna・Maxがレイアウト修正/回帰検査、親セッションが環境差
 | V3 | 未着手 | 12武器/対応補助/連動弱点/初期混成。12は最終でない |
 | V4 | 未着手 | 25武器/補助/敵/競技無限採点/本戦初回 |
 | V5 | 未着手 | 基本50/S/全連動/追加面ボス/全形態と抽選到達 |
-| V6 | 未着手 | 保存結果共有/実験場契約。本番は別許可 |
+| V6 | 実装済み・Draft提出前 | 保存v3/途中復元/結果一回精算/ランキングゲーム側契約。CI・本番・実機は未確認 |
 | V7 | 未着手 | 最終本戦/負荷/独立レビュー/実機/公開受入 |
 
 | F | V0現在と最終受入 |
@@ -178,9 +202,9 @@ Luna・Maxがレイアウト修正/回帰検査、親セッションが環境差
 | A11 | 無限変化整備 | V4 | 未着手 |
 | A12 | 接敵猶予 | V2/V7 | 未着手 |
 | A13 | 弾割当偏り | V2以後/V7 | 未着手 |
-| A14 | 途中保存 | V2/V6 | 未着手 |
-| A15 | 未使用結果一覧 | V6 | 未着手 |
-| A16 | 新旧点比較 | V1/V6 | 未着手 |
+| A14 | 途中保存 | V2/V6 | V6の安全境界保存・復元を実装。長時間・実機は未確認 |
+| A15 | 未使用結果一覧 | V6 | 使用個体を先に表示し、未使用一覧を詳細へ折りたたむ実装。画面実機は未確認 |
+| A16 | 新旧点比較 | V1/V6 | ルール版・競技結果を分離して保存。新旧本戦比較は未実施 |
 | A17 | 研究成長枝 | V1/V3～V5 | 未着手、競技恒久能力なし |
 | A18 | 追加通常面 | V5 | 未着手 |
 | A19 | 長時間枯渇 | 各工程/V7 | V0停止成長回帰のみ。本戦360/720・無限60未着手 |

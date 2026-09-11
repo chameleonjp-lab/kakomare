@@ -19,7 +19,8 @@ export interface StageRecord {
 }
 
 export interface SaveData {
-  version: 2;
+  /** Current progression save schema. Run snapshots use a separate schema. */
+  version: 3;
   profile: { name: string };
   progress: {
     unlockedStages: StageId[];
@@ -32,6 +33,9 @@ export interface SaveData {
     enemyKills: Partial<Record<EnemyId | BossId, number>>;
     weaponBestDamage: Partial<Record<WeaponId, number>>;
     sectorDamage: Partial<Record<StageId, number[]>>;
+    /** Best records are kept per ruleset so a rules update never overwrites
+     * an older competitive result. */
+    ruleVersions: Record<string, { endlessBest: number; stageBest: Partial<Record<StageId, StageRecord>> }>;
   };
   settings: {
     audio: number;
@@ -49,19 +53,23 @@ export interface SaveData {
     supportUsage: Partial<Record<SupportId, number>>;
     controlSeconds: { slowed: number; pushed: number; pulled: number };
   };
+  migration: { sourceVersion: 1 | 2 | 3; migratedAt: string };
   updatedAt: string;
 }
 
-export const SAVE_KEY = 'kakomare-save-v2';
+export const SAVE_KEY = 'kakomare-save-v3';
+/** Read-only compatibility mirror for older clients and explicit v2 exports. */
+export const PREVIOUS_SAVE_KEY = 'kakomare-save-v2';
 export const LEGACY_SAVE_KEY = 'kakomare-save-v1';
 export const DAMAGED_SAVE_KEY = 'kakomare-damaged-save';
+export const SAVE_VERSION = 3 as const;
 
 export function createDefaultSave(): SaveData {
   return {
-    version: 2,
+    version: SAVE_VERSION,
     profile: { name: '' },
     progress: { unlockedStages: ['stage-1'], parts: 0, researchLevels: {} },
-    records: { stageBest: {}, endlessBest: 0, enemyKills: {}, weaponBestDamage: {}, sectorDamage: {} },
+    records: { stageBest: {}, endlessBest: 0, enemyKills: {}, weaponBestDamage: {}, sectorDamage: {}, ruleVersions: {} },
     settings: {
       audio: 70,
       music: 35,
@@ -78,6 +86,7 @@ export function createDefaultSave(): SaveData {
       supportUsage: {},
       controlSeconds: { slowed: 0, pushed: 0, pulled: 0 },
     },
+    migration: { sourceVersion: SAVE_VERSION, migratedAt: new Date(0).toISOString() },
     updatedAt: new Date(0).toISOString(),
   };
 }

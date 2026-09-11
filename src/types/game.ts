@@ -1,6 +1,7 @@
 import type { BossId, EnemyId, StageId, SupportId, WeaponBranch, WeaponFinalBranch, WeaponId } from './content';
 import type { BuildGraphSnapshot, CapacitySnapshot, BuildLayer } from './build';
 import type { NormalizedRunInput } from '../game/systems/InputRecorder';
+import type { RunSaveEnvelope } from './runSave';
 
 export interface Point {
   x: number;
@@ -28,6 +29,20 @@ export interface EnemySnapshot {
   burning?: boolean;
   /** A non-colour status cue for telegraph/invulnerable/slow readability. */
   state?: 'normal' | 'telegraph' | 'invulnerable' | 'slowed' | 'shielded';
+  /** Runtime timers and path state needed for deterministic safe-boundary resume. */
+  age?: number;
+  shotCooldown?: number;
+  specialCooldown?: number;
+  pressureCooldown?: number;
+  splitDone?: boolean;
+  summoned?: boolean;
+  summonedChildren?: number;
+  slowRemaining?: number;
+  markedRemaining?: number;
+  burningRemaining?: number;
+  movementAngle?: number;
+  movementDistance?: number;
+  specialDamageTaken?: number;
 }
 
 export interface ProjectileSnapshot {
@@ -47,6 +62,16 @@ export interface ProjectileSnapshot {
   sourceWeaponId: WeaponId | null;
   sourceWeaponInstanceId: string | null;
   boundaryRadius: number;
+  /** Runtime targeting, impact and per-target cooldown state. */
+  targetId?: number | null;
+  hitCooldown?: number;
+  impactX?: number | null;
+  impactY?: number | null;
+  impactRadius?: number;
+  impactAngle?: number;
+  clusterSplitChild?: boolean;
+  impactWarningShown?: boolean;
+  hitAt?: Array<[number, number]>;
 }
 
 export interface WeaponSnapshot {
@@ -61,6 +86,10 @@ export interface WeaponSnapshot {
   finalBranch: WeaponFinalBranch | null;
   evolutionId: string | null;
   evolutionName?: string;
+  /** Runtime fields required to resume at a safe update boundary. */
+  cooldownRemaining?: number;
+  precisionBonus?: number;
+  shotsFired?: number;
 }
 
 export interface SupportSnapshot {
@@ -168,6 +197,12 @@ export interface BattleResult {
    * from damage so support contributions are not inferred from raw damage. */
   weaponEvents?: Partial<Record<WeaponId, { shots: number; intercepts: number; detonations: number }>>;
   build?: BuildSnapshot;
+  weaponInstances?: WeaponSnapshot[];
+  supportInstances?: SupportSnapshot[];
+  /** Stable local identity used by the result settlement ledger. */
+  resultId?: string;
+  /** Server-issued ranking play id, when a start was accepted. */
+  playId?: string | null;
 }
 
 export interface BattleCallbacks {
@@ -178,4 +213,6 @@ export interface BattleCallbacks {
   /** Optional low-volume cues emitted by actual weapon/kill events. */
   onAudioCue?: (cue: 'shot' | 'heavy' | 'defeat') => void;
   onPauseRequest: () => void;
+  /** A safe-boundary checkpoint for local resume. It is never a ranking upload. */
+  onCheckpoint?: (checkpoint: RunSaveEnvelope) => void;
 }
