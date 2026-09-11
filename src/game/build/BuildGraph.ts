@@ -100,6 +100,17 @@ export class BuildGraph {
     return true;
   }
 
+  /** Move two installed copies atomically without exposing an empty face. */
+  public swap(firstInstanceId: string, secondInstanceId: string, kind: BuildNodeKind): boolean {
+    if (!firstInstanceId || !secondInstanceId || firstInstanceId === secondInstanceId) return false;
+    const firstNode = this.nodeList.find((node) => node.kind === kind && this.occupied.get(node.nodeId) === firstInstanceId);
+    const secondNode = this.nodeList.find((node) => node.kind === kind && this.occupied.get(node.nodeId) === secondInstanceId);
+    if (!firstNode || !secondNode || !firstNode.unlocked || !secondNode.unlocked) return false;
+    this.occupied.set(firstNode.nodeId, secondInstanceId);
+    this.occupied.set(secondNode.nodeId, firstInstanceId);
+    return true;
+  }
+
   public instanceAt(kind: BuildNodeKind, slot: number): string | null {
     const node = this.nodeFor(kind, slot);
     return node ? this.occupied.get(node.nodeId) ?? null : null;

@@ -166,6 +166,13 @@
 .loadout-list { margin: 0; padding-left: 22px; color: #c3d7dc; }
 .loadout-list li { padding: 3px 0; }
 .pause-loadout .button { display: block; width: 100%; margin-top: 10px; text-align: center; }
+.loadout-controls { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(55, 106, 128, .45); }
+.loadout-controls h4 { margin: 0 0 6px; }
+.loadout-control-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; padding: 9px 0; border-top: 1px solid rgba(55, 106, 128, .3); }
+.loadout-control-label { min-width: 0; color: #d8e7e9; overflow-wrap: anywhere; }
+.loadout-control-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.loadout-control-actions .button { min-width: 0; margin-top: 0; }
+.loadout-swap-select { min-height: 48px; min-width: 0; padding: 8px; border: 1px solid #376a80; border-radius: 10px; color: #f2f0e8; background: #07131f; }
 .share-dialog { width: min(100%, 620px); }
 .share-text { width: 100%; min-height: 140px; margin: 8px 0; padding: 12px; border: 1px solid #376a80; border-radius: 10px; color: #f2f0e8; background: #07131f; resize: vertical; overflow-wrap: anywhere; }
 .share-status { min-height: 1.6em; margin: 0; color: #76e6a7; }

@@ -1,15 +1,18 @@
 import Phaser from 'phaser';
 import type { SupportSnapshot, WeaponSnapshot } from '../../types/game';
-import { adjacentWeaponSlots, itemAtExpandedSlot, DEVICE_SLOT_COUNT } from '../deviceLayout';
+import { itemAtExpandedSlot, DEVICE_SLOT_COUNT } from '../deviceLayout';
+import { supportWeaponSlots } from '../entities/SupportModule';
 import { drawHex, drawPolygon, polygonPoints } from './ShapeFactory';
 
 const WEAPON_COLORS: Record<WeaponSnapshot['id'], number> = {
   needle: 0x63d7e6, ray: 0xffbe5c, cluster: 0xa78bfa, repulse: 0x76e6a7,
   chain: 0xff8bd8, orbit: 0xf4e285, disc: 0x78a8ff, gravity: 0xc084fc,
+  grid: 0xf0a6ff, mine: 0xff8f70, lance: 0xffd166, drone: 0x6ee7b7,
 };
 
 const SUPPORT_COLORS: Record<SupportSnapshot['id'], number> = {
   output: 0xffbe5c, rhythm: 0x63d7e6, branch: 0xff8bd8, focus: 0x78a8ff, observe: 0xf4e285, brake: 0x76e6a7,
+  relay: 0xff9f68, repair: 0x9be7ff,
 };
 
 export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: number, centerY: number, weapons: WeaponSnapshot[], supports: SupportSnapshot[], unlockedLayer = 1): void {
@@ -46,6 +49,7 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
         drawWeaponGlyph(graphics, weaponPoint.x, weaponPoint.y, weapon.id, color);
         if (weapon.branch) { graphics.lineStyle(2, 0xfff1a8, 0.9); graphics.strokeCircle(weaponPoint.x, weaponPoint.y, 33); }
         if (weapon.finalBranch) { graphics.lineStyle(2, color, 0.95); graphics.strokeCircle(weaponPoint.x, weaponPoint.y, 37); }
+        if (weapon.evolutionId) { graphics.lineStyle(3, 0xffffff, 0.95); graphics.strokeCircle(weaponPoint.x, weaponPoint.y, 42); }
       } else if (weaponPoint) drawHex(graphics, weaponPoint.x, weaponPoint.y, 28, 0x07131f, 0.4, 0x163246);
       if (supportPoint && support) {
         const color = SUPPORT_COLORS[support.id];
@@ -54,7 +58,7 @@ export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: numbe
         graphics.lineBetween(centerX, centerY, supportPoint.x, supportPoint.y);
         graphics.lineStyle(1, color, 0.9);
         graphics.strokeCircle(supportPoint.x, supportPoint.y, 15 + support.level * 2);
-        const connectedWeaponSlots = adjacentWeaponSlots(support.slot);
+        const connectedWeaponSlots = supportWeaponSlots(support.id, support.slot);
         for (const connectedSlot of connectedWeaponSlots) {
           const connectedLayer = Math.floor(connectedSlot / DEVICE_SLOT_COUNT);
           const connectedSector = connectedSlot % DEVICE_SLOT_COUNT;
@@ -127,7 +131,7 @@ function drawWeaponGlyph(graphics: Phaser.GameObjects.Graphics, x: number, y: nu
     drawPolygon(graphics, polygonPoints(x, y, 9, 6), color, 0.55, 0xf2f0e8);
     graphics.strokeCircle(x, y, 3);
     graphics.lineBetween(x - 6, y + 6, x + 6, y - 6);
-  } else {
+  } else if (id === 'gravity') {
     drawPolygon(graphics, polygonPoints(x, y, 9, 4, Math.PI / 4), 0x07131f, 0, 0xf2f0e8);
     graphics.lineStyle(2, 0xf2f0e8, 0.86);
     graphics.fillCircle(x, y, 3);
@@ -137,5 +141,18 @@ function drawWeaponGlyph(graphics: Phaser.GameObjects.Graphics, x: number, y: nu
       graphics.lineBetween(x + Math.cos(angle) * 6, y + Math.sin(angle) * 6, x + Math.cos(angle - 0.42) * 8, y + Math.sin(angle - 0.42) * 8);
       graphics.lineBetween(x + Math.cos(angle) * 6, y + Math.sin(angle) * 6, x + Math.cos(angle + 0.42) * 8, y + Math.sin(angle + 0.42) * 8);
     }
+  } else if (id === 'grid') {
+    graphics.strokeRect(x - 11, y - 11, 22, 22);
+    graphics.lineBetween(x - 11, y - 4, x + 11, y - 4); graphics.lineBetween(x - 11, y + 4, x + 11, y + 4);
+    graphics.lineBetween(x - 4, y - 11, x - 4, y + 11); graphics.lineBetween(x + 4, y - 11, x + 4, y + 11);
+  } else if (id === 'mine') {
+    drawPolygon(graphics, polygonPoints(x, y, 10, 6, Math.PI / 6), color, 0.35, 0xf2f0e8);
+    graphics.fillCircle(x, y, 3); graphics.strokeCircle(x, y, 14);
+  } else if (id === 'lance') {
+    graphics.lineStyle(4, color, 0.9); graphics.lineBetween(x - 12, y, x + 12, y);
+    graphics.fillTriangle(x + 14, y, x + 5, y - 5, x + 5, y + 5); graphics.strokeCircle(x - 7, y, 5);
+  } else {
+    graphics.strokeCircle(x, y, 12); graphics.fillCircle(x, y, 4);
+    graphics.lineBetween(x - 8, y - 8, x + 8, y + 8); graphics.lineBetween(x + 8, y - 8, x - 8, y + 8);
   }
 }

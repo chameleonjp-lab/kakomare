@@ -733,6 +733,25 @@ test('P16-07: 保留から構成・停止・再開・強化・終了を画面操
   await expect(page.locator('.upgrade-layer')).toHaveCount(0);
 });
 
+test('V3/A09: 停止中の装置確認から同種の空き面へ移設できる', async ({ page }) => {
+  await enterBattle(page);
+  await page.getByTestId('pause-button').click();
+  await page.getByRole('button', { name: '装置を確認', exact: true }).click();
+  const loadout = page.getByTestId('pause-loadout');
+  await expect(loadout).toBeVisible();
+  await expect(loadout).toContainText('武器面1: 連針砲 Lv1');
+
+  const move = loadout.locator('[data-testid^="move-weapon-"]').first();
+  await expect(move).toBeEnabled();
+  await move.click();
+  await expect(loadout).toContainText('武器面2: 連針砲 Lv1');
+  await expect(loadout).not.toContainText('武器面1: 連針砲 Lv1');
+
+  await page.getByRole('button', { name: '一時停止へ戻る', exact: true }).click();
+  await page.getByTestId('resume-button').click();
+  await expect(page.locator('.pause-layer')).toHaveCount(0);
+});
+
 test('P16-01: test指定なしの画面では経験値注入を有効にしない', async ({ page }) => {
   await enterBattle(page, '?upgrade=1&testXp=154&seed=123');
   await page.waitForTimeout(1000);

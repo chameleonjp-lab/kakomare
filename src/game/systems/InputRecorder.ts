@@ -3,6 +3,7 @@ import { normalizeAngle } from './Angle';
 export type NormalizedRunInput =
   | { tick: number; kind: 'aim'; angle: number }
   | { tick: number; kind: 'upgrade'; selectionId: number; candidateId: string; placementSlot?: number }
+  | { tick: number; kind: 'build'; action: 'move' | 'swap'; instanceId: string; otherInstanceId?: string; slot?: number }
   | { tick: number; kind: 'pause' | 'resume' | 'retire' };
 
 /**
@@ -28,6 +29,18 @@ export class InputRecorder {
         selectionId: input.selectionId,
         candidateId: input.candidateId,
         ...(input.placementSlot === undefined ? {} : { placementSlot: input.placementSlot }),
+      });
+    } else if (input.kind === 'build') {
+      if (!Number.isInteger(input.tick) || input.instanceId.length === 0) return false;
+      if (input.action === 'move' && (input.slot === undefined || !Number.isInteger(input.slot) || input.slot < 0)) return false;
+      if (input.action === 'swap' && (!input.otherInstanceId || input.otherInstanceId.length === 0)) return false;
+      this.events.push({
+        tick: input.tick,
+        kind: 'build',
+        action: input.action,
+        instanceId: input.instanceId,
+        ...(input.otherInstanceId === undefined ? {} : { otherInstanceId: input.otherInstanceId }),
+        ...(input.slot === undefined ? {} : { slot: input.slot }),
       });
     } else {
       this.events.push({ tick: input.tick, kind: input.kind });

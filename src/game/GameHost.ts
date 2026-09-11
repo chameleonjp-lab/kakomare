@@ -67,6 +67,12 @@ export class GameHost {
   public deferUpgrade(selectionId: number, runId: number): void { if (runId === this.activeRunId) this.scene?.deferUpgrade(selectionId); }
   public pause(runId: number): void { if (runId === this.activeRunId) this.scene?.pause(); }
   public resume(runId: number): void { if (runId === this.activeRunId) this.scene?.resume(); }
+  public moveDevice(instanceId: string, toSlot: number, runId: number): boolean {
+    return runId === this.activeRunId && (this.scene?.moveDevice(instanceId, toSlot) ?? false);
+  }
+  public swapDevices(firstInstanceId: string, secondInstanceId: string, runId: number): boolean {
+    return runId === this.activeRunId && (this.scene?.swapDevices(firstInstanceId, secondInstanceId) ?? false);
+  }
   public retire(runId: number): void { if (runId === this.activeRunId) this.scene?.retire(); }
   public requestPendingUpgrade(selectionId: number, runId: number): void {
     if (runId === this.activeRunId) this.scene?.requestPendingUpgrade(selectionId);

@@ -2,6 +2,28 @@
 
 > 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
 
+## V3実装：12武器・8補助・発展・配置変更（2026-09-11）
+
+対象branchは `codex/v3-weapons-synergy-20260911`。基準mainは、マージ済みPR #20の後の `353295475354c145b06cb836543f9c5fd20b6141`。V3は、最終50武器・補助S=20へ向けた最初の実装地点として、既存8武器のLv1〜8・分岐・Lv8発展、追加4武器（迎撃格子・軌道機雷・蓄圧槍・追尾子機）、追加2補助（継電環・整備環）、敵状態の非色表現、停止中の移設・同種入替を実装する。残る38武器・12補助は設計済み・未実装のまま維持し、12種類を最終完成とは数えない。
+
+- [x] `npm ci --ignore-scripts --no-audit --no-fund`
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm run test -- --testTimeout=30000`（24ファイル、178件）
+- [x] `npm run verify:expansion-docs`（生成文書5ファイル）
+- [ ] `npm run test:e2e:chromium`（32件すべて起動前に失敗。`chromium_headless_shell-1234` の実行ファイルがローカルにないため。Draft PRのCIで確認）
+- [ ] `npm run test:e2e:webkit`（32件すべて起動前に失敗。`webkit-2336/pw_run.sh` がローカルにないため。Draft PRのCIで確認）
+- [x] `npm run build`（Viteの500 kB超チャンク警告あり）
+- [x] `npm run verify:dist`
+- [x] `npm run verify:originality`
+- [x] `git diff --check`
+
+ビルド後に配布物検査を順番に実行し、`build`、`verify:dist`、`verify:originality`、`git diff --check` は成功した。Chromium/WebKitはテスト本体へ到達せず、ローカル環境の実行ファイル不足で未実施である。最初に並行実行した `verify:dist` はビルド完了前のため `dist/index.html` 不在となったが、ビルド完了後の再実行は成功している。
+
+V3の追加検証は、`tests/integration/battle-quality.test.ts` の4武器の実戦オブジェクト生成、迎撃格子の方向上限と軌道機雷の一回爆発、停止中の移設・入替と入力台帳、`tests/unit/upgrade.test.ts` のLv8発展候補、`tests/unit/enemy-rendering.test.ts` の状態記号を含む。`tests/e2e/core.spec.ts` には、一時停止の「装置を確認」から実際の移設ボタンを使う画面検査を追加した。内部メソッドの直接呼び出しによる統合検査と、画面操作による検査は別に記録する。
+
+V3で確認していないものは、25/50武器、補助20の残り、全50×20の実装適用、全武器の実戦相乗効果、敵・無限モードの再構成、通常720試行・無限60試行、30/60/120回描画比較、保存v3、ランキング受付・本番DB、iPhone Safari実機である。自動ブラウザ検査はGitHub Actionsの提出commitで確認後に追記し、iPhone実機・VoiceOver・片手操作・発熱は未確認のまま残す。
+
 ## V1設計：50武器・補助・競技契約（2026-09-11）
 
 対象branchは `codex/v1-competitive-catalog-20260911`。V1では設計済みの基本武器50、補助20、適用1,000セル、相乗効果100件、競技ルール案を検証し、設計のみの内容をruntime registryへ追加しない。実装・長時間本戦・ランキング送信・本番DBは後続工程です。

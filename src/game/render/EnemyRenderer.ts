@@ -24,6 +24,21 @@ export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySna
     graphics.lineStyle(2, 0xa78bfa, 0.95);
     graphics.strokeCircle(x, y, enemy.hitRadius + 4);
   }
+  // Keep state readable without relying on colour alone. These cues are
+  // deliberately small so telegraphs and hostile projectiles remain the most
+  // prominent layer on a reduced-effects display.
+  if (enemy.state === 'invulnerable') {
+    graphics.lineStyle(2, 0x78a8ff, 0.95);
+    graphics.strokeCircle(x, y, enemy.hitRadius + 9);
+    graphics.lineBetween(x - enemy.hitRadius * 0.7, y - enemy.hitRadius * 0.7, x + enemy.hitRadius * 0.7, y + enemy.hitRadius * 0.7);
+    graphics.lineBetween(x + enemy.hitRadius * 0.7, y - enemy.hitRadius * 0.7, x - enemy.hitRadius * 0.7, y + enemy.hitRadius * 0.7);
+  } else if (enemy.state === 'telegraph') {
+    graphics.lineStyle(2, 0xfff1a8, 0.95);
+    graphics.strokeCircle(x, y, enemy.hitRadius + 8);
+  } else if (enemy.state === 'slowed') {
+    graphics.lineStyle(2, 0x9be7ff, 0.9);
+    graphics.strokeCircle(x, y, enemy.hitRadius + 6);
+  }
 }
 
 function drawBoss(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x: number, y: number, alpha: number): void {

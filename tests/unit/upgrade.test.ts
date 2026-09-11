@@ -160,6 +160,24 @@ describe('UpgradeSystem', () => {
     expect(createUpgradeCandidateList(weapons, [], 100, new DeterministicRng(5), new Set()).some((candidate) => candidate.targetId === 'needle' && candidate.id.includes(':branch:'))).toBe(false);
   });
 
+  it('offers and applies one distinct level-eight evolution for a level-seven weapon', () => {
+    const weapon = new Weapon('needle', 0);
+    weapon.level = 7;
+    let evolution = createUpgradeCandidateList([weapon], [], 100, new DeterministicRng(1), new Set(), 100, {}, { maxWeapons: 1, maxSupports: 0, weaponSlots: [], supportSlots: [] })
+      .find((candidate) => candidate.id.includes(':evolution:'));
+    for (let seed = 2; !evolution && seed <= 20; seed += 1) {
+      evolution = createUpgradeCandidateList([weapon], [], 100, new DeterministicRng(seed), new Set(), 100, {}, { maxWeapons: 1, maxSupports: 0, weaponSlots: [], supportSlots: [] })
+        .find((candidate) => candidate.id.includes(':evolution:'));
+    }
+    expect(evolution).toBeDefined();
+    expect(evolution?.targetInstanceId).toBe(weapon.instanceId);
+    expect(applyUpgradeCandidate(evolution!, [weapon], [], () => undefined)).toBe(true);
+    expect(weapon.level).toBe(8);
+    expect(weapon.evolutionId).toBe('needle-volley');
+    expect(weapon.evolutionDefinition?.name).toBe('多連装針砲');
+    expect(createUpgradeCandidateList([weapon], [], 100, new DeterministicRng(1), new Set(), 100, {}, { maxWeapons: 1, maxSupports: 0, weaponSlots: [], supportSlots: [] }).some((candidate) => candidate.id.includes(':evolution:'))).toBe(false);
+  });
+
   it('supports every level-three and level-five branch combination without overwriting either choice', () => {
     for (const first of ['spread', 'piercing'] as const) {
       for (const final of ['power', 'tempo'] as const) {

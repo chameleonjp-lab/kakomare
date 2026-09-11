@@ -2,7 +2,25 @@
 
 更新日：2026-09-11（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
 
-## 現在の作業：V2の競技基盤と制約付き設置拡張
+## 現在の作業：V3の12武器・8補助・発展と配置変更
+
+- ユーザーのV2マージ指示を受け、GitHub上でPR #20の実際のマージ状態を再確認した。PR #20はclosed・merged、headは `90e73d95bbb463b9a48d64505c7c42dde4b8e1b1`、`git fetch origin main` 後の最新 `origin/main` はマージコミット `353295475354c145b06cb836543f9c5fd20b6141` と一致する。open PRは開始時点で0件だったため、このV3用Draft PRを新規に作成する。V2のQuality結果はV3の検査へ繰り越さない。
+- V3の作業branchは `codex/v3-weapons-synergy-20260911`。この工程では、既存8武器の通常Lv1〜8・Lv3/Lv5分岐・Lv8発展、追加4武器（迎撃格子・軌道機雷・蓄圧槍・追尾子機）、追加2補助（継電環・整備環）、敵状態の輪郭・記号表示、停止中の移設・同種入替を実装する。V4以降の新敵・無限進行・採点再構成、V5の追加ステージ、V6の保存v3・ランキング通信・本番DB変更は対象外とする。
+- V3の実装数は基本武器12、補助8。これは最終要件の基本武器50・補助S=20のうち、設計済み内容を戦闘へ移した最初の検証地点であり、完成数ではない。設計専用の残り38武器・12補助は `docs/WEAPON_CATALOG.md` と `docs/SUPPORT_CATALOG.md` で未実装として保持し、本番候補・図鑑・公開レジストリへ混ぜない。V1で確定した50×20=1,000セルの適用表と各武器2方向の相乗効果は、V3で追加内容の基本実装を検証し、全件の実戦検査はV5〜V7へ残す。
+- 既存の個体ID・nodeID・BuildGraph・稼働容量・目的別乱数・入力台帳をV2から引き継ぐ。移設は空いた同種の面へ、入替は同種の個体間だけに制限し、レベル・分岐・発展形・発射待ち時間を保持する。追加武器は個別の攻撃経路・対象選択・上限を持ち、発展形は基本武器の複製として数えない。
+
+### V3の実装・検査状態
+
+- `npm ci --ignore-scripts --no-audit --no-fund`、`npm run lint`、`npm run typecheck`、`npm run test -- --testTimeout=30000`（24ファイル・178件）、`npm run verify:expansion-docs`（生成文書5ファイル）は、V3変更を含むローカル作業ツリーで成功した。V3追加検査は、4武器の実戦オブジェクト生成、迎撃格子の敵弾処理、機雷の一回爆発、停止中の移設・入替と入力台帳、Lv8発展候補、敵状態の非色表現である。
+- `tests/e2e/core.spec.ts` へ「一時停止→装置を確認→移設→再開」の画面操作検査を追加した。ローカルで `npm run test:e2e:chromium` と `npm run test:e2e:webkit` を実行したが、Chromium 32件は `chromium_headless_shell-1234`、WebKit 32件は `webkit-2336/pw_run.sh` の実行ファイル不在により、いずれもテスト本体へ到達せず起動前に失敗した。これは環境未実施であり、コードの画面検査成功とは数えない。Draft PRのGitHub Actionsで提出commitに対する実行結果を確認する。内部メソッドを直接呼ぶ統合検査は、画面操作の成功とは別に記録する。
+- `npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` をこの差分で順番に再実行し、すべて成功した（Viteの500 kB超チャンク警告は継続）。ビルド完了前に並行実行した `verify:dist` は `dist/index.html` 不在となったため、失敗を隠さず記録し、ビルド完了後に再実行して成功を確認した。以前のV2成功runは流用していない。
+- V3で未確認の範囲は、25/50武器、補助20全件、全50×20組の実戦適用、各武器の2方向相乗効果の本戦、敵・無限モードの再構成、通常720試行・無限60試行、30/60/120回描画比較、保存v3、ランキング受付・本番DB、iPhone Safari実機・VoiceOver・片手操作・発熱である。12武器・8補助の自動検査を最終完成として報告しない。
+
+### V3の提出状態
+
+- Draft PR URL、提出commit、GitHub ActionsのQuality runは、push後にこの節へ追記する。PRはopen/Draftで維持し、mainへの直接push・マージ・自動マージ・保護設定の緩和・本番DB変更・実験場の有効化は行わない。Actionsの静的・単体・ブラウザ・ビルド結果と、実機未確認を分けて記録する。
+
+## V2の提出履歴（前工程）
 
 - ユーザーのV1マージ指示を受け、GitHub上でPR #19のマージ済み状態を再確認した。PR #19のheadは `11ec1a66870a3b06e3332737d0611f5527117bc6`、マージコミットは `edb84e0800d9ed657206c246241f9fafe5fe0014` で、`git fetch origin main` 後の `origin/main` と一致する。PR #19はclosed・mergedで、Draftではない。V1のQuality #52成功は設計工程の証拠であり、V2の検査結果へ繰り越さない。
 - V2の作業branchは `codex/v2-competitive-foundation-20260911`。基準mainは上記 `edb84e0800d9ed657206c246241f9fafe5fe0014`。この工程では既存runtimeの8武器・6補助を使い、個体識別、接続図、6→12→18層、容量、発射元・境界、競技初期条件の検証フック、乱数分離、実効値計算、入力台帳の基礎を実装する。V3以降の新武器・新補助・敵・採点・保存v3・ランキング通信は追加しない。
@@ -21,7 +39,7 @@
 
 ### V2の提出状態
 
-- [Draft PR #20](https://github.com/chameleonjp-lab/kakomare/pull/20) を作成。機能・文書提出headは `b2ff3b0c6f10f3481c6d9690bc048c03e62cb912`、末尾空行補正後の最終コードheadは `f4bfb4b6a85fd9374cd098691d4e81a01bd1005f`。PRはopen/Draftで、mainへの直接push・マージ・自動マージ・保護設定の緩和・本番DB変更・実験場の有効化は行わない。機能headの [Quality #55](https://github.com/chameleonjp-lab/kakomare/actions/runs/34569409258) と最終コードheadの [Quality #57](https://github.com/chameleonjp-lab/kakomare/actions/runs/34569996494) は、静的・単体172件、Chromium31件、WebKit31件、ビルド・配布物検証を含めて成功した。これはV2の自動検査であり、iPhone実機・本戦・本番連携の完了を意味しない。
+- [Draft PR #20](https://github.com/chameleonjp-lab/kakomare/pull/20) を作成した時点の提出記録。機能・文書提出headは `b2ff3b0c6f10f3481c6d9690bc048c03e62cb912`、末尾空行補正後の最終コードheadは `f4bfb4b6a85fd9374cd098691d4e81a01bd1005f` で、当時はopen/Draftだった。その後、ユーザーのマージ指示を受けてPR #20のmerged状態と `origin/main` のマージコミット `353295475354c145b06cb836543f9c5fd20b6141` を確認した。mainへの直接push・自動マージ・保護設定の緩和・本番DB変更・実験場の有効化は行っていない。機能headの [Quality #55](https://github.com/chameleonjp-lab/kakomare/actions/runs/34569409258) と最終コードheadの [Quality #57](https://github.com/chameleonjp-lab/kakomare/actions/runs/34569996494) は、静的・単体172件、Chromium31件、WebKit31件、ビルド・配布物検証を含めて成功した。これはV2の自動検査であり、iPhone実機・本戦・本番連携の完了を意味しない。
 - V2のA項目はA06（設置拡張）、A07（個体識別）、A08（発射元・境界）、A12（接敵猶予の基盤）、A13（弾割当の個体化の基礎）を「実装中・検査待ち」とする。公平性の本戦測定と弾枠の全武器監査はV7へ残す。A14（途中保存）は設計用の入力台帳までで、保存実装はV6で行う。A20は本節追加で進行記録をV2へ同期した。
 
 ## V1完了記録（履歴）

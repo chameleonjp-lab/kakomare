@@ -52,6 +52,10 @@ export function weaponCompatibility(enemy: Enemy, weaponId?: WeaponId, enemies: 
     case 'orbit': return enemy.distanceToCore <= 240 ? 28 : -60;
     case 'disc': return enemy.type === 'dropper' || enemy.type === 'marker' ? 15 : 0;
     case 'gravity': return nearbyEnemies > 0 ? 30 : 0;
+    case 'grid': return enemy.type === 'dropper' || enemy.type === 'marker' ? 34 : enemy.isBoss ? -24 : 0;
+    case 'mine': return enemy.distanceToCore <= 360 ? 26 : -35;
+    case 'lance': return enemy.type === 'shell' || enemy.type === 'lattice' ? 34 : enemy.isBoss ? 12 : -8;
+    case 'drone': return enemy.type === 'dropper' || enemy.type === 'marker' || enemy.telegraph ? 32 : nearbyEnemies === 0 ? 8 : 0;
   }
 }
 

@@ -45,7 +45,19 @@ export function createUpgradeCandidateList(
   for (const weapon of weapons) {
     if (weapon.level < weapon.definition.maxLevel) {
       const next = weapon.level + 1;
-      if (next === 3 || next === 5) {
+      if (next === 8) {
+        if (!weapon.evolutionId) for (const form of weapon.definition.evolutions) existing.push({
+          id: `weapon:${weapon.id}:evolution:${form.id}:8`,
+          kind: 'weapon', targetId: weapon.id,
+          title: `${weapon.definition.name} Lv8・${form.name}`,
+          description: form.description,
+          before: `Lv${weapon.level} / 威力 ${weapon.stats.damage}`,
+          after: `Lv8 / ${form.name}`,
+          role: weapon.definition.role, isExisting: true,
+          targetInstanceId: weapon.instanceId,
+          details: '通常レベルを使い切らず、攻撃経路が変わる一度限りの発展です。',
+        });
+      } else if (next === 3 || next === 5) {
         const branches = weapon.definition.branches.filter((branch) => branch.atLevel === next);
         for (const branch of branches) existing.push({
           id: `weapon:${weapon.id}:branch:${branch.id}:${next}`,
@@ -63,6 +75,7 @@ export function createUpgradeCandidateList(
             weapon.definition.levels[next - 1].cooldown * (branch.cooldownMultiplier ?? weapon.cooldownMultiplier),
             weapon.damageMultiplier * (branch.damageMultiplier ?? 1),
           )} / ${branchEffectLabel(branch.damageMultiplier, branch.cooldownMultiplier)}`,
+          targetInstanceId: weapon.instanceId,
         });
       } else {
         existing.push({
@@ -71,6 +84,7 @@ export function createUpgradeCandidateList(
           description: `${weapon.definition.description}威力を上げます。`,
           before: `威力 ${weapon.stats.damage}`, after: `威力 ${weapon.definition.levels[next - 1].damage}`,
           role: weapon.definition.role, isExisting: true,
+          targetInstanceId: weapon.instanceId,
           details: attackPowerChange(weapon.stats.damage, weapon.stats.cooldown * weapon.cooldownMultiplier, weapon.damageMultiplier, weapon.definition.levels[next - 1].damage, weapon.definition.levels[next - 1].cooldown * weapon.cooldownMultiplier, weapon.damageMultiplier),
         });
       }
@@ -81,6 +95,7 @@ export function createUpgradeCandidateList(
       before: `基準威力 ×${weapon.damageMultiplier.toFixed(2)}`,
       after: `基準威力 ×${(weapon.damageMultiplier + 0.06).toFixed(2)}`,
       role: '安定した単体攻撃', isExisting: true,
+      targetInstanceId: weapon.instanceId,
       details: attackPowerChange(weapon.stats.damage, weapon.stats.cooldown * weapon.cooldownMultiplier, weapon.damageMultiplier, weapon.stats.damage, weapon.stats.cooldown * weapon.cooldownMultiplier, weapon.damageMultiplier + 0.06 * (weapon.finalBranchDefinition?.damageMultiplier ?? 1)),
     });
   }
@@ -91,7 +106,7 @@ export function createUpgradeCandidateList(
       id: `support:${support.id}:level`, kind: 'support', targetId: support.id,
       title: `${support.definition.name} Lv${next}`, description: support.definition.description,
       before: support.definition.levels[support.level - 1].label, after: support.definition.levels[next - 1].label,
-      role: support.definition.role, isExisting: true,
+      role: support.definition.role, isExisting: true, targetInstanceId: support.instanceId,
     });
   }
   if (coreHealth <= 30) existing.push({
@@ -221,11 +236,23 @@ export function applyUpgradeCandidate(
       weapons.push(new Weapon(candidate.targetId as WeaponId, placementSlot));
       return true;
     }
-    const weapon = weapons.find((item) => item.id === candidate.targetId);
+    const weapon = candidate.targetInstanceId
+      ? weapons.find((item) => item.instanceId === candidate.targetInstanceId && item.id === candidate.targetId)
+      : weapons.find((item) => item.id === candidate.targetId);
     if (!weapon) return false;
     if (candidate.id.includes(':focus')) {
       if (weapon.precisionBonus >= 2) return false;
       weapon.precisionBonus += 1;
+      return true;
+    }
+    if (candidate.id.includes(':evolution:')) {
+      const parts = candidate.id.split(':');
+      const evolutionIndex = parts.indexOf('evolution');
+      const evolutionId = evolutionIndex >= 0 ? parts[evolutionIndex + 1] : undefined;
+      const nextLevel = evolutionIndex >= 0 ? Number(parts[evolutionIndex + 2]) : NaN;
+      if (!evolutionId || nextLevel !== 8 || weapon.level !== 7 || weapon.evolutionId || !weapon.definition.evolutions.some((form) => form.id === evolutionId)) return false;
+      weapon.evolutionId = evolutionId;
+      weapon.level = 8;
       return true;
     }
     if (weapon) {
@@ -252,7 +279,9 @@ export function applyUpgradeCandidate(
       supports.push(new SupportModule(candidate.targetId as SupportId, placementSlot));
       return true;
     }
-    const support = supports.find((item) => item.id === candidate.targetId);
+    const support = candidate.targetInstanceId
+      ? supports.find((item) => item.instanceId === candidate.targetInstanceId && item.id === candidate.targetId)
+      : supports.find((item) => item.id === candidate.targetId);
     if (!support || support.level >= support.definition.maxLevel) return false;
     support.level = Math.min(support.definition.maxLevel, support.level + 1);
     return true;
@@ -280,6 +309,7 @@ export function wouldStrandNewItems(
     copy.precisionBonus = weapon.precisionBonus;
     copy.branch = weapon.branch;
     copy.finalBranch = weapon.finalBranch;
+    copy.evolutionId = weapon.evolutionId;
     return copy;
   });
   const supportCopies = supports.map((support) => {

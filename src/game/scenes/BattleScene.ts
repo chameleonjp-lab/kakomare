@@ -74,10 +74,33 @@ interface GravityField {
   slowDuration: number;
   sourceWeaponInstanceId: string | null;
 }
+interface MineField {
+  id: number;
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  radius: number;
+  damage: number;
+  sourceWeaponInstanceId: string;
+  triggered: boolean;
+}
+interface DroneUnit {
+  index: number;
+  x: number;
+  y: number;
+  angle: number;
+  cooldown: number;
+  life: number;
+  maxLife: number;
+  sourceWeaponInstanceId: string;
+}
 const MAX_ACTIVE_ENEMIES = 180;
 const MAX_FRIENDLY_PROJECTILES = 280;
 const MAX_ENEMY_PROJECTILES = 80;
 const MAX_GRAVITY_FIELDS = 24;
+const MAX_MINES = 48;
+const MAX_DRONES = 24;
 const LOGICAL_RENDER_SIZE = 720;
 const BASE_ARENA_RADIUS = 325;
 const CLUSTER_TELEGRAPH_SECONDS = 0.45;
@@ -104,6 +127,9 @@ export class BattleScene extends Phaser.Scene {
   private readonly flashes: FlashEffect[] = [];
   private readonly lines: LineEffect[] = [];
   private readonly gravityFields: GravityField[] = [];
+  private readonly mines: MineField[] = [];
+  private readonly drones = new Map<string, DroneUnit[]>();
+  private readonly lanceCharge = new Map<string, number>();
   private readonly orbitAngles = new Map<string, number>();
   private readonly orbitHits = new Map<string, number>();
   private readonly targetLocks = new Map<string, number>();
@@ -164,6 +190,7 @@ export class BattleScene extends Phaser.Scene {
   private crownWavesTriggered = 0;
   private renderPixelRatio = 1;
   private renderBackingSize = LOGICAL_RENDER_SIZE;
+  private nextMineId = 1;
 
   public constructor(options: BattleSceneOptions) {
     super({ key: 'KakomareBattleScene' });
@@ -400,6 +427,44 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** Move an installed copy while the combat clock is stopped. */
+  public moveDevice(instanceId: string, toSlot: number): boolean {
+    if (this.state !== 'paused' && this.state !== 'upgrade') return false;
+    if (!Number.isInteger(toSlot) || toSlot < 0) return false;
+    const weapon = this.weapons.find((item) => item.instanceId === instanceId);
+    const support = weapon ? undefined : this.supports.find((item) => item.instanceId === instanceId);
+    const kind: 'weapon' | 'support' = weapon ? 'weapon' : 'support';
+    const item = weapon ?? support;
+    if (!item || item.slot === toSlot) return false;
+    if (!this.buildGraph.move(instanceId, kind, item.slot, toSlot)) return false;
+    item.slot = toSlot;
+    this.recorder.recordInput({ kind: 'build', action: 'move', instanceId, slot: toSlot, tick: this.inputTick() });
+    this.emitSnapshot(true);
+    this.options.callbacks.onStatus(`${kind === 'weapon' ? '武器' : '補助'}を面${toSlot + 1}へ移設しました`);
+    return true;
+  }
+
+  /** Swap two installed copies of the same kind without an empty-face window. */
+  public swapDevices(firstInstanceId: string, secondInstanceId: string): boolean {
+    if (this.state !== 'paused' && this.state !== 'upgrade') return false;
+    const firstWeapon = this.weapons.find((item) => item.instanceId === firstInstanceId);
+    const secondWeapon = this.weapons.find((item) => item.instanceId === secondInstanceId);
+    const firstSupport = this.supports.find((item) => item.instanceId === firstInstanceId);
+    const secondSupport = this.supports.find((item) => item.instanceId === secondInstanceId);
+    const kind = firstWeapon && secondWeapon ? 'weapon' : firstSupport && secondSupport ? 'support' : null;
+    if (!kind) return false;
+    if (!this.buildGraph.swap(firstInstanceId, secondInstanceId, kind)) return false;
+    const first = kind === 'weapon' ? firstWeapon! : firstSupport!;
+    const second = kind === 'weapon' ? secondWeapon! : secondSupport!;
+    const firstSlot = first.slot;
+    first.slot = second.slot;
+    second.slot = firstSlot;
+    this.recorder.recordInput({ kind: 'build', action: 'swap', instanceId: firstInstanceId, otherInstanceId: secondInstanceId, tick: this.inputTick() });
+    this.emitSnapshot(true);
+    this.options.callbacks.onStatus(`${kind === 'weapon' ? '武器' : '補助'}の配置を入れ替えました`);
+    return true;
+  }
+
   public get paused(): boolean { return this.state === 'paused'; }
   public get upgrading(): boolean { return this.state === 'upgrade' || this.state === 'paused' && this.pauseReturnState === 'upgrade'; }
 
@@ -475,6 +540,10 @@ export class BattleScene extends Phaser.Scene {
     if (this.core.health <= 0) { this.finish('defeat', this.recorder.lastDamageSource); return; }
     this.updateDropperAttacks();
     this.updateOrbitAngles(seconds);
+    this.updateChargeWeapons(seconds);
+    this.updateMines(seconds);
+    this.updateDrones(seconds);
+    if ((this.state as string) === 'finished') return;
 
     for (const weapon of this.weapons) {
       const effective = this.combatStats(weapon);
@@ -533,19 +602,24 @@ export class BattleScene extends Phaser.Scene {
     else if (usesTarget) this.targetLocks.delete(weapon.instanceId);
     const angle = target ? Math.atan2(target.y - origin.y, target.x - origin.x) : this.aimAngle;
     const damage = this.weaponPower(weapon, powerFactor);
-    if (weapon.id === 'needle') this.fireNeedle(weapon, angle, damage);
+    if (weapon.id === 'needle') this.fireNeedle(weapon, angle, damage, allowBranch);
     else if (weapon.id === 'ray') this.fireRay(weapon, angle, damage);
     else if (weapon.id === 'cluster') this.fireCluster(weapon, target, angle, damage);
     else if (weapon.id === 'repulse') this.fireRepulse(weapon, damage);
     else if (weapon.id === 'chain') this.fireChain(weapon, target, angle, damage);
     else if (weapon.id === 'orbit') this.fireOrbit(weapon, damage);
     else if (weapon.id === 'disc') this.fireDisc(weapon, angle, damage);
-    else this.fireGravity(weapon, target, angle, damage);
+    else if (weapon.id === 'gravity') this.fireGravity(weapon, target, angle, damage);
+    else if (weapon.id === 'grid') this.fireGrid(weapon, target, angle, damage);
+    else if (weapon.id === 'mine') this.fireMine(weapon, target, angle, damage);
+    else if (weapon.id === 'lance') this.fireLance(weapon, angle, damage);
+    else this.deployDrones(weapon);
     if (!allowBranch) return;
   }
 
-  private fireNeedle(weapon: Weapon, angle: number, damage: number): void {
+  private fireNeedle(weapon: Weapon, angle: number, damage: number, allowEvolution = true): void {
     this.options.callbacks.onAudioCue?.('shot');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const origin = this.weaponOrigin(weapon);
     const spread = weapon.branch === 'spread' ? 3 : 1;
     const piercing = (weapon.stats.pierce ?? 0) + (weapon.branch === 'piercing' ? 2 : 0);
@@ -558,11 +632,20 @@ export class BattleScene extends Phaser.Scene {
         radius: 6, damage: piercingDamage, life: 1.4, piercing, sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
       });
     }
+    if (allowEvolution && weapon.evolutionId === 'needle-volley') {
+      for (const offset of [-0.24, 0.24]) {
+        this.addProjectile({
+          kind: 'needle', x: origin.x, y: origin.y, vx: Math.cos(angle + offset) * speed, vy: Math.sin(angle + offset) * speed,
+          radius: 5, damage: piercingDamage * 0.55, life: 1.25, piercing: Math.max(0, piercing - 1), sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+        });
+      }
+    }
   }
 
   private fireRay(weapon: Weapon, angle: number, damage: number): void {
     if ((this.state as string) === 'finished') return;
     this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const width = (weapon.stats.width ?? 18) + (weapon.branch === 'wide' ? 20 : 0);
     const life = weapon.branch === 'wide' ? 0.22 : 0.16;
     const origin = this.weaponOrigin(weapon);
@@ -583,6 +666,12 @@ export class BattleScene extends Phaser.Scene {
       const reflectedLength = Math.min(arenaRadius * 2, range - boundaryDistance);
       this.addLine({ angle: reflected, color: WEAPONS.ray.color, life: 0.14, maxLife: 0.14, width: width * 0.7, startX: boundaryX, startY: boundaryY, length: reflectedLength });
       this.hitRaySegment(weapon, boundaryX, boundaryY, reflected, reflectedLength, width * 0.7, damage * 0.55);
+    }
+    if (weapon.evolutionId === 'ray-cross') {
+      const crossAngle = angle + Math.PI / 2;
+      const crossLength = Math.min(primaryLength * 0.72, range * 0.72);
+      this.addLine({ angle: crossAngle, color: WEAPONS.ray.color, life: 0.12, maxLife: 0.12, width: width * 0.65, startX: origin.x, startY: origin.y, length: crossLength });
+      this.hitRaySegment(weapon, origin.x, origin.y, crossAngle, crossLength, width * 0.65, damage * 0.45);
     }
   }
 
@@ -609,6 +698,7 @@ export class BattleScene extends Phaser.Scene {
 
   private fireCluster(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
     this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const origin = this.weaponOrigin(weapon);
     const radius = weapon.stats.radius ?? 72;
     const targetPoint = target ? { x: target.x, y: target.y } : { x: origin.x + Math.cos(angle) * 250, y: origin.y + Math.sin(angle) * 250 };
@@ -667,10 +757,25 @@ export class BattleScene extends Phaser.Scene {
       }
     }
     if (weapon.branch === 'residue') this.createGravityField(x, y, 1.8, radius * 0.75, 0, 0, 180, false, 0.55 * (1 + this.supportEffect('brake', weapon.slot)), weapon.instanceId);
+    if (weapon.evolutionId === 'cluster-ring' && !projectile.clusterSplitChild) {
+      const childRadius = radius * 0.42;
+      for (let index = 0; index < 3; index += 1) {
+        const childAngle = angle + index * Math.PI * 2 / 3;
+        const childX = x + Math.cos(childAngle) * radius * 0.7;
+        const childY = y + Math.sin(childAngle) * radius * 0.7;
+        this.addProjectile({
+          kind: 'cluster', x, y, vx: Math.cos(childAngle) * CLUSTER_SPLIT_SPEED, vy: Math.sin(childAngle) * CLUSTER_SPLIT_SPEED,
+          radius: 6, damage: projectile.damage * 0.32, life: radius * 0.7 / CLUSTER_SPLIT_SPEED, piercing: 0,
+          sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId, impactX: childX, impactY: childY,
+          impactRadius: childRadius, impactAngle: childAngle, clusterSplitChild: true,
+        });
+      }
+    }
   }
 
   private fireRepulse(weapon: Weapon, damage: number): void {
     this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const radius = weapon.stats.radius ?? 165;
     const pushBonus = weapon.branch === 'strong-push' ? 1.5 : 1;
     const brakeEffect = this.supportEffect('brake', weapon.slot);
@@ -688,15 +793,25 @@ export class BattleScene extends Phaser.Scene {
       if (result.destroyed) this.handleEnemyDestroyed(enemy);
       if ((this.state as string) === 'finished') return;
     }
+    if (weapon.evolutionId === 'repulse-double') {
+      const outerRadius = radius + 58;
+      this.addLine({ angle: 0, color: WEAPONS.repulse.color, life: 0.2, maxLife: 0.2, width: outerRadius });
+      for (const enemy of this.enemies) {
+        if (!enemy.active || Math.hypot(enemy.x, enemy.y) > outerRadius + enemy.hitRadius || Math.hypot(enemy.x, enemy.y) <= radius) continue;
+        enemy.applySlow(this.elapsed, 0.6 * (1 + brakeEffect));
+        this.recorder.recordControl('slowed', 0.6);
+      }
+    }
   }
 
   private fireChain(weapon: Weapon, target: Enemy | null, _angle: number, damage: number): void {
     this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
     let current = target;
     const hit = new Set<number>();
     let lastPoint = this.weaponOrigin(weapon);
     let chainHit = false;
-    const count = (weapon.stats.chainCount ?? 3) + (weapon.branch === 'chain' ? 2 : 0);
+    const count = (weapon.stats.chainCount ?? 3) + (weapon.branch === 'chain' ? 2 : 0) + (weapon.evolutionId === 'chain-mesh' ? 2 : 0);
     for (let index = 0; index < count && current; index += 1) {
       hit.add(current.id);
       const currentPoint = { x: current.x, y: current.y };
@@ -722,6 +837,7 @@ export class BattleScene extends Phaser.Scene {
 
   private fireOrbit(weapon: Weapon, damage: number): void {
     this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const angle = this.orbitAngles.get(weapon.instanceId) ?? 0;
     const count = (weapon.stats.count ?? 2) + (weapon.branch === 'many' ? 1 : 0);
     const radius = (weapon.stats.orbitRadius ?? 108) + (weapon.branch === 'outer' ? 38 : 0);
@@ -748,6 +864,27 @@ export class BattleScene extends Phaser.Scene {
         if (this.state === 'finished') return;
       }
     }
+    if (weapon.evolutionId === 'orbit-double') this.hitOrbitRing(weapon, damage * 0.6, radius + 52, bladeLength * 0.9, count);
+  }
+
+  private hitOrbitRing(weapon: Weapon, damage: number, radius: number, bladeLength: number, count: number): void {
+    const angle = (this.orbitAngles.get(weapon.instanceId) ?? 0) + Math.PI / Math.max(1, count);
+    for (let index = 0; index < count; index += 1) {
+      const bladeAngle = angle + index * Math.PI * 2 / count;
+      const startX = Math.cos(bladeAngle) * (radius - bladeLength / 2);
+      const startY = Math.sin(bladeAngle) * (radius - bladeLength / 2);
+      const endX = Math.cos(bladeAngle) * (radius + bladeLength / 2);
+      const endY = Math.sin(bladeAngle) * (radius + bladeLength / 2);
+      for (const enemy of this.enemies) {
+        if (!enemy.active || distanceToSegment(enemy.x, enemy.y, startX, startY, endX, endY) > 8 + enemy.hitRadius) continue;
+        const key = `${weapon.instanceId}:evolution:${enemy.id}`;
+        if (this.elapsed - (this.orbitHits.get(key) ?? -Infinity) < (weapon.stats.hitCooldown ?? 0.45)) continue;
+        this.orbitHits.set(key, this.elapsed);
+        const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, damage, weapon.slot), this.elapsed, impactAngleFromVelocity(Math.cos(bladeAngle + Math.PI / 2), Math.sin(bladeAngle + Math.PI / 2)));
+        this.recordHitDamage(weapon.id, result.amount, enemy.x, enemy.y, weapon.instanceId);
+        if (result.destroyed) this.handleEnemyDestroyed(enemy);
+      }
+    }
   }
 
   private updateOrbitAngles(seconds: number): void {
@@ -761,16 +898,24 @@ export class BattleScene extends Phaser.Scene {
 
   private fireDisc(weapon: Weapon, angle: number, damage: number): void {
     this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const origin = this.weaponOrigin(weapon);
     const speed = (this.combatStats(weapon).projectileSpeed ?? 290) * (weapon.branch === 'echo' ? 1.2 : 1);
     this.addProjectile({
       kind: 'disc', x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
       radius: 10, damage, life: 4, piercing: 0, bounces: (weapon.stats.bounceCount ?? 3) + (weapon.branch === 'echo' ? 3 : 0), hitCooldown: weapon.stats.hitCooldown ?? 0.3, sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
     });
+    if (weapon.evolutionId === 'disc-resonant') {
+      this.addProjectile({
+        kind: 'disc', x: origin.x, y: origin.y, vx: Math.cos(angle + Math.PI / 3) * speed * 0.86, vy: Math.sin(angle + Math.PI / 3) * speed * 0.86,
+        radius: 8, damage: damage * 0.45, life: 3.2, piercing: 0, bounces: Math.max(1, Math.floor((weapon.stats.bounceCount ?? 3) / 2)), hitCooldown: (weapon.stats.hitCooldown ?? 0.3) + 0.05, sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+      });
+    }
   }
 
   private fireGravity(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
     this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const origin = this.weaponOrigin(weapon);
     const stats = weapon.stats;
     const range = this.combatStats(weapon).range;
@@ -796,7 +941,183 @@ export class BattleScene extends Phaser.Scene {
     const radius = (stats.pullRadius ?? 125) * (weapon.branch === 'long' ? 1.2 : 1);
     const brakeEffect = this.supportEffect('brake', weapon.slot);
     this.createGravityField(x, y, duration, radius, damage, stats.pullStrength ?? 34, safeDistance, weapon.branch === 'collapse', 0.4 * (1 + brakeEffect), weapon.instanceId);
+    if (weapon.evolutionId === 'gravity-linked') {
+      const offset = Math.PI / 5;
+      this.createGravityField(x + Math.cos(angle + offset) * 62, y + Math.sin(angle + offset) * 62, duration * 0.72, radius * 0.7, damage * 0.45, stats.pullStrength ?? 34, safeDistance, false, 0.35 * (1 + brakeEffect), weapon.instanceId);
+      this.addLine({ angle: angle + offset, color: WEAPONS.gravity.color, life: 0.3, maxLife: 0.3, startX: x, startY: y, length: 62, width: 4 });
+    }
     this.addLine({ angle, color: WEAPONS.gravity.color, life: 0.38, maxLife: 0.38, startX: origin.x, startY: origin.y, length: distance, width: stats.pullRadius ?? 125 });
+  }
+
+  private updateChargeWeapons(seconds: number): void {
+    for (const weapon of this.weapons) {
+      if (weapon.id !== 'lance') continue;
+      const limit = Math.max(1, weapon.stats.chargeTime ?? 0.8) * 3;
+      this.lanceCharge.set(weapon.instanceId, Math.min(limit, (this.lanceCharge.get(weapon.instanceId) ?? 0) + seconds));
+    }
+  }
+
+  private fireGrid(weapon: Weapon, _target: Enemy | null, angle: number, damage: number): void {
+    this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
+    const origin = this.weaponOrigin(weapon);
+    const range = this.combatStats(weapon).range;
+    const width = (weapon.stats.width ?? 30) + (weapon.branch === 'narrow' ? -8 : 0);
+    const count = Math.min(4, Math.max(1, (weapon.stats.count ?? 1) + (weapon.branch === 'multi-direction' ? 1 : 0)));
+    this.addLine({ angle, color: WEAPONS.grid.color, life: 0.24, maxLife: 0.24, width: Math.max(8, width), startX: origin.x, startY: origin.y, length: range });
+    let intercepted = 0;
+    const interceptLine = (lineAngle: number, lineWidth: number, lineLength: number): void => {
+      const lineEndX = origin.x + Math.cos(lineAngle) * lineLength;
+      const lineEndY = origin.y + Math.sin(lineAngle) * lineLength;
+      const threats = this.projectiles
+        .filter((projectile) => projectile.active && projectile.enemyProjectile && distanceToSegment(projectile.x, projectile.y, origin.x, origin.y, lineEndX, lineEndY) <= lineWidth + projectile.radius)
+        .sort((first, second) => Math.hypot(first.x - origin.x, first.y - origin.y) - Math.hypot(second.x - origin.x, second.y - origin.y));
+      for (const projectile of threats) {
+        if (intercepted >= count) break;
+        projectile.active = false;
+        intercepted += 1;
+        this.recorder.recordWeaponEvent(weapon.id, 'intercepts');
+        this.addFlash({ x: projectile.x, y: projectile.y, color: WEAPONS.grid.color, life: 0.25, maxLife: 0.25, radius: 16 });
+        const repair = this.supportEffect('repair', weapon.slot);
+        if (repair > 0) this.core.heal(Math.min(3, repair));
+      }
+    };
+    interceptLine(angle, width, range);
+    const cross = angle + Math.PI / 2;
+    if (weapon.evolutionId === 'grid-cross') interceptLine(cross, width * 0.7, range * 0.72);
+    // A grid remains a weapon even in a quiet wave. Its fallback shot is
+    // weaker than a dedicated damage weapon, preserving the advertised
+    // enemy-bullet priority without making it universally optimal.
+    const speed = this.combatStats(weapon).projectileSpeed ?? 420;
+    this.addProjectile({
+      kind: 'grid', x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+      radius: 5, damage: damage * (intercepted > 0 ? 0.75 : 0.42), life: Math.min(1.6, range / Math.max(1, speed)), piercing: 0,
+      sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+    });
+    if (weapon.evolutionId === 'grid-cross') {
+      this.addLine({ angle: cross, color: WEAPONS.grid.color, life: 0.18, maxLife: 0.18, width: Math.max(8, width * 0.7), startX: origin.x, startY: origin.y, length: range * 0.72 });
+    }
+  }
+
+  private fireMine(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
+    this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
+    const origin = this.weaponOrigin(weapon);
+    const stats = weapon.stats;
+    const targetDistance = target ? Math.hypot(target.x - origin.x, target.y - origin.y) : 260;
+    const defaultDistance = weapon.branch === 'near' ? Math.min(260, targetDistance) : Math.max(240, Math.min(this.combatStats(weapon).range, targetDistance + 90));
+    const distance = Math.max(60, Math.min(this.combatStats(weapon).range, defaultDistance));
+    const offsets = weapon.evolutionId === 'mine-cross' ? [-0.26, 0, 0.26] : [0];
+    const mineLimit = Math.min(MAX_MINES, Math.max(1, (stats.count ?? 2) + (weapon.evolutionId === 'mine-cross' ? 1 : 0)));
+    for (const offset of offsets) {
+      const point = { x: origin.x + Math.cos(angle + offset) * distance, y: origin.y + Math.sin(angle + offset) * distance };
+      const mine: MineField = {
+        id: this.nextMineId++, x: point.x, y: point.y, life: stats.duration ?? 6, maxLife: stats.duration ?? 6,
+        radius: stats.radius ?? 44, damage: offset === 0 ? damage : damage * 0.55, sourceWeaponInstanceId: weapon.instanceId, triggered: false,
+      };
+      while (this.mines.filter((item) => item.sourceWeaponInstanceId === weapon.instanceId).length >= mineLimit) {
+        const oldest = this.mines.findIndex((item) => item.sourceWeaponInstanceId === weapon.instanceId);
+        if (oldest < 0) break;
+        this.mines.splice(oldest, 1);
+      }
+      if (this.mines.length >= MAX_MINES) this.mines.shift();
+      this.mines.push(mine);
+      this.addFlash({ x: point.x, y: point.y, color: WEAPONS.mine.color, life: 0.4, maxLife: 0.4, radius: mine.radius, kind: 'telegraph' });
+    }
+  }
+
+  private fireLance(weapon: Weapon, angle: number, damage: number): void {
+    const charge = this.lanceCharge.get(weapon.instanceId) ?? 0;
+    const minimum = Math.max(0.8, weapon.stats.chargeTime ?? 0.8);
+    if (charge < minimum) return;
+    this.lanceCharge.set(weapon.instanceId, 0);
+    this.options.callbacks.onAudioCue?.('heavy');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
+    const origin = this.weaponOrigin(weapon);
+    const speed = this.combatStats(weapon).projectileSpeed ?? 620;
+    const range = this.combatStats(weapon).range;
+    const piercing = (weapon.stats.pierce ?? 3) + (weapon.branch === 'shatter' ? 2 : 0);
+    const lanceDamage = weapon.branch === 'shatter' ? damage * 1.2 : damage;
+    const life = range / Math.max(1, speed);
+    this.addProjectile({
+      kind: 'lance', x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+      radius: weapon.stats.width ?? 10, damage: lanceDamage, life, piercing, sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+    });
+    this.addLine({ angle, color: WEAPONS.lance.color, life: 0.22, maxLife: 0.22, width: weapon.stats.width ?? 10, startX: origin.x, startY: origin.y, length: 110 });
+    if (weapon.evolutionId === 'lance-double') {
+      this.addProjectile({
+        kind: 'lance', x: origin.x, y: origin.y, vx: Math.cos(angle + 0.04) * speed * 0.92, vy: Math.sin(angle + 0.04) * speed * 0.92,
+        radius: Math.max(5, (weapon.stats.width ?? 10) * 0.72), damage: lanceDamage * 0.48, life: life * 0.96, piercing: Math.max(0, piercing - 1), sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+      });
+    }
+  }
+
+  private deployDrones(weapon: Weapon): void {
+    const existing = this.drones.get(weapon.instanceId) ?? [];
+    const desired = Math.min(2, Math.max(1, weapon.stats.count ?? 1));
+    const duration = weapon.stats.duration ?? 12;
+    const totalActiveDrones = [...this.drones.values()].reduce((sum, units) => sum + units.filter((unit) => unit.life > 0).length, 0);
+    const available = Math.max(0, MAX_DRONES - (totalActiveDrones - existing.filter((unit) => unit.life > 0).length));
+    for (let index = existing.length; index < Math.min(desired, available); index += 1) {
+      const crossOffset = weapon.evolutionId === 'drone-cross' ? (index % 2 === 0 ? -0.28 : 0.28) : 0;
+      existing.push({ index, x: 0, y: 0, angle: index * Math.PI + crossOffset, cooldown: 0.35, life: duration, maxLife: duration, sourceWeaponInstanceId: weapon.instanceId });
+    }
+    this.drones.set(weapon.instanceId, existing);
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
+  }
+
+  private updateDrones(seconds: number): void {
+    for (const weapon of this.weapons.filter((item) => item.id === 'drone')) {
+      const units = this.drones.get(weapon.instanceId);
+      if (!units || units.length === 0) continue;
+      const origin = this.weaponOrigin(weapon);
+      const speed = (weapon.stats.orbitSpeed ?? 1.2) * (weapon.branch === 'near' ? 1.25 : 1) * (weapon.evolutionId === 'drone-cross' ? 1.12 : 1);
+      const orbitRadius = (weapon.stats.orbitRadius ?? 74) * (weapon.branch === 'remote' ? 1.35 : 1) * (weapon.evolutionId === 'drone-cross' ? 1.1 : 1);
+      for (const drone of units) {
+        drone.life -= seconds;
+        drone.angle += speed * seconds;
+        drone.cooldown -= seconds;
+        drone.x = origin.x + Math.cos(drone.angle + drone.index * Math.PI) * orbitRadius;
+        drone.y = origin.y + Math.sin(drone.angle + drone.index * Math.PI) * orbitRadius;
+        if (drone.life <= 0) continue;
+        if (drone.cooldown > 0) continue;
+        const target = selectTarget(this.enemies.filter((enemy) => enemy.active), { x: drone.x, y: drone.y }, { angle: this.aimAngle, manual: this.manualAim }, this.combatStats(weapon).range, this.elapsed, weapon.id, this.targetLocks.get(weapon.instanceId));
+        if (!target) { drone.cooldown = 0.2; continue; }
+        const dx = target.x - drone.x; const dy = target.y - drone.y; const distance = Math.hypot(dx, dy);
+        const projectileSpeed = this.combatStats(weapon).projectileSpeed ?? 300;
+        this.addProjectile({
+          kind: 'drone', x: drone.x, y: drone.y, vx: distance > 0 ? dx / distance * projectileSpeed : 0, vy: distance > 0 ? dy / distance * projectileSpeed : 0,
+          radius: 4, damage: this.weaponPower(weapon) * 0.6, life: 1.8, piercing: 0, sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+        });
+        this.recorder.recordWeaponEvent(weapon.id, 'shots');
+        drone.cooldown = weapon.stats.hitCooldown ?? 0.55;
+      }
+    }
+    for (const [instanceId, units] of this.drones) {
+      const active = units.filter((unit) => unit.life > 0);
+      if (active.length > 0) this.drones.set(instanceId, active);
+      else this.drones.delete(instanceId);
+    }
+  }
+
+  private updateMines(seconds: number): void {
+    for (const mine of this.mines) {
+      mine.life -= seconds;
+      if (mine.triggered || mine.life <= 0) continue;
+      const target = this.enemies.find((enemy) => enemy.active && Math.hypot(enemy.x - mine.x, enemy.y - mine.y) <= mine.radius + enemy.hitRadius);
+      if (!target) continue;
+      mine.triggered = true;
+      mine.life = 0;
+      const weapon = this.weapons.find((item) => item.instanceId === mine.sourceWeaponInstanceId);
+      if (!weapon) continue;
+      this.recorder.recordWeaponEvent(weapon.id, 'detonations');
+      this.addFlash({ x: mine.x, y: mine.y, color: WEAPONS.mine.color, life: 0.32, maxLife: 0.32, radius: mine.radius });
+      this.hitArea(weapon, mine.x, mine.y, mine.radius, mine.damage, null);
+      const repair = this.supportEffect('repair', weapon.slot);
+      if (repair > 0) this.core.heal(Math.min(2, repair));
+      if (this.state === 'finished') return;
+    }
+    for (let index = this.mines.length - 1; index >= 0; index -= 1) if (this.mines[index]?.life <= 0) this.mines.splice(index, 1);
   }
 
   private hitArea(weapon: Weapon, x: number, y: number, radius: number, damage: number, attackAngle: number | null, hitIds?: Set<number>): void {
@@ -1431,6 +1752,8 @@ export class BattleScene extends Phaser.Scene {
     const activeWeaponIds = new Set(this.weapons.map((weapon) => weapon.instanceId));
     for (const instanceId of this.orbitAngles.keys()) if (!activeWeaponIds.has(instanceId)) this.orbitAngles.delete(instanceId);
     for (const instanceId of this.targetLocks.keys()) if (!activeWeaponIds.has(instanceId)) this.targetLocks.delete(instanceId);
+    for (const instanceId of this.lanceCharge.keys()) if (!activeWeaponIds.has(instanceId)) this.lanceCharge.delete(instanceId);
+    for (const instanceId of this.drones.keys()) if (!activeWeaponIds.has(instanceId)) this.drones.delete(instanceId);
   }
 
   private updateEffects(seconds: number): void {
@@ -1474,7 +1797,7 @@ export class BattleScene extends Phaser.Scene {
       kills: this.recorder.kills,
       enemies: visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),
       projectiles: visibleProjectiles.map((projectile) => projectile.snapshot()),
-      weapons: this.weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, nodeId: weapon.nodeId, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })),
+      weapons: this.weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, nodeId: weapon.nodeId, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch, evolutionId: weapon.evolutionId, evolutionName: weapon.evolutionDefinition?.name })),
       supports: this.supports.map((support) => ({ id: support.id, instanceId: support.instanceId, nodeId: support.nodeId, level: support.level, slot: support.slot })),
       aimAngle: this.aimAngle,
       manualAim: this.manualAim,
@@ -1541,7 +1864,7 @@ export class BattleScene extends Phaser.Scene {
     const visibleEnemies = this.visibleEnemies();
     const visibleProjectiles = this.visibleProjectiles();
 
-    drawDevice(deviceLayer, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, nodeId: weapon.nodeId, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch })), this.supports.map((support) => ({ id: support.id, instanceId: support.instanceId, nodeId: support.nodeId, level: support.level, slot: support.slot })), this.buildGraph.unlockedLayer);
+    drawDevice(deviceLayer, cx, cy, this.weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, nodeId: weapon.nodeId, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch, evolutionId: weapon.evolutionId, evolutionName: weapon.evolutionDefinition?.name })), this.supports.map((support) => ({ id: support.id, instanceId: support.instanceId, nodeId: support.nodeId, level: support.level, slot: support.slot })), this.buildGraph.unlockedLayer);
     for (const projectile of visibleProjectiles) if (!projectile.enemyProjectile) this.drawProjectile(friendlyLayer, projectile, cx, cy);
     for (const particle of this.particles.active()) {
       const alpha = Math.max(0, particle.life / particle.maxLife);
@@ -1549,6 +1872,8 @@ export class BattleScene extends Phaser.Scene {
       friendlyLayer.fillCircle(cx + particle.x, cy + particle.y, 2 + alpha * 2);
     }
     this.drawOrbitBlades(friendlyLayer, cx, cy);
+    this.drawMines(friendlyLayer, cx, cy);
+    this.drawDrones(friendlyLayer, cx, cy);
     for (const enemy of visibleEnemies) drawEnemy(enemyLayer, enemy.snapshot({ x: 0, y: 0 }, this.elapsed), cx, cy);
     this.syncDamageNumberTexts(cx, cy);
     drawTelegraphs(telegraphLayer, visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)), cx, cy);
@@ -1695,6 +2020,43 @@ export class BattleScene extends Phaser.Scene {
         graphics.lineBetween(startX, startY, endX, endY);
         graphics.fillStyle(0xfff1a8, 0.85);
         graphics.fillCircle(endX, endY, 3);
+      }
+    }
+  }
+
+  private drawMines(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number): void {
+    for (const mine of this.mines) {
+      if (mine.life <= 0 || mine.triggered) continue;
+      const alpha = Math.max(0.2, Math.min(1, mine.life / mine.maxLife));
+      const x = cx + mine.x;
+      const y = cy + mine.y;
+      graphics.fillStyle(WEAPONS.mine.color, alpha * 0.2);
+      graphics.fillCircle(x, y, mine.radius);
+      graphics.lineStyle(2, WEAPONS.mine.color, alpha);
+      graphics.strokeCircle(x, y, mine.radius);
+      graphics.lineStyle(2, 0xfff1a8, alpha);
+      graphics.lineBetween(x - 7, y, x + 7, y);
+      graphics.lineBetween(x, y - 7, x, y + 7);
+    }
+  }
+
+  private drawDrones(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number): void {
+    for (const weapon of this.weapons.filter((item) => item.id === 'drone')) {
+      const units = this.drones.get(weapon.instanceId) ?? [];
+      const origin = this.weaponOrigin(weapon);
+      for (const drone of units) {
+        if (drone.life <= 0) continue;
+        const alpha = Math.max(0.25, Math.min(1, drone.life / drone.maxLife));
+        const x = cx + drone.x;
+        const y = cy + drone.y;
+        graphics.lineStyle(1, WEAPONS.drone.color, alpha * 0.45);
+        graphics.lineBetween(cx + origin.x, cy + origin.y, x, y);
+        graphics.fillStyle(WEAPONS.drone.color, alpha * 0.85);
+        graphics.fillCircle(x, y, 7);
+        graphics.lineStyle(2, 0xf2f0e8, alpha);
+        graphics.strokeCircle(x, y, 10);
+        graphics.lineBetween(x - 5, y - 5, x + 5, y + 5);
+        graphics.lineBetween(x + 5, y - 5, x - 5, y + 5);
       }
     }
   }
