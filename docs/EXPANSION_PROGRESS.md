@@ -18,7 +18,10 @@
 
 ### V3の提出状態
 
-- Draft PR URL、提出commit、GitHub ActionsのQuality runは、push後にこの節へ追記する。PRはopen/Draftで維持し、mainへの直接push・マージ・自動マージ・保護設定の緩和・本番DB変更・実験場の有効化は行わない。Actionsの静的・単体・ブラウザ・ビルド結果と、実機未確認を分けて記録する。
+- [Draft PR #21](https://github.com/chameleonjp-lab/kakomare/pull/21) を作成し、作業branch `codex/v3-weapons-synergy-20260911` の先端 `4836434484c9629e9c434f6bae79a216091ccce0` を公開した。基準mainから1コミット先で、PRはopen/Draft、mainへの直接push・マージ・自動マージ・保護設定の緩和・本番DB変更・実験場の有効化は行っていない。
+- 初回提出先端の [Quality #59](https://github.com/chameleonjp-lab/kakomare/actions/runs/34579750317) は、静的・単体は成功したが、既存E2Eのseed依存の武器名固定がV3の候補拡張に追随せずChromium 1件で失敗した。失敗を隠さず同じbranchで検査条件を修正し、`武器面2`へ現在カタログの具体的なLv1武器が入ることを画面で確認する条件へ更新した。
+- 修正後先端に対する [Quality #60](https://github.com/chameleonjp-lab/kakomare/actions/runs/34580152005) は、公式PlaywrightコンテナとPages同条件native Ubuntuの両jobで全step成功。各jobのログは静的・単体24ファイル178件、Chromium 32件、WebKit 32件、文書整合性、ビルド・配布物・独自名称検査を含む。これは提出commitの自動検査であり、iPhone Safari実機・長時間本戦・50武器完成・ランキング本番受入を意味しない。
+- ローカルのChromium/WebKitは実行ファイル不足でテスト本体へ到達しなかったままだが、提出commitのGitHub Actionsで同スイートが成功した。自動ブラウザ検査、ローカル環境未実施、実機未確認を混同しない。次工程V4は、このPRをユーザーがマージした後に最新mainを再確認して開始する。
 
 ## V2の提出履歴（前工程）
 

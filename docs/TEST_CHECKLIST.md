@@ -18,6 +18,8 @@
 - [x] `npm run verify:originality`
 - [x] `git diff --check`
 
+提出commit `4836434484c9629e9c434f6bae79a216091ccce0` に対する [Quality #60](https://github.com/chameleonjp-lab/kakomare/actions/runs/34580152005) は、公式PlaywrightコンテナとPages同条件native Ubuntuの両jobで全step成功した。各jobのログで静的・単体24ファイル178件、Chromium 32件、WebKit 32件、文書整合性、build、verify:dist、verify:originalityを確認した。ローカルのブラウザ実行ファイル不足とは別の自動検査結果であり、iPhone Safari実機の確認ではない。
+
 ビルド後に配布物検査を順番に実行し、`build`、`verify:dist`、`verify:originality`、`git diff --check` は成功した。Chromium/WebKitはテスト本体へ到達せず、ローカル環境の実行ファイル不足で未実施である。最初に並行実行した `verify:dist` はビルド完了前のため `dist/index.html` 不在となったが、ビルド完了後の再実行は成功している。
 
 V3の追加検証は、`tests/integration/battle-quality.test.ts` の4武器の実戦オブジェクト生成、迎撃格子の方向上限と軌道機雷の一回爆発、停止中の移設・入替と入力台帳、`tests/unit/upgrade.test.ts` のLv8発展候補、`tests/unit/enemy-rendering.test.ts` の状態記号を含む。`tests/e2e/core.spec.ts` には、一時停止の「装置を確認」から実際の移設ボタンを使う画面検査を追加した。内部メソッドの直接呼び出しによる統合検査と、画面操作による検査は別に記録する。
