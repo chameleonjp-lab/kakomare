@@ -69,6 +69,31 @@ export function weaponCompatibility(enemy: Enemy, weaponId?: WeaponId, enemies: 
     case 'harpoon': return enemy.type === 'shell' || enemy.type === 'lattice' ? 30 : 0;
     case 'vortex': return nearbyEnemies > 1 ? 34 : enemy.distanceToCore < 260 ? 18 : 0;
     case 'ward': return enemy.distanceToCore < 230 || enemy.telegraph ? 32 : 0;
+    case 'fan': return enemy.distanceToCore < 260 && nearbyEnemies > 0 ? 34 : 6;
+    case 'swell': return enemy.distanceToCore > 240 ? 28 : 8;
+    case 'seeker': return enemy.telegraph || enemy.type === 'marker' || enemy.type === 'dropper' ? 38 : 12;
+    case 'drill': return enemy.type === 'shell' || enemy.type === 'lattice' || enemy.type === 'guard' ? 42 : enemy.isBoss ? 15 : 0;
+    case 'mist': return nearbyEnemies > 0 ? 30 : enemy.distanceToCore < 220 ? 18 : 0;
+    case 'spark': return enemy.type === 'marker' || enemy.type === 'phase' ? 32 : nearbyEnemies > 0 ? 20 : 0;
+    case 'coil': return nearbyEnemies > 0 ? 32 : enemy.distanceToCore < 240 ? 12 : 0;
+    case 'bloom': return nearbyEnemies > 1 ? 38 : 6;
+    case 'shuttle': return enemy.type === 'shell' || enemy.type === 'lattice' ? 28 : enemy.distanceToCore < 260 ? 12 : 0;
+    case 'siphon': return enemy.type === 'charger' || enemy.type === 'runner' || enemy.telegraph ? 36 : 8;
+    case 'mirror': return enemy.type === 'dropper' || enemy.type === 'marker' || enemy.isBoss ? 30 : 4;
+    case 'stasis': return enemy.type === 'charger' || enemy.type === 'repair' || enemy.type === 'factory' ? 42 : enemy.distanceToCore < 220 ? 16 : 0;
+    case 'quake': return enemy.distanceToCore < 260 && nearbyEnemies > 0 ? 34 : enemy.distanceToCore < 180 ? 26 : -8;
+    case 'spoke': return enemy.type === 'dropper' || enemy.type === 'marker' ? 34 : nearbyEnemies > 1 ? 18 : 0;
+    case 'hollow': return enemy.type === 'guard' || enemy.type === 'shell' ? 36 : enemy.distanceToCore < 230 ? 12 : 0;
+    case 'snare': return enemy.type === 'charger' || enemy.type === 'runner' ? 42 : enemy.distanceToCore < 220 ? 14 : 0;
+    case 'chime': return enemy.type === 'phase' || enemy.type === 'marker' || enemy.isBoss ? 30 : nearbyEnemies > 0 ? 12 : 0;
+    case 'thunder': return enemy.type === 'factory' || enemy.type === 'repair' || enemy.type === 'dropper' ? 40 : enemy.isBoss ? 18 : 0;
+    case 'frost': return enemy.type === 'charger' || enemy.type === 'runner' || enemy.type === 'guard' ? 36 : nearbyEnemies > 0 ? 18 : 0;
+    case 'swarm': return nearbyEnemies > 1 ? 34 : enemy.type === 'dropper' || enemy.type === 'marker' ? 22 : 6;
+    case 'counter': return enemy.telegraph || enemy.type === 'dropper' || enemy.isBoss ? 42 : 0;
+    case 'dive': return enemy.type === 'guard' || enemy.type === 'shell' || enemy.type === 'marker' ? 34 : 8;
+    case 'axis': return nearbyEnemies > 1 ? 30 : enemy.type === 'dropper' || enemy.type === 'marker' ? 24 : 4;
+    case 'seed': return enemy.distanceToCore > 200 ? 24 : enemy.distanceToCore < 140 ? 18 : 4;
+    case 'requiem': return enemy.isBoss ? 38 : nearbyEnemies > 2 ? 32 : 0;
   }
   return 0;
 }

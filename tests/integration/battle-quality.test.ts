@@ -620,6 +620,44 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     expect(drones.get(weapons.find((weapon) => weapon.id === 'drone')?.instanceId ?? '')).toHaveLength(2);
   });
 
+  it('V5の追加25武器は個体ごとの発射元を保ったまま実戦へ入る', () => {
+    const scene = new moduleUnderTest.BattleScene(options());
+    const weapons = privateValue<Array<{ id: string; level: number; slot: number; instanceId: string }>>(scene, 'weapons');
+    const fireWeapon = privateValue<(weapon: unknown) => void>(scene, 'fireWeapon').bind(scene);
+    const projectiles = privateValue<Array<{ active: boolean; sourceWeaponId: string | null; sourceWeaponInstanceId: string | null }>>(scene, 'projectiles');
+    const v5Ids = WEAPON_ORDER.slice(-25);
+
+    for (const [index, id] of v5Ids.entries()) {
+      const weapon = new moduleUnderTest.Weapon(id, index % 3) as unknown as { id: string; level: number; slot: number; instanceId: string };
+      weapon.level = 8;
+      weapons.push(weapon);
+      fireWeapon(weapon);
+      expect(projectiles.some((projectile) => projectile.active && projectile.sourceWeaponId === id && projectile.sourceWeaponInstanceId === weapon.instanceId)).toBe(true);
+    }
+    expect(new Set(projectiles.filter((projectile) => projectile.active).map((projectile) => projectile.sourceWeaponId))).toEqual(new Set(v5Ids));
+  });
+
+  it('誘爆環は印または燃焼が付いた敵の撃破時だけ一度発動する', () => {
+    const scene = new moduleUnderTest.BattleScene(options());
+    const supports = privateValue<Array<{ id: string; level: number }>>(scene, 'supports');
+    const ignite = new moduleUnderTest.SupportModule('ignite', 0) as unknown as { id: string; level: number };
+    ignite.level = 3;
+    supports.push(ignite);
+    const destroy = privateValue<(enemy: unknown) => void>(scene, 'handleEnemyDestroyed').bind(scene);
+    const recorder = privateValue<{ supportUsage: Partial<Record<string, number>> }>(scene, 'recorder');
+    const unmarked = new moduleUnderTest.Enemy(41, 'shard', 0, 180) as unknown as { active: boolean; markedUntil: number; burningUntil: number };
+    unmarked.active = false;
+    destroy(unmarked);
+    expect(recorder.supportUsage.ignite ?? 0).toBe(0);
+
+    const marked = new moduleUnderTest.Enemy(42, 'shard', 0, 180) as unknown as { active: boolean; markedUntil: number; burningUntil: number };
+    marked.active = false;
+    marked.markedUntil = 10;
+    destroy(marked);
+    destroy(marked);
+    expect(recorder.supportUsage.ignite).toBe(1);
+  });
+
   it('迎撃格子は方向上限内の敵弾を消し、機雷は侵入時に一度だけ爆発する', () => {
     const scene = new moduleUnderTest.BattleScene(options());
     const weapons = privateValue<Array<{ id: string; level: number; slot: number }>>(scene, 'weapons');

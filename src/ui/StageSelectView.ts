@@ -5,7 +5,7 @@ import type { SaveData } from '../types/save';
 import { button, card, element, heading, pageShell } from './viewUtils';
 
 export function createStageSelectView(save: SaveData, onSelect: (id: StageId) => void, onBack: () => void): HTMLElement {
-  const shell = pageShell('ステージ選択', 'クリアしたステージの次が解放されます。無限モードはステージ3の後に選べます。');
+  const shell = pageShell('ステージ選択', 'ステージ3のクリアで無限モードと交差射線が解放され、その後は攻略順に進みます。');
   const list = element('div', 'stage-list');
   for (const stageId of STAGE_ORDER) {
     const stage = STAGES[stageId];
@@ -20,7 +20,20 @@ export function createStageSelectView(save: SaveData, onSelect: (id: StageId) =>
       const best = save.records.stageBest[stageId];
       item.append(element('p', 'stage-meta', `最高得点 ${best?.bestScore ?? 0} / 最高残り耐久力 ${best?.bestCore ?? 0}`));
     }
-    if (!unlocked) item.append(element('p', 'stage-lock', stageId === 'stage-2' ? 'ステージ1をクリアすると解放されます。' : stageId === 'stage-3' ? 'ステージ2をクリアすると解放されます。' : 'ステージ3をクリアすると解放されます。'));
+    if (!unlocked) {
+      const lockMessage = stageId === 'stage-2'
+        ? 'ステージ1をクリアすると解放されます。'
+        : stageId === 'stage-3'
+          ? 'ステージ2をクリアすると解放されます。'
+          : stageId === 'stage-4'
+            ? 'ステージ3をクリアすると解放されます。'
+            : stageId === 'stage-5'
+              ? '交差射線をクリアすると解放されます。'
+              : stageId === 'stage-6'
+                ? '再生群をクリアすると解放されます。'
+                : 'ステージ3をクリアすると解放されます。';
+      item.append(element('p', 'stage-lock', lockMessage));
+    }
     const start = button(unlocked ? 'このステージを開始' : '未解放', unlocked ? 'button button-primary' : 'button button-secondary');
     start.disabled = !unlocked;
     start.dataset.testid = `select-${stageId}`;

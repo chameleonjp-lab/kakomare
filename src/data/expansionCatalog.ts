@@ -6,7 +6,7 @@ import type {
   SupportApplicability,
 } from '../types/expansion';
 
-export const EXPANSION_RULE_VERSION = 'expansion-v4-runtime';
+export const EXPANSION_RULE_VERSION = 'expansion-v5-runtime';
 
 export const EXPANSION_SUPPORT_ORDER = [
   'output', 'rhythm', 'branch', 'focus', 'observe', 'brake',
@@ -37,18 +37,18 @@ export const EXPANSION_SUPPORTS: ExpansionSupportDesign[] = [
   support('brake', '制動環', 'implemented', '減速・押し戻し', '攻撃が減速または押し戻しを持つとき', '制動時間または距離を増やす', '容量1', '制動値は合計+45%まで', '制動時間と移動距離'),
   support('relay', '継電環', 'implemented', '接続中継', '接続図に内側へ延びる空き経路があるとき', '同層から内側の武器へ効果を1本だけ中継する', '容量2', '1個体につき中継1本、循環なし', '中継元・中継先・重複抑止'),
   support('repair', '整備環', 'implemented', '条件付き防衛', '接続武器が敵の状態を解除または迎撃したとき', 'コアへ小さな一時障壁を回復する', '容量2', '1更新につき1回、障壁上限を超えない', '障壁回復源と回数'),
-  support('shatter', '破砕環', 'design-only', '装甲・盾破壊', '殻・盾・護衛の防護へ命中したとき', '累積破砕値を加え、防護の残量を見える形で削る', '容量2', '同一防護への1更新上限を持つ', '防護種別と破砕値'),
-  support('conductive', '導電環', 'design-only', '状態連結', '減速・感電・印などの状態が付いている敵へ命中したとき', '状態を近い別の敵へ1回だけ伝える', '容量2', '派生世代1、同じ敵へ再到達しない', '供給状態・伝導先・世代'),
-  support('ignite', '誘爆環', 'design-only', '条件範囲攻撃', '印または燃焼状態の敵が倒れたとき', '周囲へ小さな範囲攻撃を1回発生させる', '容量2', '誘爆から再誘爆しない、同時3体まで', '親撃破・範囲・派生回数'),
-  support('brink', '背水環', 'design-only', '危険時強化', 'コア耐久が最大値の30%以下のとき', '威力または制動を少し高める代わりに障壁回復を止める', '容量1', '倍率は1.18、回復停止を明示', '成立時間・代償・適用武器'),
-  support('anchor', '定着環', 'design-only', '寿命・設置', '領域・機雷・子機など持続する攻撃を生成するとき', '寿命または設置位置を固定し、移動で消えにくくする', '容量1', '個体ごとの同時数上限を変えない', '生成数・寿命・固定位置'),
-  support('veil', '薄幕環', 'design-only', '障壁・被害軽減', 'コア防衛攻撃または障壁を持つ構成のとき', '短い被害軽減幕を作るが、攻撃性能を少し下げる', '容量2', '同時幕1、無敵にはならない', '吸収被害・有効時間・代償'),
-  support('vector', '指向環', 'design-only', '照準補助', '対象方向または危険対象の選択が可能なとき', '優先対象の選択範囲を狭め、選んだ方向の命中を安定させる', '容量1', '全方向自動化にはしない', '選択対象・命中率・対象変更'),
-  support('pulse', '脈動環', 'design-only', '周期発動', '一定時間ごとの攻撃または領域を持つとき', '通常発射とは別の周期で小さな補助波を出す', '容量2', '補助波から別の周期波を呼ばない', '周期・対象数・補助波回数'),
-  support('reserve', '蓄勢環', 'design-only', '蓄積・放出', 'ため時間または命中蓄積を持つ攻撃のとき', '蓄積を1段階増やし、放出時の貫通または範囲を選ぶ', '容量2', '蓄積は最大3段、待機中の無限加算なし', '蓄積段階・放出値・待機時間'),
-  support('lattice', '格子環', 'design-only', '迎撃・遮断', '敵弾または直線攻撃を迎撃・遮断できるとき', '迎撃対象または遮断回数を増やす', '容量2', '同時迎撃は個体ごとに4まで', '迎撃対象・遮断数・失敗理由'),
-  support('orbit', '軌道環', 'design-only', '軌道変化', '周回・往復・移動経路を持つ攻撃のとき', '軌道半径または往復経路を少し変える', '容量1', '軌道を無限に広げない', '軌道半径・接触間隔・経路'),
-  support('catalyst', '触媒環', 'design-only', '状態消費', '二つ以上の状態が同じ敵へ成立したとき', '一方の状態を消費して、別の追加効果を1回発生させる', '容量2', '1敵につき1回、状態を往復させない', '消費状態・発動効果・回数'),
+  support('shatter', '破砕環', 'implemented', '装甲・盾破壊', '殻・盾・護衛の防護へ命中したとき', '累積破砕値を加え、防護の残量を見える形で削る', '容量2', '同一防護への1更新上限を持つ', '防護種別と破砕値'),
+  support('conductive', '導電環', 'implemented', '状態連結', '減速・感電・印などの状態が付いている敵へ命中したとき', '状態を近い別の敵へ1回だけ伝える', '容量2', '派生世代1、同じ敵へ再到達しない', '供給状態・伝導先・世代'),
+  support('ignite', '誘爆環', 'implemented', '条件範囲攻撃', '印または燃焼状態の敵が倒れたとき', '周囲へ小さな範囲攻撃を1回発生させる', '容量2', '誘爆から再誘爆しない、同時3体まで', '親撃破・範囲・派生回数'),
+  support('brink', '背水環', 'implemented', '危険時強化', 'コア耐久が最大値の30%以下のとき', '威力または制動を少し高める代わりに障壁回復を止める', '容量1', '倍率は1.18、回復停止を明示', '成立時間・代償・適用武器'),
+  support('anchor', '定着環', 'implemented', '寿命・設置', '領域・機雷・子機など持続する攻撃を生成するとき', '寿命または設置位置を固定し、移動で消えにくくする', '容量1', '個体ごとの同時数上限を変えない', '生成数・寿命・固定位置'),
+  support('veil', '薄幕環', 'implemented', '障壁・被害軽減', 'コア防衛攻撃または障壁を持つ構成のとき', '短い被害軽減幕を作るが、攻撃性能を少し下げる', '容量2', '同時幕1、無敵にはならない', '吸収被害・有効時間・代償'),
+  support('vector', '指向環', 'implemented', '照準補助', '対象方向または危険対象の選択が可能なとき', '優先対象の選択範囲を狭め、選んだ方向の命中を安定させる', '容量1', '全方向自動化にはしない', '選択対象・命中率・対象変更'),
+  support('pulse', '脈動環', 'implemented', '周期発動', '一定時間ごとの攻撃または領域を持つとき', '通常発射とは別の周期で小さな補助波を出す', '容量2', '補助波から別の周期波を呼ばない', '周期・対象数・補助波回数'),
+  support('reserve', '蓄勢環', 'implemented', '蓄積・放出', 'ため時間または命中蓄積を持つ攻撃のとき', '蓄積を1段階増やし、放出時の貫通または範囲を選ぶ', '容量2', '蓄積は最大3段、待機中の無限加算なし', '蓄積段階・放出値・待機時間'),
+  support('lattice', '格子環', 'implemented', '迎撃・遮断', '敵弾または直線攻撃を迎撃・遮断できるとき', '迎撃対象または遮断回数を増やす', '容量2', '同時迎撃は個体ごとに4まで', '迎撃対象・遮断数・失敗理由'),
+  support('orbit', '軌道環', 'implemented', '軌道変化', '周回・往復・移動経路を持つ攻撃のとき', '軌道半径または往復経路を少し変える', '容量1', '軌道を無限に広げない', '軌道半径・接触間隔・経路'),
+  support('catalyst', '触媒環', 'implemented', '状態消費', '二つ以上の状態が同じ敵へ成立したとき', '一方の状態を消費して、別の追加効果を1回発生させる', '容量2', '1敵につき1回、状態を往復させない', '消費状態・発動効果・回数'),
 ];
 
 type SynergySeed = Omit<ExpansionSynergyDesign, 'id' | 'testId'>;
@@ -209,11 +209,11 @@ const makeSynergy = (weaponId: string, index: number, seed: SynergySeed): Expans
   testId: `C04-${weaponId}-${index === 0 ? 'A' : 'B'}`,
 });
 
-const V4_RUNTIME_WEAPONS = new Set(['prism', 'mortar', 'ribbon', 'shockwave', 'barrage', 'anchor', 'flare', 'cutter', 'beacon', 'nova', 'harpoon', 'vortex', 'ward']);
+const V5_RUNTIME_WEAPONS = new Set(EXPANSION_WEAPON_SEEDS.map((seed) => seed.id));
 
 export const EXPANSION_WEAPONS: ExpansionWeaponDesign[] = EXPANSION_WEAPON_SEEDS.map((seed) => ({
   ...seed,
-  status: V4_RUNTIME_WEAPONS.has(seed.id) ? 'implemented' : seed.status,
+  status: V5_RUNTIME_WEAPONS.has(seed.id) ? 'implemented' : seed.status,
   supportProfile: PROFILES[seed.archetype],
   nonApplicableReasons: Object.fromEntries(
     Object.entries(PROFILES[seed.archetype])

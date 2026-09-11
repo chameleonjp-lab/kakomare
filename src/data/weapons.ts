@@ -214,7 +214,67 @@ for (const [id, name, shortName, description, role, color, evolutionId, evolutio
   ), evolution(evolutionId, evolutionName, evolutionDescription));
 }
 
+/** V5 completes the remaining twenty-five basic weapon definitions.  These
+ * definitions intentionally use the same bounded attack primitives as the
+ * first twenty-five, but each keeps its own timing, range, count, target role,
+ * and evolution identity so it can be measured and balanced independently. */
+const V5_WEAPON_SPECS: Array<[WeaponId, string, string, string, string, number, string, string, string]> = [
+  ['fan', '扇裂砲', '扇裂', '瞬間に複数方向へ弾を広げ、近中距離の波を処理します。', '扇状・近中距離', 0xf472b6, 'fan-fold', '二重扇', '二つの扇を角度をずらして一度だけ放ちます。'],
+  ['swell', '膨張弾', '膨張', '飛翔距離に応じて大きくなる弾を遠い地点へ届けます。', '飛翔成長・範囲', 0x60a5fa, 'swell-ring', '膨張発展', '着弾時の最大半径を二段に分け、再膨張はしません。'],
+  ['seeker', '追跡針', '追針', '発射後に対象へ曲がり、危険な一体を追い続けます。', '単体追尾・急加速', 0x38bdf8, 'seeker-pair', '二段追跡', '二本目の追跡弾を一度だけ追加し、無限追尾しません。'],
+  ['drill', '穿孔錐', '穿孔', '一直線へ重い錐を通し、殻や盾の奥へ貫通します。', '重貫通・防護', 0xf59e0b, 'drill-bore', '双穿孔', '同じ線へ短い二本目を一度だけ通します。'],
+  ['mist', '薄霧弾', '薄霧', '指定地点へ視界を遮らない短い減速霧を残します。', '領域・減速', 0x94a3b8, 'mist-screen', '重層薄霧', '二つの薄霧を重ねますが、減速段階は共有します。'],
+  ['spark', '火花連射', '火花', '短い電弧を細かく連射し、近い敵へ状態を付けます。', '連射・状態', 0xfacc15, 'spark-link', '連結火花', '直近の別対象へ一度だけ電弧を渡します。'],
+  ['coil', '螺旋弾', '螺旋', '螺旋軌道を描く弾で、直線外の敵にも届かせます。', '螺旋・追尾', 0xc084fc, 'coil-spiral', '二重螺旋', '逆向きの螺旋を一周だけ追加します。'],
+  ['bloom', '開花弾', '開花', '着弾した場所から花弁状の小爆発を広げます。', '範囲・分裂', 0xfb7185, 'bloom-petal', '三重開花', '外側へ三枚の花弁を一度だけ作ります。'],
+  ['shuttle', '往復舟', '往復', '敵列を往復する弾で、行きと帰りの経路を分けます。', '往復・貫通', 0x2dd4bf, 'shuttle-return', '双方向往復', '帰路の短弾を一度だけ追加し、再往復しません。'],
+  ['siphon', '吸収線', '吸収', '命中した敵の速度を短く奪い、次の攻撃へつなげます。', '吸収・制御', 0x22d3ee, 'siphon-drain', '連続吸収', '二体目へ一度だけ吸収線を渡します。'],
+  ['mirror', '双映鏡', '双映', '二枚の鏡弾を別方向へ飛ばし、反射経路を作ります。', '反射・分岐', 0xe879f9, 'mirror-pair', '四面鏡', '反射後の短弾を一枚だけ追加します。'],
+  ['stasis', '静止針', '静止', '命中した敵を短く止め、止まった隙へ次の弾を合わせます。', '停止・単体', 0x67e8f9, 'stasis-lock', '静止網', '近い別対象へ一度だけ静止印を渡します。'],
+  ['quake', '地脈槌', '地脈', '指定地点へ局所衝撃を落とし、敵を外向きへ押し戻します。', '局所衝撃・防衛', 0xf97316, 'quake-pair', '二地点衝撃', '反対側へ弱い二地点目を一度だけ落とします。'],
+  ['spoke', '放射軸', '放射', '複数の放射軸を固定角へ伸ばし、方向を選んで切ります。', '固定放射・角度選択', 0x818cf8, 'spoke-double', '二重放射', '二つ目の軸を角度をずらして一度だけ出します。'],
+  ['hollow', '虚空裂', '虚空', '二地点を結ぶ短い裂け目を開き、通過した敵を切断します。', '短距離転位・裂け目', 0xa78bfa, 'hollow-triple', '三点裂け', '三点目へ短い裂け目を一度だけ延ばします。'],
+  ['snare', '絡網射', '絡網', '指定地点へ網を残し、通過した敵の速度を段階的に落とします。', '網罠・速度低下', 0x34d399, 'snare-cross', '交差網', '直角の網を一枚だけ追加します。'],
+  ['chime', '共鳴鐘', '共鳴', '異なる状態が重なった敵へ周期音撃を鳴らします。', '状態反応・周期音', 0xf0abfc, 'chime-double', '二重共鳴', '二つ目の音撃を一度だけ追加し、状態を再付与しません。'],
+  ['thunder', '雷柱', '雷柱', '予告した地点へ垂直の落雷を落とし、敵の列を断ちます。', '予告落雷・単発高威力', 0xfde047, 'thunder-triple', '三柱落雷', '左右の予告柱を一度だけ追加します。'],
+  ['frost', '霜結線', '霜結', '線状領域を残し、敵の速度を段階的に下げます。', '減速領域・凍結段階', 0x93c5fd, 'frost-double', '二重霜結', '別角度の霜結線を一度だけ重ねます。'],
+  ['swarm', '微群機', '微群', '小型機の群れを分散追尾させ、複数の敵へ同時に触れます。', '小型群・分散追尾', 0x86efac, 'swarm-pair', '二群展開', '別の角度から二群目を一度だけ展開します。'],
+  ['counter', '返照盾', '返照', '短い盾で敵弾を受け、弱い返照弾として発射元へ返します。', '受け返し・敵弾反射', 0x64748b, 'counter-double', '二面返照', '反対方向の盾を一度だけ追加します。'],
+  ['dive', '潜航弾', '潜航', '一度潜航してから対象の背面へ再出現し、貫通します。', '潜入・再出現', 0x14b8a6, 'dive-pair', '二重潜航', '別の対象へ短い潜航弾を一度だけ追加します。'],
+  ['axis', '軸旋砲', '軸旋', '回転する軸上へ短弾を連射し、角度を変えながら掃射します。', '回転軸・角度連射', 0x818cf8, 'axis-cross', '二軸回転', '逆回転の軸を一度だけ追加します。'],
+  ['seed', '種弾', '種弾', '指定地点へ種を落とし、成長後に短命の小砲台へ変えます。', '設置成長・小砲台', 0x84cc16, 'seed-pair', '二砲台', '成長した砲台を一台だけ追加し、寿命を共有します。'],
+  ['requiem', '終奏砲', '終奏', '周囲の撃破を蓄積し、一定数で広い終端弾を放ちます。', '撃破蓄積・終端弾', 0xe879f9, 'requiem-echo', '二重終奏', '終端弾の短い残響を一度だけ追加します。'],
+];
+
+for (const [id, name, shortName, description, role, color, evolutionId, evolutionName, evolutionDescription] of V5_WEAPON_SPECS) {
+  const levels = Array.from({ length: 8 }, (_, index) => {
+    const isFast = ['spark', 'seeker', 'axis'].includes(id);
+    const isHeavy = ['drill', 'quake', 'thunder', 'requiem'].includes(id);
+    const baseCooldown = isFast ? 0.48 : isHeavy ? 1.35 : 0.82;
+    const damageBase = isHeavy ? 22 : isFast ? 10 : 15;
+    return {
+      damage: damageBase + index * (isHeavy ? 9 : 6),
+      cooldown: Math.max(0.24, baseCooldown - index * (isFast ? 0.035 : 0.055)),
+      range: 470 + index * 22,
+      radius: 34 + index * 5,
+      width: 10 + index * 2,
+      projectileSpeed: (isHeavy ? 290 : 340) + index * 20,
+      count: Math.min(4, 1 + Math.floor(index / 2)),
+      duration: 4 + index * 0.6,
+      chargeTime: isHeavy ? Math.max(0.75, 1.15 - index * 0.03) : undefined,
+    };
+  });
+  WEAPONS[id] = define(id, name, shortName, description, role, color, levels, commonBranches(
+    { id: 'spread', name: '分散深化', description: '対象数と経路を広げます。' },
+    { id: 'piercing', name: '集中深化', description: '一列への貫通と対象優先を高めます。' },
+    `${shortName}の一撃を22%高め、得意な局面を伸ばします。`,
+    `${shortName}の発射間隔を18%短くし、空白を減らします。`,
+    `${shortName}威圧`, `${shortName}連続`,
+  ), evolution(evolutionId, evolutionName, evolutionDescription));
+}
+
 export const WEAPON_ORDER: WeaponId[] = [
   'needle', 'ray', 'cluster', 'repulse', 'chain', 'orbit', 'disc', 'gravity', 'grid', 'mine', 'lance', 'drone',
   ...V4_WEAPON_SPECS.map(([id]) => id),
+  ...V5_WEAPON_SPECS.map(([id]) => id),
 ];

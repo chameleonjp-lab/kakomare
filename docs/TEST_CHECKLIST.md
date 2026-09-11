@@ -2,6 +2,25 @@
 
 > 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
 
+## V5実装：基本50武器・補助20・追加ステージ／ボス（2026-09-11）
+
+対象branchは `codex/v5-content-complete-20260911`。基準mainは、ユーザーがマージしたPR #22のマージコミット `4bb667784e6e7553034ca7682b088f027d95a118`。V5では、設計済みの残り25武器と12補助をruntimeへ移し、基本武器50、補助20、50×20=1,000組の適用表を維持する。追加25武器の個体別発射、有限な補助効果、stage-4〜6、射線門・織り手・三相炉、無限の6ボス循環を実装した。V5は保存v3、ランキング本番、長時間本戦、iPhone Safari実機を完了扱いにしない。
+
+- [x] `npm ci --ignore-scripts --no-audit --no-fund`（162パッケージ）
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm test -- --run --testTimeout=30000`（24ファイル、181件）
+- [x] `npm run generate:expansion-docs`
+- [x] `npm run verify:expansion-docs`（生成文書5ファイル）
+- [x] `npm run build`（Viteの500 kB超チャンク警告あり）
+- [x] `npm run verify:dist`
+- [x] `npm run verify:originality`
+- [x] `git diff --check`
+- [ ] `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（ローカル実行ファイル不足で起動前に失敗。Chromiumの`chromium_headless_shell-1234`、WebKitの`webkit-2336/pw_run.sh`がなく、CIの提出コミットで確認する）
+- [ ] 50武器・20補助の実戦相乗効果、通常720試行、無限60試行、30/60/120回描画比較、iPhone Safari実機、保存v3、ランキング受付
+
+V5固有の検査は、`tests/unit/content.test.ts` の50武器・20補助・6ボス・stage-4〜6、`tests/unit/expansion-catalog.test.ts` の実装済み50と1,000セル、`tests/unit/quality-b.test.ts` の全補助値・上限、`tests/unit/spawn-and-simulation.test.ts` の追加面の出現とボス循環、`tests/integration/battle-quality.test.ts` の追加25武器の個体別発射を含む。内部メソッドを直接呼ぶ統合検査と、画面操作によるE2E検査を別の証拠として扱う。
+
 ## V3実装：12武器・8補助・発展・配置変更（2026-09-11）
 
 ## V4実装：25武器・12敵・競技無限進行（2026-09-11）

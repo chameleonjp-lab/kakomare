@@ -4,8 +4,8 @@ import { WEAPONS, WEAPON_ORDER } from '../../src/data/weapons';
 import { SupportModule, SUPPORT_EFFECT_CAPS, supportEffectsFor, supportWeaponSlots } from '../../src/game/entities/SupportModule';
 import { audioCueForStatus } from '../../src/services/AudioService';
 
-describe('V3 の実効値と表現', () => {
-  it('12武器は8段階の正の基礎値とレベル3・5・8の成長を持つ', () => {
+describe('V5 の実効値と表現', () => {
+  it('50武器は8段階の正の基礎値とレベル3・5・8の成長を持つ', () => {
     for (const id of WEAPON_ORDER) {
       const weapon = WEAPONS[id];
       expect(weapon.levels).toHaveLength(weapon.maxLevel);
@@ -21,7 +21,7 @@ describe('V3 の実効値と表現', () => {
     }
   });
 
-  it('25武器×8補助の200組すべてで隣接効果を計算できる', () => {
+  it('50武器×20補助の1,000組すべてで隣接効果を計算できる', () => {
     const expectedAtLevelThree = {
       output: { primary: 0.2, secondary: 0.2 },
       rhythm: { primary: 0.16, secondary: 0.16 },
@@ -31,6 +31,18 @@ describe('V3 の実効値と表現', () => {
       brake: { primary: 0.28, secondary: 0.28 },
       relay: { primary: 0.12, secondary: 0.12 },
       repair: { primary: 3, secondary: 3 },
+      shatter: { primary: 0.3, secondary: 3 },
+      conductive: { primary: 0.22, secondary: 2 },
+      ignite: { primary: 0.26, secondary: 52 },
+      brink: { primary: 0.18, secondary: 0.18 },
+      anchor: { primary: 0.22, secondary: 1.1 },
+      veil: { primary: 0.2, secondary: 0.08 },
+      vector: { primary: 0.22, secondary: 0.22 },
+      pulse: { primary: 0.42, secondary: 2 },
+      reserve: { primary: 3, secondary: 0.22 },
+      lattice: { primary: 3, secondary: 3 },
+      orbit: { primary: 0.22, secondary: 0.22 },
+      catalyst: { primary: 0.24, secondary: 1 },
     } as const;
     let combinations = 0;
     for (const weaponId of WEAPON_ORDER) {
@@ -42,7 +54,7 @@ describe('V3 の実効値と表現', () => {
         combinations += 1;
       }
     }
-    expect(combinations).toBe(25 * 8);
+    expect(combinations).toBe(50 * 20);
   });
 
   it('補助2基の上限は成長値を隠さず、射程と弾速を別々に制限する', () => {

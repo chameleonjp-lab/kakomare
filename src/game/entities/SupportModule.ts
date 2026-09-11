@@ -20,6 +20,18 @@ export const SUPPORT_EFFECT_CAPS: Record<SupportId, { primary: number; secondary
   // Repair is a conditional count/value, not a damage stat. The value is
   // consumed by the event that actually intercepts or controls an attack.
   repair: { primary: 9, secondary: 9 },
+  shatter: { primary: 0.45, secondary: 6 },
+  conductive: { primary: 0.35, secondary: 3 },
+  ignite: { primary: 0.45, secondary: 60 },
+  brink: { primary: 0.18, secondary: 0.18 },
+  anchor: { primary: 0.35, secondary: 1.5 },
+  veil: { primary: 0.2, secondary: 0.08 },
+  vector: { primary: 0.35, secondary: 0.35 },
+  pulse: { primary: 0.42, secondary: 2 },
+  reserve: { primary: 3, secondary: 0.22 },
+  lattice: { primary: 3, secondary: 3 },
+  orbit: { primary: 0.35, secondary: 0.35 },
+  catalyst: { primary: 0.45, secondary: 1 },
 };
 
 export class SupportModule {

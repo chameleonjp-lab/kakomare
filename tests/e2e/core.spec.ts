@@ -297,7 +297,7 @@ test('ステージ1から連勝してステージ3と無限モードを順に解
     if (!raw) throw new Error('保存データがありません。');
     return (JSON.parse(raw) as { progress: { unlockedStages: string[] } }).progress.unlockedStages;
   });
-  expect(unlocked).toEqual(['stage-1', 'stage-2', 'stage-3', 'endless']);
+  expect(unlocked).toEqual(['stage-1', 'stage-2', 'stage-3', 'endless', 'stage-4']);
 });
 
 test('ホームから研究と記録、段階解放されたステージ選択へ進める', async ({ page }) => {

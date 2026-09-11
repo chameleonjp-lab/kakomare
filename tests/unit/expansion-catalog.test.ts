@@ -5,16 +5,15 @@ import { SUPPORT_ORDER } from '../../src/data/supports';
 import { WEAPON_ORDER } from '../../src/data/weapons';
 import { validateExpansionCatalog } from '../../src/validation/expansionCatalog';
 
-describe('V1 expansion design contract', () => {
+describe('V5 expansion runtime contract', () => {
   it('validates 50 distinct basic weapons without exposing design-only entries at runtime', () => {
     const result = validateExpansionCatalog();
     expect(result.ok, result.errors.join('\n')).toBe(true);
     expect(result.weaponCount).toBe(50);
     expect(new Set(EXPANSION_WEAPONS.map((weapon) => weapon.id)).size).toBe(50);
-    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'implemented')).toHaveLength(25);
-    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only')).toHaveLength(25);
-    expect(WEAPON_ORDER).toHaveLength(25);
-    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only').every((weapon) => !WEAPON_ORDER.includes(weapon.id as typeof WEAPON_ORDER[number]))).toBe(true);
+    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'implemented')).toHaveLength(50);
+    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only')).toHaveLength(0);
+    expect(WEAPON_ORDER).toHaveLength(50);
   });
 
   it('has two mechanically different synergy directions for every weapon', () => {
@@ -42,7 +41,7 @@ describe('V1 expansion design contract', () => {
   });
 
   it('fixes a common competitive rule version and bounded starting contract', () => {
-    expect(EXPANSION_RULE_VERSION).toBe('expansion-v4-runtime');
+    expect(EXPANSION_RULE_VERSION).toBe('expansion-v5-runtime');
     expect(COMPETITIVE_RULES.version).toBe(EXPANSION_RULE_VERSION);
     expect(COMPETITIVE_RULES.initial.coreHp).toBeGreaterThan(0);
     expect(COMPETITIVE_RULES.initial.capacity).toBeGreaterThan(0);

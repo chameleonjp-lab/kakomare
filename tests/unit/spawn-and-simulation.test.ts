@@ -18,7 +18,7 @@ function runSpawnSimulation(stageId: StageId, run: number): { emitted: number; m
   const types = new Set<EnemyId>();
   let emitted = 0;
   let maxActive = 0;
-  const duration = stageId === 'stage-1' ? 180 : stageId === 'stage-2' ? 210 : 240;
+  const duration = STAGES[stageId].timeLimit;
   for (let index = 0; index < duration * 2; index += 1) {
     const elapsed = index / 2;
     const requests: SpawnRequest[] = [];
@@ -92,12 +92,28 @@ describe('spawn director and long simulations', () => {
   });
 
   it('keeps expensive enemies pending and emits every stage enemy at production timing', () => {
-    for (const stageId of ['stage-1', 'stage-2', 'stage-3'] as const) {
+    for (const stageId of ['stage-1', 'stage-2', 'stage-3', 'stage-4', 'stage-5', 'stage-6'] as const) {
       const sequence = spawnSequence(stageId, 1 / 60, STAGES[stageId].timeLimit);
       const emitted = new Set(sequence);
       for (const type of STAGES[stageId].enemies) expect(emitted.has(type), `${stageId} did not emit ${type}`).toBe(true);
       expect(sequence.some((type) => ENEMIES[type].threatCost > 1)).toBe(true);
     }
+  });
+
+  it('uses the dedicated V5 boss for each added stage and cycles endless bosses', () => {
+    expect(new SpawnDirector('stage-4', 101).bossId).toBe('gate');
+    expect(new SpawnDirector('stage-5', 102).bossId).toBe('weaver');
+    expect(new SpawnDirector('stage-6', 103).bossId).toBe('reactor');
+
+    const endless = new SpawnDirector('endless', 104);
+    const bosses: string[] = [];
+    for (let index = 0; index < 6; index += 1) {
+      bosses.push(endless.bossId);
+      expect(endless.requestBossSpawn(300 + index * 300)).toBe(true);
+      endless.confirmBossSpawn();
+    }
+    expect(bosses).toEqual(['echo', 'crown', 'designer', 'gate', 'weaver', 'reactor']);
+    expect(new Set(bosses).size).toBe(6);
   });
 
   it('chooses the same enemy sequence for different caller update widths', () => {

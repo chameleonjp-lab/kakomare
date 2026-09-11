@@ -6,7 +6,7 @@ import { WEAPONS } from '../../data/weapons';
 import { Core } from '../entities/Core';
 import { DROPPER_SHOT_INTERVAL_SECONDS, Enemy } from '../entities/Enemy';
 import { Projectile } from '../entities/Projectile';
-import { SupportModule, supportEffectsFor } from '../entities/SupportModule';
+import { SUPPORT_EFFECT_CAPS, SupportModule, supportEffectsFor } from '../entities/SupportModule';
 import { Weapon } from '../entities/Weapon';
 import { EnemyPool } from '../pools/EnemyPool';
 import { ParticlePool } from '../pools/ParticlePool';
@@ -133,6 +133,8 @@ export class BattleScene extends Phaser.Scene {
   private readonly orbitAngles = new Map<string, number>();
   private readonly orbitHits = new Map<string, number>();
   private readonly targetLocks = new Map<string, number>();
+  private readonly supportPulseAt = new Map<string, number>();
+  private readonly igniteTriggered = new Set<number>();
   private readonly discTrailAt = new Map<number, number>();
   private readonly pendingSporeSplits: number[] = [];
   private readonly recorder: RunRecorder;
@@ -546,7 +548,8 @@ export class BattleScene extends Phaser.Scene {
       }
       if (enemy.slowUntil > this.elapsed) this.recorder.recordControl('slowed', seconds);
       if (reached) {
-        const damage = applyContactDamage(this.core, enemy);
+        const mitigation = this.globalSupportEffect('veil', 'secondary');
+        const damage = applyContactDamage(this.core, enemy, 1 - mitigation);
         if (damage > 0) {
           this.triggerScreenShake(damage);
           this.recorder.recordContact(enemy.angle, damage, `${enemy.isBoss ? BOSSES[enemy.type as BossId].name : ENEMIES[enemy.type as EnemyId].name}の接触`);
@@ -560,6 +563,7 @@ export class BattleScene extends Phaser.Scene {
     this.updateChargeWeapons(seconds);
     this.updateMines(seconds);
     this.updateDrones(seconds);
+    this.updateSupportPulses();
     if ((this.state as string) === 'finished') return;
 
     for (const weapon of this.weapons) {
@@ -635,27 +639,50 @@ export class BattleScene extends Phaser.Scene {
     if (!allowBranch) return;
   }
 
-  /** V4 weapons reuse bounded projectile primitives while keeping distinct
-   * target/timing parameters and source identity for later balance analysis. */
+  /**
+   * V4/V5 weapons share a small set of pooled primitives, but their effective
+   * attack path remains distinct: fan/axis weapons vary direction, drill and
+   * harpoon pierce, mirror/shuttle bounce, and mist/frost/snare leave bounded
+   * control fields. Every branch keeps the weapon instance as its source.
+   */
   private fireAdditionalWeapon(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
     this.options.callbacks.onAudioCue?.('shot');
     this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const origin = this.weaponOrigin(weapon);
     const stats = this.combatStats(weapon);
-    const count = Math.max(1, Math.min(4, weapon.stats.count ?? 1));
-    const spread = weapon.id === 'barrage' || weapon.id === 'prism' ? 0.14 : 0.06;
+    const isWide = weapon.id === 'barrage' || weapon.id === 'prism' || weapon.id === 'fan' || weapon.id === 'swarm' || weapon.id === 'bloom';
+    const isHeavy = weapon.id === 'mortar' || weapon.id === 'nova' || weapon.id === 'drill' || weapon.id === 'thunder' || weapon.id === 'requiem';
+    const isBouncing = weapon.id === 'mirror' || weapon.id === 'shuttle';
+    const count = Math.max(1, Math.min(4, (weapon.stats.count ?? 1) + (weapon.id === 'swarm' ? 1 : 0)));
+    const spread = isWide ? 0.18 : weapon.id === 'axis' || weapon.id === 'spoke' ? 0.28 : 0.06;
     const speed = stats.projectileSpeed ?? 360;
-    const life = weapon.id === 'mortar' || weapon.id === 'nova' ? 0.9 : 1.25;
+    const life = isHeavy ? 0.9 : weapon.id === 'swell' ? 1.55 : 1.25;
+    const projectileKind: 'needle' | 'disc' = isBouncing ? 'disc' : 'needle';
+    const damageFactor = isHeavy ? 1.35 : weapon.id === 'counter' || weapon.id === 'ward' ? 0.58 : 0.72;
+    const piercing = weapon.id === 'harpoon' || weapon.id === 'cutter' || weapon.id === 'drill' || weapon.id === 'shuttle' ? 2 : weapon.id === 'dive' ? 1 : 0;
     for (let index = 0; index < count; index += 1) {
       const offset = count === 1 ? 0 : (index - (count - 1) / 2) * spread;
       this.addProjectile({
-        kind: 'needle', x: origin.x, y: origin.y,
+        kind: projectileKind, x: origin.x, y: origin.y,
         vx: Math.cos(angle + offset) * speed, vy: Math.sin(angle + offset) * speed,
         radius: Math.min(11, 5 + (weapon.stats.width ?? 0) / 12),
-        damage: damage * (weapon.id === 'mortar' || weapon.id === 'nova' ? 1.35 : 0.72),
-        life, piercing: weapon.id === 'harpoon' || weapon.id === 'cutter' ? 2 : 0,
+        damage: damage * damageFactor,
+        life, piercing, bounces: isBouncing ? 2 : 0, hitCooldown: isBouncing ? 0.35 : 0,
         sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
       });
+    }
+    if (target && ['shockwave', 'nova', 'vortex', 'quake', 'bloom', 'swell', 'hollow', 'thunder'].includes(weapon.id)) {
+      const radius = weapon.stats.radius ?? (weapon.id === 'thunder' ? 32 : 52);
+      this.hitArea(weapon, target.x, target.y, radius, damage * (weapon.id === 'thunder' ? 0.4 : 0.35), null, new Set<number>());
+    }
+    if (target && ['mist', 'frost', 'snare', 'siphon', 'stasis'].includes(weapon.id)) {
+      const slowDuration = weapon.id === 'stasis' ? 0.9 : weapon.id === 'snare' ? 1.15 : 0.7;
+      this.createGravityField(target.x, target.y, Math.min(3, (weapon.stats.duration ?? 2.2) * 0.45), Math.min(90, weapon.stats.radius ?? 58), 0, 0, 180, false, slowDuration, weapon.instanceId);
+    }
+    if (target && weapon.id === 'beacon') target.markedUntil = Math.max(target.markedUntil, this.elapsed + 6);
+    if (target && weapon.id === 'flare') target.burningUntil = Math.max(target.burningUntil, this.elapsed + 4);
+    if (weapon.id === 'counter' || weapon.id === 'ward') {
+      this.addLine({ angle, color: WEAPONS[weapon.id].color, life: 0.26, maxLife: 0.26, width: 10, startX: origin.x, startY: origin.y, length: Math.min(180, stats.range) });
     }
     if (weapon.evolutionId && target && (weapon.id === 'shockwave' || weapon.id === 'nova' || weapon.id === 'vortex')) {
       this.hitArea(weapon, target.x, target.y, weapon.stats.radius ?? 52, damage * 0.35, null, new Set<number>());
@@ -885,7 +912,8 @@ export class BattleScene extends Phaser.Scene {
     this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const angle = this.orbitAngles.get(weapon.instanceId) ?? 0;
     const count = (weapon.stats.count ?? 2) + (weapon.branch === 'many' ? 1 : 0);
-    const radius = (weapon.stats.orbitRadius ?? 108) + (weapon.branch === 'outer' ? 38 : 0);
+    const radius = ((weapon.stats.orbitRadius ?? 108) + (weapon.branch === 'outer' ? 38 : 0))
+      * (1 + Math.min(0.35, this.supportEffect('orbit', weapon.slot)));
     const bladeLength = (weapon.stats.bladeLength ?? 32) + (weapon.branch === 'outer' ? 28 : 0);
     for (let index = 0; index < count; index += 1) {
       const bladeAngle = angle + index * Math.PI * 2 / count;
@@ -935,7 +963,8 @@ export class BattleScene extends Phaser.Scene {
   private updateOrbitAngles(seconds: number): void {
     for (const weapon of this.weapons) {
       if (weapon.id !== 'orbit') continue;
-      const speed = (weapon.stats.orbitSpeed ?? 1.9) * (weapon.branch === 'many' ? 1.25 : 1);
+      const speed = (weapon.stats.orbitSpeed ?? 1.9) * (weapon.branch === 'many' ? 1.25 : 1)
+        * (1 + Math.min(0.25, this.supportEffect('orbit', weapon.slot) * 0.7));
       const previous = this.orbitAngles.get(weapon.instanceId) ?? 0;
       this.orbitAngles.set(weapon.instanceId, advanceOrbitAngle(previous, speed, seconds));
     }
@@ -982,7 +1011,8 @@ export class BattleScene extends Phaser.Scene {
       x = Math.cos(angle) * safeRadius;
       y = Math.sin(angle) * safeRadius;
     }
-    const duration = (stats.duration ?? 2.2) * (weapon.branch === 'long' ? 1.4 : 1);
+    const duration = (stats.duration ?? 2.2) * (weapon.branch === 'long' ? 1.4 : 1)
+      * (1 + Math.min(0.35, this.supportEffect('anchor', weapon.slot)));
     const radius = (stats.pullRadius ?? 125) * (weapon.branch === 'long' ? 1.2 : 1);
     const brakeEffect = this.supportEffect('brake', weapon.slot);
     this.createGravityField(x, y, duration, radius, damage, stats.pullStrength ?? 34, safeDistance, weapon.branch === 'collapse', 0.4 * (1 + brakeEffect), weapon.instanceId);
@@ -1008,7 +1038,11 @@ export class BattleScene extends Phaser.Scene {
     const origin = this.weaponOrigin(weapon);
     const range = this.combatStats(weapon).range;
     const width = (weapon.stats.width ?? 30) + (weapon.branch === 'narrow' ? -8 : 0);
-    const count = Math.min(4, Math.max(1, (weapon.stats.count ?? 1) + (weapon.branch === 'multi-direction' ? 1 : 0)));
+    const count = Math.min(4, Math.max(1,
+      (weapon.stats.count ?? 1)
+      + (weapon.branch === 'multi-direction' ? 1 : 0)
+      + Math.floor(this.supportEffect('lattice', weapon.slot)),
+    ));
     this.addLine({ angle, color: WEAPONS.grid.color, life: 0.24, maxLife: 0.24, width: Math.max(8, width), startX: origin.x, startY: origin.y, length: range });
     let intercepted = 0;
     const interceptLine = (lineAngle: number, lineWidth: number, lineLength: number): void => {
@@ -1056,8 +1090,9 @@ export class BattleScene extends Phaser.Scene {
     const mineLimit = Math.min(MAX_MINES, Math.max(1, (stats.count ?? 2) + (weapon.evolutionId === 'mine-cross' ? 1 : 0)));
     for (const offset of offsets) {
       const point = { x: origin.x + Math.cos(angle + offset) * distance, y: origin.y + Math.sin(angle + offset) * distance };
+      const mineLife = (stats.duration ?? 6) * (1 + Math.min(0.35, this.supportEffect('anchor', weapon.slot)));
       const mine: MineField = {
-        id: this.nextMineId++, x: point.x, y: point.y, life: stats.duration ?? 6, maxLife: stats.duration ?? 6,
+        id: this.nextMineId++, x: point.x, y: point.y, life: mineLife, maxLife: mineLife,
         radius: stats.radius ?? 44, damage: offset === 0 ? damage : damage * 0.55, sourceWeaponInstanceId: weapon.instanceId, triggered: false,
       };
       while (this.mines.filter((item) => item.sourceWeaponInstanceId === weapon.instanceId).length >= mineLimit) {
@@ -1073,7 +1108,8 @@ export class BattleScene extends Phaser.Scene {
 
   private fireLance(weapon: Weapon, angle: number, damage: number): void {
     const charge = this.lanceCharge.get(weapon.instanceId) ?? 0;
-    const minimum = Math.max(0.8, weapon.stats.chargeTime ?? 0.8);
+    const reserve = this.supportEffect('reserve', weapon.slot);
+    const minimum = Math.max(0.8, (weapon.stats.chargeTime ?? 0.8) - Math.min(0.24, reserve * 0.08));
     if (charge < minimum) return;
     this.lanceCharge.set(weapon.instanceId, 0);
     this.options.callbacks.onAudioCue?.('heavy');
@@ -1100,7 +1136,7 @@ export class BattleScene extends Phaser.Scene {
   private deployDrones(weapon: Weapon): void {
     const existing = this.drones.get(weapon.instanceId) ?? [];
     const desired = Math.min(2, Math.max(1, weapon.stats.count ?? 1));
-    const duration = weapon.stats.duration ?? 12;
+    const duration = (weapon.stats.duration ?? 12) * (1 + Math.min(0.35, this.supportEffect('anchor', weapon.slot)));
     const totalActiveDrones = [...this.drones.values()].reduce((sum, units) => sum + units.filter((unit) => unit.life > 0).length, 0);
     const available = Math.max(0, MAX_DRONES - (totalActiveDrones - existing.filter((unit) => unit.life > 0).length));
     for (let index = existing.length; index < Math.min(desired, available); index += 1) {
@@ -1142,6 +1178,36 @@ export class BattleScene extends Phaser.Scene {
       const active = units.filter((unit) => unit.life > 0);
       if (active.length > 0) this.drones.set(instanceId, active);
       else this.drones.delete(instanceId);
+    }
+  }
+
+  /**
+   * Pulse support is a bounded secondary trigger. It is deliberately resolved
+   * once per support instance and uses the same target/hit path as weapons so
+   * its damage, enemy states, and score entries cannot diverge from combat.
+   */
+  private updateSupportPulses(): void {
+    for (const support of this.supports.filter((item) => item.id === 'pulse')) {
+      const interval = Math.max(0.5, support.secondaryValue);
+      let next = this.supportPulseAt.get(support.instanceId) ?? interval;
+      if (this.elapsed + 1e-9 < next) continue;
+      next = this.elapsed + interval;
+      this.supportPulseAt.set(support.instanceId, next);
+      const weapon = this.weapons.find((item) => support.affectsWeaponSlot(item.slot));
+      if (!weapon) continue;
+      const target = selectTarget(
+        this.enemies.filter((enemy) => enemy.active),
+        this.weaponOrigin(weapon),
+        { angle: this.aimAngle, manual: this.manualAim },
+        this.combatStats(weapon).range,
+        this.elapsed,
+        weapon.id,
+        this.targetLocks.get(weapon.instanceId),
+      );
+      if (!target) continue;
+      this.recorder.recordSupportUsage(support.id);
+      this.hitArea(weapon, target.x, target.y, 34, this.weaponPower(weapon, Math.min(0.5, support.value * 0.55)), null, new Set<number>());
+      if (this.state === 'finished') return;
     }
   }
 
@@ -1280,7 +1346,8 @@ export class BattleScene extends Phaser.Scene {
     for (const projectile of this.projectiles) {
       if (!projectile.active || !projectile.enemyProjectile) continue;
       if (Math.hypot(projectile.x, projectile.y) > 42) continue;
-      const damage = this.core.damage(projectile.damage);
+      const mitigation = this.globalSupportEffect('veil', 'secondary');
+      const damage = this.core.damage(projectile.damage * (1 - mitigation));
       projectile.active = false;
       if (damage > 0) {
         this.triggerScreenShake(damage);
@@ -1380,6 +1447,86 @@ export class BattleScene extends Phaser.Scene {
         }
       }
     }
+    if (boss.type === 'gate') {
+      const pressure = BOSSES.gate.pressure;
+      if (pressure) {
+        boss.pressureCooldown -= seconds;
+        if (!this.crownPressure && boss.pressureCooldown <= 0) {
+          const alternating = Math.floor(this.elapsed / Math.max(1, pressure.interval)) % 2;
+          const angle = boss.angle + alternating * Math.PI / 2;
+          this.crownPressure = { angle, life: pressure.telegraph, maxLife: pressure.telegraph };
+          boss.pressureCooldown = pressure.interval;
+          this.options.callbacks.onStatus('射線門が交互射撃の方向を予告しています');
+        }
+        if (this.crownPressure) {
+          this.crownPressure.life -= seconds;
+          if (this.crownPressure.life <= 0) {
+            const angle = this.crownPressure.angle;
+            this.addProjectile({
+              kind: 'enemy', x: boss.x, y: boss.y, vx: -Math.cos(angle) * pressure.speed, vy: -Math.sin(angle) * pressure.speed,
+              radius: 10, damage: pressure.damage, life: pressure.life, piercing: 0, enemyProjectile: true,
+            });
+            this.crownPressure = null;
+            this.options.callbacks.onStatus('射線門が予告方向へ弾を放ちました');
+          }
+        }
+      }
+    }
+    if (boss.type === 'weaver') {
+      const pressure = BOSSES.weaver.pressure;
+      if (!this.designerWave && boss.specialCooldown <= 0) {
+        const angle = this.quietSectorAngle() + Math.PI / 6;
+        this.designerWave = { angle, life: pressure?.telegraph ?? 1.2, maxLife: pressure?.telegraph ?? 1.2 };
+        this.options.callbacks.onStatus('織り手が支援網の方向を予告しています');
+      }
+      if (this.designerWave) {
+        this.designerWave.life -= seconds;
+        if (this.designerWave.life <= 0 && this.availableEnemySlots() >= 3) {
+          const angle = this.designerWave.angle;
+          this.spawnEnemy('repair', angle - 0.16, true);
+          this.spawnEnemy('factory', angle, true);
+          this.spawnEnemy('guard', angle + 0.16, true);
+          this.designerWave = null;
+          boss.specialCooldown = pressure?.interval ?? 7;
+          this.options.callbacks.onStatus('織り手が有限の支援網を展開しました');
+        }
+      }
+    }
+    if (boss.type === 'reactor') {
+      const pressure = BOSSES.reactor.pressure;
+      if (!this.echoWave && boss.specialCooldown <= 0) {
+        const angle = this.quietSectorAngle();
+        this.echoWave = { angle, life: pressure?.telegraph ?? 1, maxLife: pressure?.telegraph ?? 1 };
+        this.options.callbacks.onStatus('三相炉が次の局面を予告しています');
+      }
+      if (this.echoWave) {
+        this.echoWave.life -= seconds;
+        if (this.echoWave.life <= 0) {
+          const angle = this.echoWave.angle;
+          const phase = Math.floor(this.elapsed / Math.max(1, pressure?.interval ?? 5.5)) % 3;
+          if (phase === 0) {
+            this.addProjectile({
+              kind: 'enemy', x: Math.cos(angle) * this.arenaRadius(), y: Math.sin(angle) * this.arenaRadius(),
+              vx: -Math.cos(angle) * (pressure?.speed ?? 220), vy: -Math.sin(angle) * (pressure?.speed ?? 220),
+              radius: 10, damage: pressure?.damage ?? 16, life: pressure?.life ?? 1.9, piercing: 0, enemyProjectile: true,
+            });
+            this.options.callbacks.onStatus('三相炉が遠隔局面の弾を放ちました');
+          } else if (this.availableEnemySlots() >= 3) {
+            this.spawnEnemy(phase === 1 ? 'charger' : 'repair', angle - 0.16, true);
+            this.spawnEnemy(phase === 1 ? 'dropper' : 'guard', angle, true);
+            this.spawnEnemy(phase === 1 ? 'runner' : 'factory', angle + 0.16, true);
+            this.options.callbacks.onStatus('三相炉が接近・支援局面の編成を送りました');
+          } else {
+            // Keep the telegraph visible and reserve the finite three-slot wave
+            // until the arena has room; no enemy is silently dropped.
+            this.echoWave.life = 0.15;
+            return;
+          }
+          this.echoWave = null;
+          boss.specialCooldown = pressure?.interval ?? 5.5;
+        }
+      }
+    }
   }
 
   private spawnEnemy(type: EnemyId, angle: number, bossReinforcement = false, summoned = false): boolean {
@@ -1421,6 +1568,8 @@ export class BattleScene extends Phaser.Scene {
       if (wavesDue > this.crownWavesTriggered) return 4;
     }
     if (boss.type === 'designer' && this.designerWave) return 3;
+    if (boss.type === 'weaver' && this.designerWave) return 3;
+    if (boss.type === 'reactor' && this.echoWave) return 3;
     return 0;
   }
 
@@ -1453,6 +1602,7 @@ export class BattleScene extends Phaser.Scene {
     }
     const enemyId = enemy.type as EnemyId;
     this.options.callbacks.onAudioCue?.('defeat');
+    this.triggerIgniteSynergy(enemy);
     if (enemy.summoned) return;
     this.recorder.kills += 1;
     this.recorder.recordEnemyKill(enemyId);
@@ -1472,6 +1622,17 @@ export class BattleScene extends Phaser.Scene {
       this.spawnEnemy('shard', angle - 0.2);
       this.spawnEnemy('shard', angle + 0.2);
     }
+  }
+
+  private triggerIgniteSynergy(enemy: Enemy): void {
+    const effect = this.globalSupportEffect('ignite');
+    if (effect <= 0 || this.igniteTriggered.has(enemy.id) || (enemy.markedUntil <= this.elapsed && enemy.burningUntil <= this.elapsed)) return;
+    this.igniteTriggered.add(enemy.id);
+    const weapon = this.weapons[0];
+    if (!weapon) return;
+    const radius = Math.min(60, Math.max(24, this.globalSupportEffect('ignite', 'secondary')));
+    this.recorder.recordSupportUsage('ignite');
+    this.hitArea(weapon, enemy.x, enemy.y, radius, this.weaponPower(weapon, Math.min(0.35, effect * 0.55)), null, new Set([enemy.id]));
   }
 
   private openUpgrade(): boolean {
@@ -1748,21 +1909,51 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private combatStats(weapon: Weapon) {
+    const brink = this.core.health <= this.core.maxHealth * 0.3 ? this.globalSupportEffect('brink') : 0;
     return effectiveWeaponStats(
       weapon,
       this.supports,
-      this.combatResearchEffects.powerMultiplier,
+      this.combatResearchEffects.powerMultiplier * (1 + brink),
       this.combatResearchEffects.projectileSpeedMultiplier,
       this.weaponPolishStacks,
     );
   }
 
   private adjustForSpecialEnemy(enemy: Enemy, amount: number, weaponSlot: number): number {
-    return amount * (1 + this.supportEffect('observe', weaponSlot) * (enemy.type === 'shell' || enemy.type === 'marker' || enemy.type === 'dropper' || enemy.type === 'phase' ? 1 : 0));
+    const special = enemy.type === 'shell' || enemy.type === 'marker' || enemy.type === 'dropper' || enemy.type === 'phase'
+      || enemy.type === 'guard' || enemy.isBoss;
+    let adjusted = amount * (1 + this.supportEffect('observe', weaponSlot) * (special ? 1 : 0));
+    const shatter = this.supportEffect('shatter', weaponSlot, 'secondary');
+    if ((enemy.type === 'lattice' || enemy.type === 'guard') && enemy.shieldHits > 0 && shatter > 0) {
+      // A shatter connection removes at most one extra plate per hit. This
+      // keeps the eight-hit shield meaningful while giving heavy/slow weapons
+      // a finite second route through it.
+      enemy.shieldHits = Math.max(0, enemy.shieldHits - 1);
+      adjusted *= 1 + Math.min(0.45, this.supportEffect('shatter', weaponSlot));
+    }
+    const conductive = this.supportEffect('conductive', weaponSlot, 'secondary');
+    if (conductive > 0 && enemy.slowUntil > this.elapsed) {
+      const maxTargets = Math.min(2, Math.max(1, Math.floor(conductive)));
+      const nearby = this.enemies
+        .filter((other) => other.active && other.id !== enemy.id && Math.hypot(other.x - enemy.x, other.y - enemy.y) <= 120)
+        .sort((first, second) => first.id - second.id)
+        .slice(0, maxTargets);
+      for (const other of nearby) other.applySlow(this.elapsed, 0.35);
+    }
+    if (this.supportEffect('catalyst', weaponSlot) > 0 && enemy.slowUntil > this.elapsed && (enemy.type === 'marker' || enemy.type === 'phase' || enemy.isBoss)) {
+      adjusted *= 1 + Math.min(0.45, this.supportEffect('catalyst', weaponSlot));
+    }
+    return adjusted;
   }
 
   private supportEffect(id: SupportId, weaponSlot: number, component: 'primary' | 'secondary' = 'primary'): number {
     return supportEffectsFor(this.supports, id, weaponSlot)[component];
+  }
+
+  private globalSupportEffect(id: SupportId, component: 'primary' | 'secondary' = 'primary'): number {
+    const matching = this.supports.filter((support) => support.id === id);
+    const total = matching.reduce((sum, support) => sum + (component === 'primary' ? support.value : support.secondaryValue), 0);
+    return Math.min(SUPPORT_EFFECT_CAPS[id][component], total);
   }
 
   private markerBoostFor(enemy: Enemy): number {
@@ -1924,9 +2115,19 @@ export class BattleScene extends Phaser.Scene {
     for (const enemy of visibleEnemies) drawEnemy(enemyLayer, enemy.snapshot({ x: 0, y: 0 }, this.elapsed), cx, cy);
     this.syncDamageNumberTexts(cx, cy);
     drawTelegraphs(telegraphLayer, visibleEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)), cx, cy);
-    if (this.designerWave) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, WEAPONS.chain.color, 5);
-    if (this.echoWave) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, WEAPONS.disc.color, 5);
-    if (this.crownPressure) this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.crownPressure.angle, this.crownPressure.life / this.crownPressure.maxLife, BOSSES.crown.color, 6, 42, Math.min(196, arena));
+    const activeBoss = this.enemies.find((enemy) => enemy.active && enemy.isBoss);
+    if (this.designerWave) {
+      const color = activeBoss?.type === 'weaver' ? BOSSES.weaver.color : WEAPONS.chain.color;
+      this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.designerWave.angle, this.designerWave.life / this.designerWave.maxLife, color, 5);
+    }
+    if (this.echoWave) {
+      const color = activeBoss?.type === 'reactor' ? BOSSES.reactor.color : WEAPONS.disc.color;
+      this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.echoWave.angle, this.echoWave.life / this.echoWave.maxLife, color, 5);
+    }
+    if (this.crownPressure) {
+      const color = activeBoss?.type === 'gate' ? BOSSES.gate.color : BOSSES.crown.color;
+      this.drawSpecialLine(telegraphLayer, cx, cy, arena, this.crownPressure.angle, this.crownPressure.life / this.crownPressure.maxLife, color, 6, 42, Math.min(196, arena));
+    }
     if (this.specialWaveWarning) this.drawSpecialWaveWarning(telegraphLayer, cx, cy, arena, this.specialWaveWarning.angle, this.specialWaveWarning.life / this.specialWaveWarning.maxLife);
     this.drawFlashes(telegraphLayer, cx, cy, true);
     if (this.manualAim) this.drawManualAim(telegraphLayer, cx, cy, arena);
