@@ -9,14 +9,15 @@
 - 設計数は基本武器50（現行実装8＋最初の追加4＋残る新規38）、補助S=20（現行実装6＋設計14）、武器×補助の適用セル1,000、各武器2方向の相乗効果100件。現行runtime registryは武器8・補助6のままで、50種類を実装済みとは数えない。
 - 追加した主な成果物は `src/types/expansion.ts`、`src/data/expansionCatalog.ts`、`src/data/competitiveRules.ts`、`src/validation/expansionCatalog.ts`、`tests/unit/expansion-catalog.test.ts`、`scripts/generate-expansion-docs.mjs` と、生成された `WEAPON_CATALOG.md`、`SUPPORT_CATALOG.md`、`SYNERGY_MATRIX.md`、`COMPETITIVE_RULES.md`、`BALANCE_REPORT.md`。文書は台帳データから生成し、`verify:expansion-docs` で同期を検査する。Qualityの両runnerへ同検査を追加した。
 - D01〜D07（50/S、通常Lv8・分岐・特別発展の出発点、容量6、候補重み、採点案、敵・負荷の観測基準、ランキング版・識別子・送信境界）は `docs/BALANCE_REPORT.md` と `docs/COMPETITIVE_RULES.md` に根拠付きで記録した。D08（長時間の数値範囲・性能予算・保存頻度）はV2で決める。
+- [Draft PR #19](https://github.com/chameleonjp-lab/kakomare/pull/19) を作成し、提出headは `9899ab6e129559a528c349fe235df4e40ff802b2`。PRはDraft/openを維持し、mainへのpush・マージ・自動マージは行っていない。
 
 ### V1の検査状態
 
 - `npm ci --ignore-scripts --no-audit --no-fund` は162パッケージで成功。`npm run lint`、`npm run typecheck`、`npm run test`（23ファイル・165件）、`npm run verify:expansion-docs`（5ファイル）、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` は、提出差分を含む作業ツリーで成功した。Viteの500kB超チャンク警告は残るが、V1の設計検証失敗とは扱わない。
-- ローカルのPlaywrightブラウザ一覧は空で、Chromium/WebKitの画面検査は未実行。V1のDraft PR作成後、既存のQuality両runnerでChromium/WebKit回帰を実行し、結果を提出headへ対応付ける。iPhone 17 Pro Safari、VoiceOver、片手操作、発熱、公開配備一致、本番DB・受付・ランキングは未確認。
+- ローカルのPlaywrightブラウザ一覧は空で、Chromium/WebKitの画面検査は未実行。ただし提出headに対する [Quality #51](https://github.com/chameleonjp-lab/kakomare/actions/runs/34555013705) は成功した。公式Playwrightコンテナのjob `103125704885` とPages同条件native Ubuntuのjob `103125705018` は、各23ファイル・165件、Chromium31件、WebKit31件、文書整合性、静的、ビルド、配布物、独自名称の全stepに成功している。これは自動ブラウザ検査であり、iPhone 17 Pro Safari、VoiceOver、片手操作、発熱、公開配備一致、本番DB・受付・ランキングの確認ではない。
 - V1の受入境界は、設計済み台帳・適用表・相乗効果・競技契約・検証器が揃うこと。50武器の戦闘実装、抽選到達、容量実測、長時間本戦、ランキング送信、DB変更はV2〜V7へ残す。mainへのpush/マージ、自動マージ、保護緩和、本番DB・実験場の有効化は行わない。
 
-次はこのbranchをpushしてDraft PRを作成し、CIの両runnerで既存V0回帰とV1文書検査を確認する。ユーザーのV1マージ後に、計画どおりV2の競技基盤へ進む。
+次はこの提出headに対応する進行記録の更新をpushし、更新後のCIを再確認する。ユーザーのV1マージ後に、計画どおりV2の競技基盤へ進む。
 
 ## V0の配備検査失敗を補正した履歴（PR #18）
 
