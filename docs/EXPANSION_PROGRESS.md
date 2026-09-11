@@ -16,8 +16,17 @@
 
 修正：600px以下の縦画面では、HUDの自然高をGridのauto行へ確保し、残りの行をsize containerとして戦場の正方形を収める。従来のviewportから固定remを引く計算だけではHUD実寸の差を吸収できなかった。320×568・文字200%は従来の既定フォント条件を残し、monospace条件・正方形・保留ボタン48pxも追加。既存の240px最小戦場と下端569pxの閾値を維持する。
 
-`npm ci` 成功（162パッケージ）。修正後の `npm run lint`、`npm run typecheck`、`npm run test`（22ファイル161件）、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` は成功。Viteの500kB超警告は残る。ローカルPlaywrightのブラウザ一覧は空で、Chromium取得は配布元502により失敗し、ローカルブラウザ検査は未実行。PRでは既存コンテナ検査に加えてPagesと同じnative Ubuntu/Node24/ブラウザ導入の検査jobを追加する。配備処理・権限は追加しない。対象SHA・Draft URL・両jobの実結果は提出後に追記する。
-Luna・Maxがレイアウト修正/回帰検査、親セッションが環境差確認/CI/文書/統合/提出、別のSol・Highがread-only独立レビューを担当する。レビューの完了前には成功扱いしない。iPhone実機は未確認。
+`npm ci` 成功（162パッケージ）。修正後の `npm run lint`、`npm run typecheck`、`npm run test`（22ファイル161件）、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` は成功。Viteの500kB超警告は残る。ローカルPlaywrightのブラウザ一覧は空で、Chromium取得は配布元502により失敗し、ローカルブラウザ検査は未実行。PRでは既存コンテナ検査に加えてPagesと同じnative Ubuntu/Node24/ブラウザ導入の検査jobを追加した。配備処理・権限は追加しない。
+Luna・Maxがレイアウト修正/回帰検査、親セッションが環境差確認/CI/文書/統合/提出、別のSol・Highがread-only独立レビューを担当した。独立レビューで「viewport内でも親shellでHUDが切れ得る」と指摘され、shell/layout下端との比較を追加した。静的レビューの他のblockerはなく、追加した厳密な判定も両環境のE2Eで成功。iPhone実機は未確認。
+
+[Draft PR #18](https://github.com/chameleonjp-lab/kakomare/pull/18) を作成。コード提出 `2ab16aadfe2adffa62245c1cf946f882e8f3509a` の [Quality #49](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552188622) は成功。通常git pushはローカルのGitHub認証未設定で失敗したため、接続済みGitHub APIで同じ差分を作業branchへ反映した。ローカルcommit `cefb95f` とコード提出commitのtreeはともに `2270027fad702e8c1289b7e4ea160d89d90b3c4f` で一致する。
+
+| Quality #49環境 | job / ログ | 単体・結合 | Chromium | WebKit | 静的・build・公開物検査 |
+|---|---|---|---|---|---|
+| 公式Playwrightコンテナ | [103117226737](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552188622/job/103117226737) | 22ファイル161成功 | 31成功 | 31成功 | 全成功 |
+| Pages同条件native Ubuntu | [103117226540](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552188622/job/103117226540) | 22ファイル161成功 | 31成功 | 31成功 | 全成功 |
+
+両jobのログに失敗・flaky・retryの記録なし。既存X01～X10/P16-01～08を含む全スイートを維持して実行した。旧Pages失敗をこの成功で消さず、公開配備完了とは扱わない。本記録だけを追加した提出headのCIも再確認し、正確な最終headとrunはPR #18本文・Checksへ記載する（自己参照SHAを文書へ書くための無限更新はしない）。次はユーザーの#18マージ後に最新mainとPages配備結果を確認する。V1は未着手で、開始指示を待つ。
 
 ## V0初回提出時の確認状態（履歴）
 
