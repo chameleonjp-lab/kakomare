@@ -19,6 +19,7 @@
 - 初回提出コミット `e034157e8d8f5e0492d4a0a2499afa8b6a765e48` の [Quality #65](https://github.com/chameleonjp-lab/kakomare/actions/runs/34611107511) は、静的・単体は成功したが、Chromium 32件中31件成功・1件失敗で停止した。失敗は `tests/e2e/core.spec.ts:179` の候補装着検査が、V5で補助候補も追加された後に「武器面2」を固定していたためである。WebKitと後続build検査を未実行のまま成功扱いにせず、同じブランチで候補タイトルと実際の新規装着面を照合する条件へ修正した。
 - 修正コミット `34189758d957426b4848f203503e66495b1470be` では、上記E2Eの固定武器名を廃し、`aria-disabled` の新規候補カードから候補名を取得して、装着後の構成一覧に同じ名前が現れることを確認する。修正後に静的・型・単体／統合検査（24ファイル・181件）を再実行した。
 - 修正後提出コミットに対する [Quality #66](https://github.com/chameleonjp-lab/kakomare/actions/runs/34611876158) は、公式Playwrightコンテナ `quality` とPages同条件 `pages-runner-quality` の両jobで全step成功した。各jobで静的・単体24ファイル181件、Chromium 32件、WebKit 32件、文書生成・整合性、build、`verify:dist`、`verify:originality` を確認した。これはGitHub Actionsの自動検査であり、iPhone Safari実機、長時間本戦、V6の保存・ランキング本番受入を意味しない。
+- [Draft PR #23](https://github.com/chameleonjp-lab/kakomare/pull/23) は `codex/v5-content-complete-20260911` から `main` へ提出中で、追補後のリモート先端は `f47481bdb1613c9205be4c0163c07e49a3f64960`（3コミット）である。PRはopen/Draftを維持し、mainへの直接push・マージ・自動マージ・保護設定変更・本番DB／実験場設定変更は行っていない。
 
 ## V4の25武器・競技無限進行・敵コンテンツ
 
