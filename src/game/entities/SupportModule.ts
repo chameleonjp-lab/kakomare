@@ -1,6 +1,6 @@
 import { SUPPORTS } from '../../data/supports';
 import type { SupportId } from '../../types/content';
-import { adjacentWeaponSlots } from '../deviceLayout';
+import { adjacentWeaponSlots, nodeIdForSlot } from '../deviceLayout';
 
 export const SUPPORT_EFFECT_CAPS: Record<SupportId, { primary: number; secondary: number }> = {
   output: { primary: 0.4, secondary: 0.4 },
@@ -17,13 +17,20 @@ export const SUPPORT_EFFECT_CAPS: Record<SupportId, { primary: number; secondary
 
 export class SupportModule {
   public readonly id: SupportId;
+  /** Stable identity of this installed copy; support type is not an identity. */
+  public readonly instanceId: string;
   public level = 1;
-  public readonly slot: number;
+  public slot: number;
 
-  public constructor(id: SupportId, slot: number) {
+  public constructor(id: SupportId, slot: number, instanceId?: string) {
     this.id = id;
     this.slot = slot;
+    // Keep the default stable across seeded runs; a persisted ID is used when
+    // a later build workflow needs to move or replace an existing instance.
+    this.instanceId = instanceId ?? `support-${id}-s${slot}`;
   }
+
+  public get nodeId() { return nodeIdForSlot('support', this.slot); }
 
   public get definition() {
     return SUPPORTS[this.id];
@@ -42,7 +49,7 @@ export class SupportModule {
   }
 }
 
-export function supportEffectsFor(supports: SupportModule[], id: SupportId, weaponSlot: number): { primary: number; secondary: number } {
+export function supportEffectsFor(supports: readonly SupportModule[], id: SupportId, weaponSlot: number): { primary: number; secondary: number } {
   const matching = supports.filter((support) => support.id === id && support.affectsWeaponSlot(weaponSlot));
   // Branch values are shot intervals (6 → 5 → 4), not bonuses. Adding two
   // intervals would perversely make a second branch module weaker, so use the

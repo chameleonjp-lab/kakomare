@@ -22,7 +22,7 @@ import { WEAPONS } from '../data/weapons';
 import type { StageId } from '../types/content';
 import { isLocalTestHost } from './testMode';
 import { RunLifecycleGuard } from './RunLifecycleGuard';
-import { DEVICE_SLOT_COUNT, itemAtSlot } from '../game/deviceLayout';
+import { MAX_DEVICE_SLOT_COUNT, DEVICE_SLOT_COUNT, itemAtExpandedSlot } from '../game/deviceLayout';
 
 function stageLabel(stageId: StageId): string {
   return stageId === 'endless' ? 'ENDLESS' : stageId.replace('stage-', 'STAGE ');
@@ -333,12 +333,14 @@ export class AppController {
     if (scoreValue) scoreValue.textContent = snapshot.score.toLocaleString('ja-JP');
     aimState.textContent = snapshot.manualAim ? '手動照準中' : '自動照準';
     const loadout: string[] = [];
-    for (let slot = 0; slot < DEVICE_SLOT_COUNT; slot += 1) {
-      const weapon = itemAtSlot(snapshot.weapons, slot);
-      const support = itemAtSlot(snapshot.supports, slot);
+    const visibleSlots = Math.min(MAX_DEVICE_SLOT_COUNT, (snapshot.build?.unlockedLayer ?? 1) * DEVICE_SLOT_COUNT);
+    for (let slot = 0; slot < visibleSlots; slot += 1) {
+      const weapon = itemAtExpandedSlot(snapshot.weapons, slot);
+      const support = itemAtExpandedSlot(snapshot.supports, slot);
       if (weapon) loadout.push(`武器面${slot + 1}: ${this.weaponName(weapon.id)} Lv${weapon.level}`);
       if (support) loadout.push(`補助面${slot + 1}: ${this.supportName(support.id)} Lv${support.level}`);
     }
+    if (snapshot.build) loadout.push(`稼働容量 ${snapshot.build.capacity.used}/${snapshot.build.capacity.maximum}`);
     buildList.textContent = loadout.join(' / ');
   }
 
@@ -590,13 +592,13 @@ export class AppController {
     copy.append(element('h3', '', '現在の装置'));
     const snapshot = this.latestBattleSnapshot;
     const loadout = snapshot
-      ? Array.from({ length: DEVICE_SLOT_COUNT * 2 }, (_, index) => {
+      ? Array.from({ length: Math.min(MAX_DEVICE_SLOT_COUNT, (snapshot.build?.unlockedLayer ?? 1) * DEVICE_SLOT_COUNT) * 2 }, (_, index) => {
         const slot = Math.floor(index / 2);
         if (index % 2 === 0) {
-          const weapon = itemAtSlot(snapshot.weapons, slot);
+          const weapon = itemAtExpandedSlot(snapshot.weapons, slot);
           return `武器面${slot + 1}: ${weapon ? `${this.weaponName(weapon.id)} Lv${weapon.level}` : '空き'}`;
         }
-        const support = itemAtSlot(snapshot.supports, slot);
+        const support = itemAtExpandedSlot(snapshot.supports, slot);
         return `補助面${slot + 1}: ${support ? `${this.supportName(support.id)} Lv${support.level}` : '空き'}`;
       })
       : ['装置情報を読み込んでいます'];

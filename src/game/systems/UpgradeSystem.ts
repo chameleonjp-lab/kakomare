@@ -6,6 +6,7 @@ import { SupportModule } from '../entities/SupportModule';
 import { Weapon } from '../entities/Weapon';
 import { DEVICE_SLOT_COUNT } from '../deviceLayout';
 import { DeterministicRng } from './SpawnDirector';
+import type { BuildLayer } from '../../types/build';
 
 export type ContinuousUpgradeId = 'polish' | 'armor' | 'parts';
 
@@ -16,6 +17,17 @@ export interface ContinuousUpgradeState {
 
 export interface UpgradeApplicationCallbacks {
   onContinuous?: (id: ContinuousUpgradeId) => void;
+  onExpansion?: (layer: BuildLayer) => void;
+}
+
+export interface UpgradePlacementState {
+  /** Slots currently unlocked by the BuildGraph, excluding occupied faces. */
+  weaponSlots?: number[];
+  supportSlots?: number[];
+  /** Maximum number of installed copies in each category for the unlocked layers. */
+  maxWeapons?: number;
+  maxSupports?: number;
+  expansionCandidates?: UpgradeCandidate[];
 }
 
 export function createUpgradeCandidateList(
@@ -26,6 +38,7 @@ export function createUpgradeCandidateList(
   banned: Set<string>,
   coreMaxHealth = 100,
   continuousState: ContinuousUpgradeState = {},
+  placementState: UpgradePlacementState = {},
 ): UpgradeCandidate[] {
   const existing: UpgradeCandidate[] = [];
   const newItems: UpgradeCandidate[] = [];
@@ -86,8 +99,12 @@ export function createUpgradeCandidateList(
     before: `耐久力 ${Math.round(coreHealth)}`, after: `耐久力 ${Math.min(coreMaxHealth, Math.round(coreHealth + 20))}`,
     role: '立て直し', isExisting: true,
   });
-  if (weapons.length < 3) for (const id of WEAPON_ORDER) if (!weapons.some((weapon) => weapon.id === id)) newItems.push(newWeaponCandidate(id));
-  if (supports.length < 3) for (const id of SUPPORT_ORDER) if (!supports.some((support) => support.id === id)) newItems.push(newSupportCandidate(id));
+  const maxWeapons = placementState.maxWeapons ?? 3;
+  const maxSupports = placementState.maxSupports ?? 3;
+  if (weapons.length < maxWeapons) for (const id of WEAPON_ORDER) if (!weapons.some((weapon) => weapon.id === id)) newItems.push(newWeaponCandidate(id));
+  if (supports.length < maxSupports) for (const id of SUPPORT_ORDER) if (!supports.some((support) => support.id === id)) newItems.push(newSupportCandidate(id));
+
+  const expansions = uniqueCandidates(placementState.expansionCandidates ?? [], banned);
 
   const firstMilestone = existing.find((candidate) => candidate.id.includes(':branch:'));
   const milestonePair = firstMilestone
@@ -96,7 +113,7 @@ export function createUpgradeCandidateList(
   const orderedExisting = milestonePair.length === 2
     ? [...shuffle(milestonePair, rng), ...shuffle(existing.filter((candidate) => !milestonePair.includes(candidate)), rng)]
     : shuffle(existing, rng);
-  const related = uniqueCandidates(orderedExisting, banned);
+  const related = uniqueCandidates([...expansions, ...orderedExisting], banned);
   const additions = uniqueCandidates(shuffle(newItems, rng), banned);
 
   // The old two-related/one-new ratio is a preference, not a gate. When only
@@ -191,9 +208,15 @@ export function applyUpgradeCandidate(
     callbacks.onContinuous?.(candidate.targetId);
     return true;
   }
+  if (candidate.kind === 'expansion') {
+    const layer = candidate.expansionLayer ?? (candidate.targetId === 'layer-2' ? 2 : candidate.targetId === 'layer-3' ? 3 : null);
+    if (layer !== 2 && layer !== 3) return false;
+    callbacks.onExpansion?.(layer);
+    return true;
+  }
   if (candidate.kind === 'weapon') {
     if (candidate.id.endsWith(':new')) {
-      const placementSlot = resolvePlacementSlot(candidate.placementSlot, weapons.map((item) => item.slot));
+      const placementSlot = resolvePlacementSlot(candidate.placementSlot, weapons.map((item) => item.slot), candidate.placementSlots);
       if (weapons.some((item) => item.slot === placementSlot)) return false;
       weapons.push(new Weapon(candidate.targetId as WeaponId, placementSlot));
       return true;
@@ -224,7 +247,7 @@ export function applyUpgradeCandidate(
   }
   if (candidate.kind === 'support') {
     if (candidate.id.endsWith(':new')) {
-      const placementSlot = resolvePlacementSlot(candidate.placementSlot, supports.map((item) => item.slot));
+      const placementSlot = resolvePlacementSlot(candidate.placementSlot, supports.map((item) => item.slot), candidate.placementSlots);
       if (supports.some((item) => item.slot === placementSlot)) return false;
       supports.push(new SupportModule(candidate.targetId as SupportId, placementSlot));
       return true;
@@ -237,8 +260,8 @@ export function applyUpgradeCandidate(
   return false;
 }
 
-function resolvePlacementSlot(requestedSlot: number | undefined, occupiedSlots: number[]): number {
-  const availableSlots = Array.from({ length: DEVICE_SLOT_COUNT }, (_, slot) => slot).filter((slot) => !occupiedSlots.includes(slot));
+function resolvePlacementSlot(requestedSlot: number | undefined, occupiedSlots: number[], allowedSlots?: number[]): number {
+  const availableSlots = (allowedSlots ?? Array.from({ length: DEVICE_SLOT_COUNT }, (_, slot) => slot)).filter((slot) => !occupiedSlots.includes(slot));
   return requestedSlot !== undefined && availableSlots.includes(requestedSlot) ? requestedSlot : availableSlots[0] ?? 0;
 }
 

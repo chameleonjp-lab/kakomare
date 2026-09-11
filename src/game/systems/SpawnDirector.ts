@@ -14,6 +14,13 @@ export class DeterministicRng {
     return this.state / 0x100000000;
   }
 
+  public getState(): number { return this.state; }
+
+  public setState(state: number): void {
+    if (!Number.isFinite(state)) return;
+    this.state = (Math.floor(state) >>> 0) || 1;
+  }
+
   public pick<T>(items: T[]): T {
     return items[Math.floor(this.next() * items.length)] ?? items[0];
   }
@@ -66,8 +73,8 @@ export class SpawnDirector {
   private nextSpecialWaveAt = SPECIAL_WAVE_FIRST_AT_SECONDS;
   private specialWaveCount = 0;
 
-  public constructor(private readonly stageId: StageId, seed: number, private readonly testMode = false) {
-    this.rng = new DeterministicRng(seed);
+  public constructor(private readonly stageId: StageId, seedOrRng: number | DeterministicRng, private readonly testMode = false) {
+    this.rng = seedOrRng instanceof DeterministicRng ? seedOrRng : new DeterministicRng(seedOrRng);
     this.nextBossAt = this.testMode ? 5.5 : STAGES[stageId].bossAt;
   }
 

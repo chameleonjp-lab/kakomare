@@ -1,8 +1,11 @@
 import { WEAPONS } from '../../data/weapons';
 import type { WeaponBranch, WeaponFinalBranch, WeaponId } from '../../types/content';
+import { nodeIdForSlot } from '../deviceLayout';
 
 export class Weapon {
   public readonly id: WeaponId;
+  /** Stable identity of this installed copy; weapon type is not an identity. */
+  public readonly instanceId: string;
   public level = 1;
   public cooldown = 0;
   public damageDealt = 0;
@@ -12,10 +15,16 @@ export class Weapon {
   public shotsFired = 0;
   public slot: number;
 
-  public constructor(id: WeaponId, slot: number) {
+  public constructor(id: WeaponId, slot: number, instanceId?: string) {
     this.id = id;
     this.slot = slot;
+    // The face is part of the installation identity for the current runtime.
+    // Callers that support replacement or replay may provide a persisted ID;
+    // the deterministic fallback keeps identical seeded runs comparable.
+    this.instanceId = instanceId ?? `weapon-${id}-s${slot}`;
   }
+
+  public get nodeId() { return nodeIdForSlot('weapon', this.slot); }
 
   public get definition() {
     return WEAPONS[this.id];

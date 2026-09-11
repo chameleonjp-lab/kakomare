@@ -1,4 +1,6 @@
 import type { BossId, EnemyId, StageId, SupportId, WeaponBranch, WeaponFinalBranch, WeaponId } from './content';
+import type { BuildGraphSnapshot, CapacitySnapshot, BuildLayer } from './build';
+import type { NormalizedRunInput } from '../game/systems/InputRecorder';
 
 export interface Point {
   x: number;
@@ -38,10 +40,14 @@ export interface ProjectileSnapshot {
   enemyProjectile: boolean;
   bounces: number;
   sourceWeaponId: WeaponId | null;
+  sourceWeaponInstanceId: string | null;
+  boundaryRadius: number;
 }
 
 export interface WeaponSnapshot {
   id: WeaponId;
+  instanceId: string;
+  nodeId: string;
   /** Persisted face number; acquisition order is not a placement contract. */
   slot: number;
   level: number;
@@ -52,8 +58,16 @@ export interface WeaponSnapshot {
 
 export interface SupportSnapshot {
   id: SupportId;
+  instanceId: string;
+  nodeId: string;
   level: number;
   slot: number;
+}
+
+export interface BuildSnapshot {
+  unlockedLayer: BuildLayer;
+  graph: BuildGraphSnapshot;
+  capacity: CapacitySnapshot;
 }
 
 export interface BattleSnapshot {
@@ -82,12 +96,14 @@ export interface BattleSnapshot {
   bossDefeated: boolean;
   sectorDamage: number[];
   effectsLevel: 'standard' | 'low' | 'minimum';
+  /** V2 build state is emitted with every live snapshot; optional for legacy fixtures. */
+  build?: BuildSnapshot;
 }
 
 export interface UpgradeCandidate {
   id: string;
-  kind: 'weapon' | 'support' | 'repair' | 'continuous';
-  targetId: WeaponId | SupportId | 'core' | 'polish' | 'armor' | 'parts';
+  kind: 'weapon' | 'support' | 'repair' | 'continuous' | 'expansion';
+  targetId: WeaponId | SupportId | 'core' | 'polish' | 'armor' | 'parts' | 'layer-2' | 'layer-3';
   title: string;
   description: string;
   before: string;
@@ -100,6 +116,10 @@ export interface UpgradeCandidate {
   placementSlot?: number;
   /** Continuous safety-net upgrades remain obtainable and cannot be banned. */
   canBan?: boolean;
+  /** Layer unlock candidates are applied through the build graph callback. */
+  expansionLayer?: BuildLayer;
+  /** Optional installed-copy target used once duplicate weapon/support types exist. */
+  targetInstanceId?: string;
 }
 
 export interface UpgradePayload {
@@ -134,6 +154,10 @@ export interface BattleResult {
   runSeed: number;
   newUnlock: StageId | null;
   retired: boolean;
+  ruleVersion?: string;
+  inputLog?: NormalizedRunInput[];
+  weaponInstanceDamage?: Record<string, number>;
+  build?: BuildSnapshot;
 }
 
 export interface BattleCallbacks {

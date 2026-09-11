@@ -2,7 +2,29 @@
 
 更新日：2026-09-11（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
 
-## 現在の作業：V1の競技仕様と50武器全体設計
+## 現在の作業：V2の競技基盤と制約付き設置拡張
+
+- ユーザーのV1マージ指示を受け、GitHub上でPR #19のマージ済み状態を再確認した。PR #19のheadは `11ec1a66870a3b06e3332737d0611f5527117bc6`、マージコミットは `edb84e0800d9ed657206c246241f9fafe5fe0014` で、`git fetch origin main` 後の `origin/main` と一致する。PR #19はclosed・mergedで、Draftではない。V1のQuality #52成功は設計工程の証拠であり、V2の検査結果へ繰り越さない。
+- V2の作業branchは `codex/v2-competitive-foundation-20260911`。基準mainは上記 `edb84e0800d9ed657206c246241f9fafe5fe0014`。この工程では既存runtimeの8武器・6補助を使い、個体識別、接続図、6→12→18層、容量、発射元・境界、競技初期条件の検証フック、乱数分離、実効値計算、入力台帳の基礎を実装する。V3以降の新武器・新補助・敵・採点・保存v3・ランキング通信は追加しない。
+- 競技初期条件は `BattleSceneOptions.competitive=true` のローカル実行フックで適用する。コア100、基準能力、初期武器、初期3＋3面、容量6、引き直し2、除外2を `COMPETITIVE_RULES` から参照する。AppControllerからこのフラグを常時有効化せず、ランキング送信・本番DB・実験場設定は変更していない。
+- BuildGraphは各層に武器3面＋補助3面を持ち、層1の6面から層2の12面、層3の18面へ順に開放する。BuildCapacityは表示可能な面数と別に、個体ごとの稼働コスト（現工程は1、容量6/12/18）を管理する。スナップショット、HUD、停止中の装置一覧へ個体ID・nodeID・容量を渡す。
+- 攻撃は武器個体ID・生成時の発射元・生成時の境界半径を保持する。通常の射撃・光線・範囲・連鎖・円盤・重力点は設置面の原点を使い、反発輪・周回刃はコア中心の防衛攻撃として維持する。層拡張後も飛翔中の旧弾を新境界へ移さず、実効値は `CombatStats` の共通計算経路から取得する。
+- 乱数は敵出現、候補抽選、戦闘効果、表示用に分離した。競技フックでは候補抽選が敵出現列を進めない。通常モードはV0のseed互換性を保持するため従来のシーン乱数列を維持し、競技モードだけ目的別ストリームを使う。
+- 結果へルール版、入力の正規化台帳、武器個体別与ダメージ、BuildGraph/Capacityスナップショットを追加した。入力台帳は角度を正規化し更新tickを単調に記録するが、途中保存・分割送信・受付側検証はV6の対象である。
+
+### V2の実装・検査状態
+
+- 追加した主な構造は `src/game/build/BuildGraph.ts`、`src/game/build/BuildCapacity.ts`、`src/game/systems/ArenaGeometry.ts`、`CombatStats.ts`、`RandomStreams.ts`、`InputRecorder.ts`、`src/types/build.ts` と `tests/unit/v2-foundation.test.ts`。既存の `Weapon`、`SupportModule`、`Projectile`、`BattleScene`、`RunRecorder`、HUD/描画へ個体・層・境界情報を接続した。
+- `npm ci --ignore-scripts --no-audit --no-fund`（162パッケージ）、`npm run lint`、`npm run typecheck`、`npm run test -- --testTimeout=30000`（24ファイル・172件）は、V2変更後の作業ツリーで成功した。V2単体7件は、層・接続・容量、乱数独立性、入力正規化、実効値、原点・反射、設計専用カタログ非混入を確認する。
+- `npm run test:e2e:chromium` はローカルPlaywright実行ファイルが存在せず、31件すべて起動前に失敗した（`/root/.cache/ms-playwright/.../chrome-headless-shell` 不在）。続けて `npm run test:e2e:webkit` も同じ理由で31件すべて起動前に失敗した（`/root/.cache/ms-playwright/webkit-2336/pw_run.sh` 不在）。テストコードの失敗ではなく環境未実施として扱う。V2の提出headに対するGitHub Actionsのブラウザ結果は、公開後に対象commitとrunを追記する。
+- V2で測定していないものは、6→12→18の長時間本戦バランス、18面最大負荷、30/60/120描画比較、保存からの完全復元、iPhone Safari/VoiceOver/片手操作、通常720試行・無限60試行、ランキング受付・本番DBである。V2は基盤のコード検査までで、競技性や実機受入を完了扱いにしない。
+
+### V2の提出状態
+
+- Draft PRはコード・文書・検査を確定してから作成する。作成前のためURLは未確定。mainへの直接push、マージ、自動マージ、保護設定の緩和、本番DB変更、実験場の有効化は行わない。
+- V2のA項目はA06（設置拡張）、A07（個体識別）、A08（発射元・境界）、A12（接敵猶予の基盤）、A13（弾割当の個体化の基礎）を「実装中・検査待ち」とする。公平性の本戦測定と弾枠の全武器監査はV7へ残す。A14（途中保存）は設計用の入力台帳までで、保存実装はV6で行う。A20は本節追加で進行記録をV2へ同期した。
+
+## V1完了記録（履歴）
 
 - V0の補正Draft PR #18は2026-09-11T02:08:01Zにマージ済み。GitHub APIと `git fetch origin main` の双方で、現在のmainが `7ba253c4304cf719b96c738974af5fe821236371` であることを確認した。PR #18の [Quality #50](https://github.com/chameleonjp-lab/kakomare/actions/runs/34552685647) は公式PlaywrightコンテナとPages同条件native Ubuntuの両jobで成功し、V0の配備検査補正を完了とする。Pagesの公開結果、iPhone Safari、本番ランキングは別の未確認事項である。
 - V1作業branchは `codex/v1-competitive-catalog-20260911`。基準mainは上記 `7ba253c4`。この工程では設計台帳、型、検証器、競技ルール案、生成文書だけを追加し、設計のみの武器・補助を戦闘・図鑑・抽選の実行時登録へ混ぜない。
