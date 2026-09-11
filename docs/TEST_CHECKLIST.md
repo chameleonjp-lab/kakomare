@@ -4,7 +4,7 @@
 
 ## V7実装：最終本戦・性能・公開前ゲート（2026-09-11）
 
-対象branchは `codex/v7-final-verification-20260911`。基準mainは、ユーザーがマージしたPR #24のマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`（head `69abd6024471b47d044d378d9f044dd03bb51001`）。V7では、競技ルール版を `expansion-v7-runtime` へ分離し、競技得点へ生存時間・残HPを混ぜない修正、通常720試行、競技無限60試行、30／60／120回描画比較を実際の `BattleScene` 更新経路で検査する。基本武器50・補助20・全1,000組はV5から維持し、12・25種類を完成扱いにしない。
+対象branchは `codex/v7-final-verification-20260911`。基準mainは、ユーザーがマージしたPR #24のマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`（head `69abd6024471b47d044d378d9f044dd03bb51001`）。Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25) の提出commitは `2669a784df52621ce9e5195eb4c2a5780b532a06`。V7では、競技ルール版を `expansion-v7-runtime` へ分離し、競技得点へ生存時間・残HPを混ぜない修正、通常720試行、競技無限60試行、30／60／120回描画比較を実際の `BattleScene` 更新経路で検査する。基本武器50・補助20・全1,000組はV5から維持し、12・25種類を完成扱いにしない。
 
 - [x] `npm run lint`
 - [x] `npm run typecheck`
@@ -16,7 +16,7 @@
 - [x] `npm run verify:expansion-docs`（V7生成文書5ファイル）
 - [x] `npm run verify:ranking-manifest`（V7 manifest）
 - [x] `npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check`（Viteの500 kB超チャンク警告あり）
-- [ ] V7提出commitのGitHub Actions専用 `v7-final-gates` job（Draft PR作成後に確認）
+- [x] V7提出commitのGitHub Actions [Quality #74](https://github.com/chameleonjp-lab/kakomare/actions/runs/34644134706)（`quality`、`pages-runner-quality`、`v7-final-gates` の全job・全step成功）
 - [ ] ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（実行ファイル不在のため本体未実施。提出CIと分離）
 - [x] V6マージ後mainの公開Pages配備 [run 34633650787](https://github.com/chameleonjp-lab/kakomare/actions/runs/34633650787) とクラウドブラウザの名前入力→stage-1戦闘→一時停止（V7 branchの配備ではない）
 - [ ] iPhone Safari実機、VoiceOver、片手操作、発熱、V7 branchの公開配備後の再確認

@@ -4,7 +4,7 @@
 
 ## V7 Draft提出ゲート（2026-09-11）
 
-対象branchは `codex/v7-final-verification-20260911`。基準mainはPR #24のマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`。V7は最終本戦・性能・公開前のゲーム側検査をDraft PRへ提出する工程であり、mainへの直接push・マージ、自動マージ、本番DB／Supabase RPC／実験場登録の変更・有効化は行わない。競技ルール版は `expansion-v7-runtime`、manifestクライアント版は `kakomare-web-v7` とする。
+対象branchは `codex/v7-final-verification-20260911`。基準mainはPR #24のマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`。Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25) の提出commitは `2669a784df52621ce9e5195eb4c2a5780b532a06`。V7は最終本戦・性能・公開前のゲーム側検査をDraft PRへ提出する工程であり、mainへの直接push・マージ、自動マージ、本番DB／Supabase RPC／実験場登録の変更・有効化は行わない。競技ルール版は `expansion-v7-runtime`、manifestクライアント版は `kakomare-web-v7` とする。
 
 - [x] 基本武器50・補助20・全1,000組・相乗効果をV5から維持（12・25を完成扱いにしない）
 - [x] 競技得点から生存時間・残HPを除外し、通常モードの旧式得点を回帰で確認
@@ -12,7 +12,7 @@
 - [x] V7試行で敵180・味方弾280・敵弾80の共通上限を検査
 - [x] 生成文書5ファイル、manifest、release metadataをV7版へ同期
 - [x] 最終差分のlint、型、単体／統合（29ファイル・206件）、文書、manifest、build、配布物、独自名称検査（Viteの500 kB超チャンク警告あり）
-- [ ] Draft PR URL、提出commit、V7専用GitHub Actions `v7-final-gates` jobの成功
+- [x] Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25)、提出commit、V7専用GitHub Actions [Quality #74](https://github.com/chameleonjp-lab/kakomare/actions/runs/34644134706) の `v7-final-gates` job成功
 - [x] V6マージ後mainのPages配備 [run 34633650787](https://github.com/chameleonjp-lab/kakomare/actions/runs/34633650787) とクラウドブラウザの公開戦闘・一時停止（V7 branchの公開確認ではない）
 - [ ] V7 branchの公開配備後のURL・配備commit一致
 - [ ] iPhone Safari実機、VoiceOver、片手操作、発熱、長時間の実機操作
