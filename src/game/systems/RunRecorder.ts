@@ -20,6 +20,19 @@ export interface RunRecorderState {
   weaponEvents: Partial<Record<WeaponId, { shots: number; intercepts: number; detonations: number }>>;
 }
 
+/**
+ * Result fields such as survival time and remaining core health are useful to
+ * explain a run, but a competitive score must not silently award points for
+ * waiting or for ending just before the core is damaged.  The policy is
+ * explicit so normal-stage legacy scoring can remain unchanged while the
+ * competitive path opts out.
+ */
+export interface RunScorePolicy {
+  includeSurvivalAndCore: boolean;
+}
+
+export const LEGACY_RUN_SCORE_POLICY: RunScorePolicy = Object.freeze({ includeSurvivalAndCore: true });
+
 function finiteNonNegative(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
@@ -109,6 +122,13 @@ export class RunRecorder {
     this.controlSeconds[kind] += Math.max(0, seconds);
   }
 
+  public finalScore(coreRemaining: number, policy: RunScorePolicy = LEGACY_RUN_SCORE_POLICY): number {
+    const resultFieldScore = policy.includeSurvivalAndCore
+      ? this.survivalTime * 5 + Math.max(0, coreRemaining) * 20
+      : 0;
+    return Math.max(0, Math.round(this.score + resultFieldScore));
+  }
+
   public snapshotState(): RunRecorderState {
     return {
       kills: this.kills,
@@ -167,11 +187,18 @@ export class RunRecorder {
     return true;
   }
 
-  public result(outcome: BattleResult['outcome'], coreRemaining: number, partsEarned: number, retired = false, newUnlock: StageId | null = null): BattleResult {
+  public result(
+    outcome: BattleResult['outcome'],
+    coreRemaining: number,
+    partsEarned: number,
+    retired = false,
+    newUnlock: StageId | null = null,
+    scorePolicy: RunScorePolicy = LEGACY_RUN_SCORE_POLICY,
+  ): BattleResult {
     return {
       stageId: this.stageId,
       outcome,
-      score: Math.max(0, Math.round(this.score + this.survivalTime * 5 + coreRemaining * 20)),
+      score: this.finalScore(coreRemaining, scorePolicy),
       survivalTime: this.survivalTime,
       coreRemaining,
       kills: this.kills,

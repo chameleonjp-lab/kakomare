@@ -268,6 +268,31 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     expect(snapshots).toEqual([{ timeLimit: 180, isEndless: false }, { timeLimit: Infinity, isEndless: true }]);
   });
 
+  it('競技スコアへ生存時間と残HPを混ぜず、通常モードの旧式得点は維持する', () => {
+    const makeScene = (competitive: boolean): { scene: unknown; snapshots: Array<{ score: number }>; results: BattleResult[] } => {
+      const snapshots: Array<{ score: number }> = [];
+      const results: BattleResult[] = [];
+      const scene = new moduleUnderTest.BattleScene(options({ competitive, callbacks: {
+        onStatus() {}, onUpgrade() {}, onPauseRequest() {},
+        onSnapshot: (snapshot: { score: number }) => snapshots.push(snapshot),
+        onFinish: (result: BattleResult) => results.push(result),
+      } }));
+      const recorder = privateValue<{ score: number; survivalTime: number }>(scene, 'recorder');
+      recorder.score = 123;
+      recorder.survivalTime = 10;
+      (scene as Record<string, unknown>).elapsed = 10;
+      privateValue<(force: boolean) => void>(scene, 'emitSnapshot').bind(scene)(true);
+      privateValue<(outcome: BattleResult['outcome'], cause: string) => void>(scene, 'finish').bind(scene)('defeat', '検査終了');
+      return { scene, snapshots, results };
+    };
+    const competitive = makeScene(true);
+    expect(competitive.snapshots.at(-1)?.score).toBe(123);
+    expect(competitive.results[0]?.score).toBe(123);
+    const normal = makeScene(false);
+    expect(normal.snapshots.at(-1)?.score).toBe(2_173);
+    expect(normal.results[0]?.score).toBe(2_173);
+  });
+
   it('強化候補を表示しても経験値とレベルを消費せず、確定は同じ選択番号で一度だけ行う', () => {
     const upgrades: Array<{ selectionId: number; candidates: Array<{ id: string; isExisting: boolean; canBan?: boolean }> }> = [];
     const scene = new moduleUnderTest.BattleScene(options({ callbacks: {
