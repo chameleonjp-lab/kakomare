@@ -11,9 +11,9 @@ describe('V1 expansion design contract', () => {
     expect(result.ok, result.errors.join('\n')).toBe(true);
     expect(result.weaponCount).toBe(50);
     expect(new Set(EXPANSION_WEAPONS.map((weapon) => weapon.id)).size).toBe(50);
-    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'implemented')).toHaveLength(12);
-    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only')).toHaveLength(38);
-    expect(WEAPON_ORDER).toHaveLength(12);
+    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'implemented')).toHaveLength(25);
+    expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only')).toHaveLength(25);
+    expect(WEAPON_ORDER).toHaveLength(25);
     expect(EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'design-only').every((weapon) => !WEAPON_ORDER.includes(weapon.id as typeof WEAPON_ORDER[number]))).toBe(true);
   });
 
@@ -42,7 +42,7 @@ describe('V1 expansion design contract', () => {
   });
 
   it('fixes a common competitive rule version and bounded starting contract', () => {
-    expect(EXPANSION_RULE_VERSION).toBe('expansion-v1-design');
+    expect(EXPANSION_RULE_VERSION).toBe('expansion-v4-runtime');
     expect(COMPETITIVE_RULES.version).toBe(EXPANSION_RULE_VERSION);
     expect(COMPETITIVE_RULES.initial.coreHp).toBeGreaterThan(0);
     expect(COMPETITIVE_RULES.initial.capacity).toBeGreaterThan(0);

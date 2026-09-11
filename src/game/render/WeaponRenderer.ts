@@ -8,6 +8,9 @@ const WEAPON_COLORS: Record<WeaponSnapshot['id'], number> = {
   needle: 0x63d7e6, ray: 0xffbe5c, cluster: 0xa78bfa, repulse: 0x76e6a7,
   chain: 0xff8bd8, orbit: 0xf4e285, disc: 0x78a8ff, gravity: 0xc084fc,
   grid: 0xf0a6ff, mine: 0xff8f70, lance: 0xffd166, drone: 0x6ee7b7,
+  prism: 0xff7dd3, mortar: 0xffa07a, ribbon: 0x8be9fd, shockwave: 0xffd166,
+  barrage: 0xfca5a5, anchor: 0x94a3b8, flare: 0xfde68a, cutter: 0xc4b5fd,
+  beacon: 0xf9a8d4, nova: 0xfb7185, harpoon: 0x67e8f9, vortex: 0xa7f3d0, ward: 0xfef08a,
 };
 
 const SUPPORT_COLORS: Record<SupportSnapshot['id'], number> = {

@@ -2,7 +2,20 @@
 
 更新日：2026-09-11（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
 
-## 現在の作業：V3の12武器・8補助・発展と配置変更
+## 現在の作業：V4の25武器・競技無限進行・敵コンテンツ
+
+- PR #21（V3）はユーザーによりマージ済み。GitHub上のmain先端はマージコミット `5da26b1fd5f79057af919c16d475f1baa8d3cf4f`、open PRは0件である。これを基準にV4ブランチ `codex/v4-endless-enemy-20260911` を開始した。
+- V4では、既存12武器へ設計済み13武器（分光弾、曲射砲、拘束索、脈動砲、散弾幕、固定杭、閃光弾、横断刃、導標弾、爆縮核、牽引槍、旋回渦、守護灯）を追加し、runtime registryを基本25武器へ拡張した。補助は8種を維持し、補助20種・50武器は最終工程まで未完成として扱う。
+- 突進体・護衛体・修復体・造兵体を追加し、予告、限定盾、回復対象上限、召喚子4体上限、召喚由来の報酬除外を実装した。無限モードは45秒テーマ切替、15分以後の特殊敵比率、ボスをecho→crown→designerの順で循環させる。
+- 競技ルール版を `expansion-v4-runtime` に更新した。採点は撃破・脅威コスト・ボス・節目を基礎とし、ランキング送信や本番DB変更は行わない。
+
+### V4の検査状態
+
+- `npm run typecheck`、`npm run lint`、`npm test -- --testTimeout=30000`（24ファイル・178件）、`npm run generate:expansion-docs` は成功した。既存テストの12→25武器、8→12敵、25×8=200組への更新を含む。
+- `npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` も成功した（Viteの500 kB超チャンク警告は継続）。ローカルChromium/WebKitは実行ファイル不足で未実施だが、提出コミットの [Quality #63](https://github.com/chameleonjp-lab/kakomare/actions/runs/34594754202) は公式PlaywrightコンテナとPages同条件runnerの両jobで全step成功した。静的・単体24ファイル178件、Chromium32件、WebKit32件、文書・build・配布物検証を含む。
+- iPhone Safari、長時間本戦、無限60試行、補助20全件、全50×20実戦網羅、保存v3、ランキング受付・本番DBはV4の完了条件ではなく未確認のまま残す。
+
+## V3の12武器・8補助・発展と配置変更（履歴）
 
 - ユーザーのV2マージ指示を受け、GitHub上でPR #20の実際のマージ状態を再確認した。PR #20はclosed・merged、headは `90e73d95bbb463b9a48d64505c7c42dde4b8e1b1`、`git fetch origin main` 後の最新 `origin/main` はマージコミット `353295475354c145b06cb836543f9c5fd20b6141` と一致する。open PRは開始時点で0件だったため、このV3用Draft PRを新規に作成する。V2のQuality結果はV3の検査へ繰り越さない。
 - V3の作業branchは `codex/v3-weapons-synergy-20260911`。この工程では、既存8武器の通常Lv1〜8・Lv3/Lv5分岐・Lv8発展、追加4武器（迎撃格子・軌道機雷・蓄圧槍・追尾子機）、追加2補助（継電環・整備環）、敵状態の輪郭・記号表示、停止中の移設・同種入替を実装する。V4以降の新敵・無限進行・採点再構成、V5の追加ステージ、V6の保存v3・ランキング通信・本番DB変更は対象外とする。

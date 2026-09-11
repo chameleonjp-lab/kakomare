@@ -84,7 +84,7 @@ describe('spawn director and long simulations', () => {
     for (let elapsed = 0.5; elapsed <= 1_200; elapsed += 0.5) {
       director.update(0.5, elapsed, 0, (request) => { if (elapsed >= 900) late.push(request.type); });
     }
-    const specialIds = new Set<EnemyId>(['shell', 'lattice', 'spore', 'marker', 'dropper', 'phase']);
+    const specialIds = new Set<EnemyId>(['shell', 'lattice', 'spore', 'marker', 'dropper', 'phase', 'charger', 'guard', 'repair', 'factory']);
     const specialCount = late.filter((id) => specialIds.has(id)).length;
     expect(late.length).toBeGreaterThan(100);
     expect(specialCount / late.length).toBeGreaterThan(0.75);

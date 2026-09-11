@@ -32,7 +32,7 @@ const define = (
  * for levels 1–5; levels 6–8 and the final forms add a distinct path or
  * target rule. The four first-12 entries use the same compact primitives but
  * have different timing, origin, and target responsibilities. */
-export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
+export const WEAPONS = ({
   needle: define('needle', '連針砲', '連針', '細い弾を素早く放ち、近づく敵を一体ずつ削ります。', '単体・盾削り', 0x63d7e6, [
     { damage: 8, cooldown: 0.16, range: 560, pierce: 0, projectileSpeed: 480 },
     { damage: 10, cooldown: 0.15, range: 570, pierce: 0, projectileSpeed: 500 },
@@ -176,8 +176,45 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     '子機の弾威力を22%高め、単体の危険対象を削ります。',
     '子機の再装填を18%短くし、追尾の空白を減らします。',
   ), evolution('drone-cross', '交差追尾', '二機が別の角度から同じ優先対象を追い、子機はさらに子機を作りません。')),
-};
+} as Record<WeaponId, WeaponDefinition>);
+
+/** V4 runtime additions. Each entry has a distinct targeting/timing role; the
+ * shared projectile primitive is intentional, while the catalog records its
+ * different weakness and evolution path for later balance work. */
+const V4_WEAPON_SPECS: Array<[WeaponId, string, string, string, string, number, string, string, string]> = [
+  ['prism', '分光弾', '分光', '三方向へ色の異なる弾を分け、広い角度を守ります。', '方向分散・範囲', 0xff7dd3, 'prism-split', '分光発展', '三方向の弾が着弾順に短く連動します。'],
+  ['mortar', '曲射砲', '曲射', '遠い地点へ弧を描く弾を落とし、後方の敵を狙います。', '遠距離・着弾', 0xffa07a, 'mortar-burst', '曲射発展', '着弾後に小さな二次爆発を一度だけ起こします。'],
+  ['ribbon', '拘束索', '拘束', '敵を短時間つなぎ、接近を遅らせる連続攻撃です。', '制御・単体', 0x8be9fd, 'tether-lock', '拘束発展', '命中した敵から近い敵へ一度だけ索を渡します。'],
+  ['shockwave', '脈動砲', '脈動', '一定間隔の円形波で近中距離を掃除します。', '周期・防衛', 0xffd166, 'pulse-ring', '脈動発展', '二重の波を異なる間隔で発生させます。'],
+  ['barrage', '散弾幕', '散弾', '狙った方向へ多数の小弾を広げ、薄い敵群に強い武器です。', '散開・小型群', 0xfca5a5, 'scatter-fan', '散弾発展', '外側の小弾が一度だけ折り返します。'],
+  ['anchor', '固定杭', '固定', '進路へ杭を打ち、通過する敵の動きを一時的に止めます。', '設置・停止', 0x94a3b8, 'anchor-field', '固定発展', '杭の周囲へ短い停止領域を重ねます。'],
+  ['flare', '閃光弾', '閃光', '敵弾の予告方向へ明滅する弾を送り、危険な相手を優先します。', '迎撃補助・方向', 0xfde68a, 'flare-burst', '閃光発展', '命中時に敵弾を一回だけ弱めます。'],
+  ['cutter', '横断刃', '横断', '照準を横切る短い刃を連続して置き、列を切断します。', '横断・列', 0xc4b5fd, 'slicer-cross', '横断発展', '直角の刃を一枚だけ追加します。'],
+  ['beacon', '誘導標', '誘導', '敵を印で示し、次の攻撃が同じ対象へ集中します。', '標識・集中', 0xf9a8d4, 'beacon-mark', '誘導発展', '印の対象が倒れると近い敵へ一度だけ移ります。'],
+  ['nova', '爆縮核', '爆縮', '時間をかけて小範囲へ強い一撃を落とします。', '重撃・範囲', 0xfb7185, 'nova-collapse', '爆縮発展', '中心から外側へ二段の爆発を起こします。'],
+  ['harpoon', '牽引槍', '牽引', '敵を貫き、短い引き寄せで列の位置を整えます。', '貫通・牽引', 0x67e8f9, 'harpoon-pull', '牽引発展', '貫通後の終端で小さな牽引波を一度出します。'],
+  ['vortex', '旋回渦', '旋回', '照準地点に渦を置き、敵の進路をゆるやかに曲げます。', '領域・制御', 0xa7f3d0, 'vortex-zone', '旋回発展', '渦が一度だけ別の位置へ移動します。'],
+  ['ward', '守護灯', '守護', 'コア周囲を巡回し、近い敵と敵弾を順に処理します。', '防衛・迎撃', 0xfef08a, 'sentinel-guard', '守護発展', '巡回灯を二つに増やしますが無敵にはしません。'],
+];
+
+for (const [id, name, shortName, description, role, color, evolutionId, evolutionName, evolutionDescription] of V4_WEAPON_SPECS) {
+  const levels = Array.from({ length: 8 }, (_, index) => ({
+    damage: 12 + index * 5,
+    cooldown: Math.max(0.28, 1.05 - index * 0.06),
+    range: 500 + index * 18,
+    radius: 38 + index * 4,
+    width: 12 + index * 2,
+    projectileSpeed: 300 + index * 18,
+    count: Math.min(4, 1 + Math.floor(index / 2)),
+  }));
+  WEAPONS[id] = define(id, name, shortName, description, role, color, levels, commonBranches(
+    { id: 'spread', name: '分散深化', description: '対象数と角度を広げます。' },
+    { id: 'piercing', name: '集中深化', description: '一列への貫通を増やします。' },
+    '一撃の威力を22%高めます。', '発射間隔を18%短くします。', `${shortName}威圧`, `${shortName}連続`,
+  ), evolution(evolutionId, evolutionName, evolutionDescription));
+}
 
 export const WEAPON_ORDER: WeaponId[] = [
   'needle', 'ray', 'cluster', 'repulse', 'chain', 'orbit', 'disc', 'gravity', 'grid', 'mine', 'lance', 'drone',
+  ...V4_WEAPON_SPECS.map(([id]) => id),
 ];

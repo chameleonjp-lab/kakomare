@@ -4,6 +4,22 @@
 
 ## V3実装：12武器・8補助・発展・配置変更（2026-09-11）
 
+## V4実装：25武器・12敵・競技無限進行（2026-09-11）
+
+対象branchは `codex/v4-endless-enemy-20260911`。V4では、設計台帳から追加13武器をruntimeへ移し、突進体・護衛体・修復体・造兵体、無限モードのテーマ循環とボス循環を実装した。基本50武器・補助20、長時間本戦、iPhone Safari、保存v3、ランキング本番は未完了である。
+
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm test -- --testTimeout=30000`（24ファイル、178件）
+- [x] `npm run verify:expansion-docs`
+- [x] `npm run build`（Viteの500 kB超チャンク警告あり）
+- [x] `npm run verify:dist`
+- [x] `npm run verify:originality`
+- [x] `git diff --check`
+- [ ] iPhone Safari実機・長時間本戦・無限60試行・30/60/120描画比較・ランキング受付
+
+提出コミット `ed6dee836d96ddbc7582c9fef7e9bb6738b2673d` の [Quality #63](https://github.com/chameleonjp-lab/kakomare/actions/runs/34594754202) は、公式PlaywrightコンテナとPages同条件runnerの両jobで全step成功した。静的・単体24ファイル178件、Chromium32件、WebKit32件、文書・build・配布物検証を確認済み。これはCI結果であり、iPhone Safari実機・長時間本戦・ランキング本番受入を意味しない。
+
 対象branchは `codex/v3-weapons-synergy-20260911`。基準mainは、マージ済みPR #20の後の `353295475354c145b06cb836543f9c5fd20b6141`。V3は、最終50武器・補助S=20へ向けた最初の実装地点として、既存8武器のLv1〜8・分岐・Lv8発展、追加4武器（迎撃格子・軌道機雷・蓄圧槍・追尾子機）、追加2補助（継電環・整備環）、敵状態の非色表現、停止中の移設・同種入替を実装する。残る38武器・12補助は設計済み・未実装のまま維持し、12種類を最終完成とは数えない。
 
 - [x] `npm ci --ignore-scripts --no-audit --no-fund`

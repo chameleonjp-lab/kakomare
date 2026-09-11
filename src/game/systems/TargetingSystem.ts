@@ -56,7 +56,21 @@ export function weaponCompatibility(enemy: Enemy, weaponId?: WeaponId, enemies: 
     case 'mine': return enemy.distanceToCore <= 360 ? 26 : -35;
     case 'lance': return enemy.type === 'shell' || enemy.type === 'lattice' ? 34 : enemy.isBoss ? 12 : -8;
     case 'drone': return enemy.type === 'dropper' || enemy.type === 'marker' || enemy.telegraph ? 32 : nearbyEnemies === 0 ? 8 : 0;
+    case 'prism': return nearbyEnemies > 1 ? 30 : 4;
+    case 'mortar': return enemy.distanceToCore > 260 ? 32 : 8;
+    case 'ribbon': return enemy.type === 'runner' ? 34 : enemy.distanceToCore < 220 ? 20 : 0;
+    case 'shockwave': return enemy.distanceToCore <= 260 ? 30 : -20;
+    case 'barrage': return nearbyEnemies > 2 ? 36 : 0;
+    case 'anchor': return enemy.distanceToCore <= 340 ? 28 : -10;
+    case 'flare': return enemy.telegraph || enemy.type === 'dropper' ? 40 : 0;
+    case 'cutter': return nearbyEnemies > 0 ? 26 : 4;
+    case 'beacon': return enemy.type === 'marker' || enemy.type === 'dropper' ? 34 : 0;
+    case 'nova': return nearbyEnemies > 2 ? 38 : enemy.isBoss ? 14 : 0;
+    case 'harpoon': return enemy.type === 'shell' || enemy.type === 'lattice' ? 30 : 0;
+    case 'vortex': return nearbyEnemies > 1 ? 34 : enemy.distanceToCore < 260 ? 18 : 0;
+    case 'ward': return enemy.distanceToCore < 230 || enemy.telegraph ? 32 : 0;
   }
+  return 0;
 }
 
 export function angleToTarget(origin: Point, target: Point): number {
