@@ -40,4 +40,4 @@
 
 保存、結果台帳、ランキングの偽ゲートウェイ、manifest検証は28ファイル・201件の単体／統合検査で確認した。文書生成・配布物・独自名称・差分検査も成功している（Viteの500 kB超チャンク警告あり）。ローカルのChromium／WebKitは実行ファイル不在により起動前で停止するため、画面操作の成功とは数えない。Draft PR提出後のGitHub Actions、実機、受付側検査はこの文書へ追記し、未確認のまま完了とは報告しない。
 
-提出先は [Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24)、提出コミットは `e779be6f42bf6a2e88b243ba505695e28e092202`。提出コミットの [Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) は記録時点で実行中であり、完了後の静的・単体・ブラウザ・配布物検査をこの欄へ追記する。CI成功、実機、実験場の本番受付確認を同一の証拠として扱わない。
+提出先は [Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24)、最終提出コミットは `16452821650d281c2e962d3e766ebf845bfe1f7d`。初回 [Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) のblob切断、[Quality #71](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630528950) のリタイア記録差分を修正し、最終 [Quality #72](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630923501) で `quality`／`pages-runner-quality` の両jobの静的・型・単体201件、Chromium32件、WebKit32件、文書・manifest・build・配布物検査が成功した。CI成功、実機、実験場の本番受付確認を同一の証拠として扱わない。

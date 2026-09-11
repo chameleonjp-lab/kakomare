@@ -9,14 +9,15 @@
 - ランキングは既定では未接続ゲートウェイ。接続時も、ゲーム生成の `start_id` →受付発行の `play_id` → `finish_game_play_v1` →一つの `submission_id` による `submit_score_idempotent_v1` の順で、応答喪失後は同じ識別子・確定得点・内訳を再送する。本番Supabase／実験場の登録、RPC署名・権限・認証・受付動作は未確認であり、DB変更・ランキング有効化は行わない。
 - `ResultLedger` は `resultId` ごとに部品・記録の精算を一回に限定し、リタイアをランキングへ送らない。ルール版・コンテンツ版・クライアント版を保存と結果で区別する。
 
-### V6の検査状態（Draft提出済み・CI確認中）
+### V6の検査状態（Draft提出済み・CI確認済み）
 
 - `npm test -- --run --testTimeout=30000` は28ファイル・201件が成功。保存v3移行、途中状態のwrite-ahead復元、入力・時計・結果台帳、ランキングの開始再送・得点内訳固定・未設定ゲートウェイ、manifest検証、完全なBuildGraph／runtime検証を含む。
 - `npm run lint`、`npm run typecheck`、`npm run generate:expansion-docs`、`npm run verify:expansion-docs`、`npm run verify:ranking-manifest`、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` は成功（Viteの500 kB超チャンク警告は継続）。
 - 途中保存は runSeed、固定時計、入力台帳、目的別乱数、出現状態、敵・弾・機雷・重力領域・子機・予告・候補・配置・容量を一体で検証し、無限モードの制限時間は保存時だけ有限の0へ正規化する。BuildGraphの重複ノード・親・接続、runtimeの入れ子・map・候補も復元前に拒否し、正規キーの読み戻しを確認する。
 - ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit` は、Playwright実行ファイル（Chromium `chromium_headless_shell-1234`、WebKit `webkit-2336/pw_run.sh`）不在により起動前に失敗し、テスト本体は未実施。提出コミットのGitHub Actions結果とiPhone Safari実機を別に記録する。
-- [Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24) を `codex/v6-save-result-ranking-20260911` から提出した。ゲーム側提出コミットは `e779be6f42bf6a2e88b243ba505695e28e092202`（ローカル対応コミット `5d9352b`）で、基準main `65801a7c9619aa988f787890716252d1342d923b` から1コミット先である。PRはopen/Draft、mainへの直接push・マージ・自動マージ・保護設定変更・本番DB／実験場設定変更は行っていない。
-- 提出コミットの [Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) は記録時点で `in_progress`。完了後に両jobの結果を確認し、以前の工程の成功runをV6へ流用しない。
+- [Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24) を `codex/v6-save-result-ranking-20260911` から提出した。最終提出コミットは `16452821650d281c2e962d3e766ebf845bfe1f7d`（ローカル対応コミット `a6f7efd`）で、基準main `65801a7c9619aa988f787890716252d1342d923b` から3コミット先である。PRはopen/Draft、mainへの直接push・マージ・自動マージ・保護設定変更・本番DB／実験場設定変更は行っていない。
+- 初回 [Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) は、BattleSceneの大きなblobが転送出力上限で切断され、静的検査の構文解析で失敗した。完全なblobへ置き換えた [Quality #71](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630528950) は、既存E2Eのリタイア検査で、V6のルール版バケット初期化が未確定記録を変更していたため失敗した。いずれも失敗を隠さず同じbranchで修正した。
+- 最終提出コミットに対する [Quality #72](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630923501) は、`quality`／`pages-runner-quality` の両jobで静的・型・単体201件、Chromium32件、WebKit32件、文書・manifest・build・配布物検査の全step成功を確認した。これはGitHub Actionsの自動検査であり、iPhone Safari実機、長時間本戦、実験場本番受入を意味しない。
 - 未確認：iPhone Safari・VoiceOver・片手操作・発熱、通常720試行／無限60試行、30/60/120回描画比較、実験場本番受付・DB・公開URL。これらをV6のゲーム側検査成功へ繰り上げない。
 
 ### V6の変更境界
@@ -167,7 +168,7 @@ Luna・Maxがレイアウト修正/回帰検査、親セッションが環境差
 | V3 | 未着手 | 12武器/対応補助/連動弱点/初期混成。12は最終でない |
 | V4 | 未着手 | 25武器/補助/敵/競技無限採点/本戦初回 |
 | V5 | 未着手 | 基本50/S/全連動/追加面ボス/全形態と抽選到達 |
-| V6 | 実装済み・Draft提出前 | 保存v3/途中復元/結果一回精算/ランキングゲーム側契約。CI・本番・実機は未確認 |
+| V6 | 実装済み・Draft提出済み・CI確認済み | 保存v3/途中復元/結果一回精算/ランキングゲーム側契約。実機・本番は未確認 |
 | V7 | 未着手 | 最終本戦/負荷/独立レビュー/実機/公開受入 |
 
 | F | V0現在と最終受入 |

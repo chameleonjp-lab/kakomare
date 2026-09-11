@@ -17,11 +17,13 @@
 - [x] `npm run verify:ranking-manifest`
 - [x] `git diff --check`
 - [ ] ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（Playwright実行ファイル不在で起動前に失敗。テスト本体未実施）
-- [ ] V6提出コミットのGitHub Actions（[Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24)、[Quality #69](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630146610) は確認中）
+- [x] V6最終提出コミットのGitHub Actions（[Draft PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24)、[Quality #72](https://github.com/chameleonjp-lab/kakomare/actions/runs/34630923501)。`quality`／`pages-runner-quality` の両jobで静的・型・単体201件、Chromium32件、WebKit32件、文書・manifest・build・配布物検査が成功）
 - [ ] iPhone Safari実機、VoiceOver、片手操作、発熱、通常720試行、無限60試行、30/60/120回描画比較
 - [ ] 実験場の本番受付・DB・認証・権限・公開URL（ユーザー許可待ち。変更していない）
 
 V6固有の検査は、`tests/unit/run-save.test.ts` のv3安全境界・write-ahead復元・壊れた入力拒否、`tests/unit/result-ledger.test.ts` の一回精算、`tests/unit/ranking-client.test.ts` のstart_id再送・play_id保持・submission_idと得点内訳固定・未設定ゲートウェイ、`tests/unit/ranking-manifest.test.ts` のmanifest検証を含む。画面からの途中再開、実験場の実署名・返り値・受付側再計算は自動検査成功とは別に記録する。
+
+Quality #69はBattleSceneのblob切断による構文解析失敗、Quality #71はリタイア時の空ルール版バケット生成による既存E2E失敗だった。完全なBattleSceneの提出と、リタイア結果を全記録から除外する修正後、Quality #72で両jobの全step成功を確認した。
 
 ## V5実装：基本50武器・補助20・追加ステージ／ボス（2026-09-11）
 
