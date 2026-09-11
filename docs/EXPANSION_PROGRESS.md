@@ -21,7 +21,7 @@
 
 ### V2の提出状態
 
-- [Draft PR #20](https://github.com/chameleonjp-lab/kakomare/pull/20) を作成し、提出headは `b2ff3b0c6f10f3481c6d9690bc048c03e62cb912`。PRはopen/Draftで、mainへの直接push・マージ・自動マージ・保護設定の緩和・本番DB変更・実験場の有効化は行わない。提出headの [Quality #55](https://github.com/chameleonjp-lab/kakomare/actions/runs/34569409258) は、静的・単体172件、Chromium31件、WebKit31件、ビルド・配布物検証を含めて成功した。これはV2の自動検査であり、iPhone実機・本戦・本番連携の完了を意味しない。
+- [Draft PR #20](https://github.com/chameleonjp-lab/kakomare/pull/20) を作成。機能・文書提出headは `b2ff3b0c6f10f3481c6d9690bc048c03e62cb912`、末尾空行補正後の最終コードheadは `f4bfb4b6a85fd9374cd098691d4e81a01bd1005f`。PRはopen/Draftで、mainへの直接push・マージ・自動マージ・保護設定の緩和・本番DB変更・実験場の有効化は行わない。機能headの [Quality #55](https://github.com/chameleonjp-lab/kakomare/actions/runs/34569409258) と最終コードheadの [Quality #57](https://github.com/chameleonjp-lab/kakomare/actions/runs/34569996494) は、静的・単体172件、Chromium31件、WebKit31件、ビルド・配布物検証を含めて成功した。これはV2の自動検査であり、iPhone実機・本戦・本番連携の完了を意味しない。
 - V2のA項目はA06（設置拡張）、A07（個体識別）、A08（発射元・境界）、A12（接敵猶予の基盤）、A13（弾割当の個体化の基礎）を「実装中・検査待ち」とする。公平性の本戦測定と弾枠の全武器監査はV7へ残す。A14（途中保存）は設計用の入力台帳までで、保存実装はV6で行う。A20は本節追加で進行記録をV2へ同期した。
 
 ## V1完了記録（履歴）
