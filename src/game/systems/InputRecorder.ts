@@ -40,4 +40,3 @@ export class InputRecorder {
   public get size(): number { return this.events.length; }
   public get lastRecordedTick(): number { return this.lastTick; }
 }
-

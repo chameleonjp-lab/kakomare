@@ -41,4 +41,3 @@ export interface CapacitySnapshot {
   unlockedLayer: BuildLayer;
   allocations: Array<{ instanceId: string; cost: number; kind: BuildNodeKind }>;
 }
-
