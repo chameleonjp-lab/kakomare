@@ -894,22 +894,27 @@ export class AppController {
       }
     }
     const ruleVersion = result.ruleVersion ?? 'runtime-v0';
-    const priorRule = this.state.save.records.ruleVersions[ruleVersion] ?? { endlessBest: 0, stageBest: {} };
-    const ruleStageBest = result.stageId === 'endless' || result.retired ? priorRule.stageBest : {
-      ...priorRule.stageBest,
-      [result.stageId]: {
-        bestScore: Math.max(priorRule.stageBest[result.stageId]?.bestScore ?? 0, Math.round(result.score)),
-        bestCore: Math.max(priorRule.stageBest[result.stageId]?.bestCore ?? 0, Math.round(result.coreRemaining)),
-        bestTime: Math.max(priorRule.stageBest[result.stageId]?.bestTime ?? 0, result.survivalTime),
-      },
-    };
-    const ruleVersions = {
-      ...this.state.save.records.ruleVersions,
-      [ruleVersion]: {
-        endlessBest: result.stageId === 'endless' && !result.retired ? Math.max(priorRule.endlessBest, Math.round(result.score)) : priorRule.endlessBest,
-        stageBest: ruleStageBest,
-      },
-    };
+    // A retired run is deliberately excluded from every durable record. In
+    // particular, do not create an otherwise empty ruleset bucket just because
+    // the current runtime version was attached to the transient result.
+    const ruleVersions = result.retired ? this.state.save.records.ruleVersions : (() => {
+      const priorRule = this.state.save.records.ruleVersions[ruleVersion] ?? { endlessBest: 0, stageBest: {} };
+      const ruleStageBest = result.stageId === 'endless' ? priorRule.stageBest : {
+        ...priorRule.stageBest,
+        [result.stageId]: {
+          bestScore: Math.max(priorRule.stageBest[result.stageId]?.bestScore ?? 0, Math.round(result.score)),
+          bestCore: Math.max(priorRule.stageBest[result.stageId]?.bestCore ?? 0, Math.round(result.coreRemaining)),
+          bestTime: Math.max(priorRule.stageBest[result.stageId]?.bestTime ?? 0, result.survivalTime),
+        },
+      };
+      return {
+        ...this.state.save.records.ruleVersions,
+        [ruleVersion]: {
+          endlessBest: result.stageId === 'endless' ? Math.max(priorRule.endlessBest, Math.round(result.score)) : priorRule.endlessBest,
+          stageBest: ruleStageBest,
+        },
+      };
+    })();
     const next: SaveData = {
       ...this.state.save,
       progress: { ...this.state.save.progress, parts: this.state.save.progress.parts + settledParts, unlockedStages },
