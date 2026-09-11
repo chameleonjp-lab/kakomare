@@ -185,14 +185,20 @@ test('除外を使い切った後も新しい装置を面へ装着できる', as
   // Seed 1 intentionally puts a removable new-item candidate in the third
   // card. The first two existing upgrades cannot be removed without leaving
   // too few candidates, while this new item can be removed and consumes the
-  // last ban. The replacement weapon is selected from the current catalog.
+  // last ban. V5 expands both the weapon and support catalogs, so assert the
+  // replacement by its candidate title rather than assuming a weapon slot.
   await expect(bans.nth(2)).toBeEnabled();
   await bans.nth(2).click();
-  const placement = page.getByTestId('upgrade-placement').first();
+  const newItemCard = page.locator('[data-testid="upgrade-card"]').filter({
+    has: page.locator('[data-testid="upgrade-candidate"][aria-disabled="true"]'),
+  }).first();
+  await expect(newItemCard).toBeVisible({ timeout: 3000 });
+  const replacementTitle = (await newItemCard.getByTestId('upgrade-candidate').textContent())?.trim() ?? '';
+  const placement = newItemCard.getByTestId('upgrade-placement').first();
   await expect(placement).toBeEnabled({ timeout: 3000 });
   await placement.click();
   await expect(page.getByTestId('upgrade-candidate').first()).toBeHidden();
-  await expect(page.getByTestId('build-list')).toContainText(/武器面2: .+ Lv1/);
+  await expect(page.getByTestId('build-list')).toContainText(replacementTitle);
 });
 
 test('一時停止と再開が二重開始なしで動く', async ({ page }) => {
