@@ -20,6 +20,31 @@
 
 新しい検証IDは、全50列挙・重複監査・50×20適用表・各武器2方向の相乗効果・設計のみのruntime非混入を `tests/unit/expansion-catalog.test.ts` で確認する。CIの結果、iPhone Safari実機、公開配備、本番ランキング受付は [EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md) に対象コミットとともに記録します。
 
+## V2競技基盤：個体・接続・容量・乱数（2026-09-11）
+
+対象branchは `codex/v2-competitive-foundation-20260911`。基準mainはPR #19のマージコミット `edb84e0800d9ed657206c246241f9fafe5fe0014`。V2は既存runtimeの8武器・6補助を対象に、6→12→18面のBuildGraph、稼働容量、設置原点と反射境界、競技初期条件のローカルフック、目的別乱数、実効値、検証用入力台帳を確認する。50武器・補助20・相乗効果・新敵は設計または後続工程であり、V2の実装済み数へ加えない。
+
+- [x] `npm ci --ignore-scripts --no-audit --no-fund`（162パッケージ）
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm run test -- --testTimeout=30000`（24ファイル、172件。V2追加7件）
+- [ ] `npm run test:e2e:chromium`（31件すべて起動前に失敗。PlaywrightのChromium実行ファイル不在）
+- [ ] `npm run test:e2e:webkit`（31件すべて起動前に失敗。PlaywrightのWebKit実行ファイル不在）
+- [ ] iPhone Safari、VoiceOver、片手操作、発熱、長時間の実機検査
+- [ ] 30/60/120回描画比較、18面最大負荷、通常720試行、競技無限60試行
+
+| ID | 確認内容 | 実装・検査 | 状態 |
+|---|---|---|---|
+| B01/B02 | 層1の6面、層2の12面、層3の18面を順に開き、面を飛ばした装着を拒否 | `BuildGraph`単体、V2候補の層開放経路 | コード検査済み。画面操作未確認 |
+| B03/B07 | 同じ武器・補助を個体IDとnodeIDで分離し、接続を層内で維持 | 個体型、グラフ占有、スナップショット単体 | コード検査済み。複数同種の実戦は後続 |
+| B04 | 補助の接続線と実効値計算の対象を一致させる | `connections`、`adjacentWeaponSlots`、実効値単体 | コード検査済み |
+| B05/B06 | 設置原点、層別戦場半径、反射境界、旧弾の生成時境界を保持 | `ArenaGeometry`単体、Projectileスナップショット | コード検査済み。層拡張の長時間比較は未実施 |
+| C06/C07 | 競技フックで研究依存の基礎能力を外し、容量6/12/18と候補の合法性を扱う | `competitive`初期化、`BuildCapacity`、候補単体 | コード検査済み。ランキング受付未接続 |
+| C08/C09 | 候補・敵出現・戦闘効果・表示の乱数を分離し、入力をtick/角度で正規化 | `RandomStreams`、`InputRecorder`単体 | コード検査済み。描画頻度比較は未実施 |
+| C14 | 結果へ個体別記録・ルール版・入力台帳・構成スナップショットを渡す | `RunRecorder`、`BattleResult`型 | コード検査済み。途中保存復元はV6 |
+
+V2で追加した構造は、設計済みの50武器・補助20を実行時registryへ登録しません。本番ランキング通信、Supabase/実験場、DB・権限・公開設定は変更していません。自動ブラウザ検査が起動できない環境の失敗を成功へ繰り上げず、GitHub Actionsの提出commit結果と実機結果を別記録にします。
+
 ## PR-Aの品質検査
 
 対象ブランチ: `codex/quality-a-20260908`

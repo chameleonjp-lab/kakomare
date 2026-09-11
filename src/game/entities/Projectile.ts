@@ -16,6 +16,9 @@ export interface ProjectileOptions {
   bounces?: number;
   hitCooldown?: number;
   sourceWeaponId?: WeaponId | null;
+  sourceWeaponInstanceId?: string | null;
+  /** Boundary used by this projectile; expansion does not retarget old shots. */
+  boundaryRadius?: number;
   impactX?: number;
   impactY?: number;
   impactRadius?: number;
@@ -38,6 +41,8 @@ export class Projectile {
   public piercing: number;
   public enemyProjectile: boolean;
   public sourceWeaponId: WeaponId | null;
+  public sourceWeaponInstanceId: string | null;
+  public boundaryRadius: number;
   public active = true;
   public targetId: number | null = null;
   public bounces: number;
@@ -64,6 +69,8 @@ export class Projectile {
     this.piercing = 0;
     this.enemyProjectile = false;
     this.sourceWeaponId = null;
+    this.sourceWeaponInstanceId = null;
+    this.boundaryRadius = 325;
     this.bounces = 0;
     this.hitCooldown = 0;
     this.impactX = null;
@@ -87,6 +94,8 @@ export class Projectile {
     this.piercing = options.piercing;
     this.enemyProjectile = options.enemyProjectile ?? false;
     this.sourceWeaponId = options.sourceWeaponId ?? null;
+    this.sourceWeaponInstanceId = options.sourceWeaponInstanceId ?? null;
+    this.boundaryRadius = Number.isFinite(options.boundaryRadius) && (options.boundaryRadius ?? 0) > 0 ? options.boundaryRadius! : 325;
     this.bounces = options.bounces ?? 0;
     this.hitCooldown = options.hitCooldown ?? 0;
     this.impactX = options.impactX ?? null;
@@ -124,6 +133,8 @@ export class Projectile {
       enemyProjectile: this.enemyProjectile,
       bounces: this.bounces,
       sourceWeaponId: this.sourceWeaponId,
+      sourceWeaponInstanceId: this.sourceWeaponInstanceId,
+      boundaryRadius: this.boundaryRadius,
     };
   }
 }

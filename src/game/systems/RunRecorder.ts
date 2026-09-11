@@ -1,5 +1,6 @@
 import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
 import type { BattleResult } from '../../types/game';
+import { InputRecorder, type NormalizedRunInput } from './InputRecorder';
 
 export class RunRecorder {
   public readonly stageId: StageId;
@@ -12,6 +13,9 @@ export class RunRecorder {
   public readonly upgrades: string[] = [];
   public readonly branches: string[] = [];
   public readonly controlSeconds = { slowed: 0, pushed: 0, pulled: 0 };
+  public readonly weaponInstanceDamage: Record<string, number> = {};
+  public readonly inputRecorder = new InputRecorder();
+  public readonly ruleVersion: string;
   public kills = 0;
   public score = 0;
   public bossDefeated = false;
@@ -19,16 +23,20 @@ export class RunRecorder {
   public survivalTime = 0;
   public lastDamageSource = 'まだ被害はありません';
 
-  public constructor(stageId: StageId, bossId: BossId = 'crown', runSeed = 0) {
+  public constructor(stageId: StageId, bossId: BossId = 'crown', runSeed = 0, ruleVersion = 'runtime-v0') {
     this.stageId = stageId;
     this.bossId = bossId;
     this.runSeed = runSeed;
+    this.ruleVersion = ruleVersion;
   }
 
-  public recordWeaponDamage(id: WeaponId, amount: number): void {
+  public recordWeaponDamage(id: WeaponId, amount: number, instanceId?: string): void {
     if (amount <= 0) return;
     this.weaponDamage[id] = (this.weaponDamage[id] ?? 0) + amount;
+    if (instanceId) this.weaponInstanceDamage[instanceId] = (this.weaponInstanceDamage[instanceId] ?? 0) + amount;
   }
+
+  public recordInput(input: NormalizedRunInput): void { this.inputRecorder.record(input); }
 
   public recordEnemyKill(id: EnemyId): void {
     this.enemyKills[id] = (this.enemyKills[id] ?? 0) + 1;
@@ -71,6 +79,9 @@ export class RunRecorder {
       runSeed: this.runSeed,
       newUnlock,
       retired,
+      ruleVersion: this.ruleVersion,
+      inputLog: this.inputRecorder.snapshot(),
+      weaponInstanceDamage: { ...this.weaponInstanceDamage },
     };
   }
 }

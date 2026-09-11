@@ -37,6 +37,7 @@ export class GameHost {
     testOutcome?: 'victory' | 'defeat';
     testUpgrade?: boolean;
     testUpgradeExperience?: number;
+    competitive?: boolean;
     runId: number;
     seed?: number;
     callbacks: BattleCallbacks;
