@@ -37,6 +37,8 @@ export class Enemy {
   public pressureCooldown = 0;
   public lastHitAt = -Infinity;
   public specialDamageTaken = 0;
+  public summoned = false;
+  public summonedChildren = 0;
   private age = 0;
   /** Radial path state stays separate from the runner's visual wobble. */
   private movementAngle = 0;
@@ -71,7 +73,7 @@ export class Enemy {
     this.y = Math.sin(angle) * distanceToCore;
     this.movementAngle = angle;
     this.movementDistance = distanceToCore;
-    this.shieldHits = this.type === 'lattice' ? 8 : 0;
+    this.shieldHits = this.type === 'lattice' ? 8 : this.type === 'guard' ? 4 : 0;
     this.invulnerable = false;
     this.telegraph = false;
     this.telegraphPhase = 0;
@@ -80,16 +82,23 @@ export class Enemy {
     this.active = true;
     this.splitDone = false;
     this.shotCooldown = this.type === 'dropper' ? DROPPER_SHOT_INTERVAL_SECONDS : 0;
-    this.specialCooldown = this.isBoss ? 1.2 : 0;
+    this.specialCooldown = this.isBoss ? 1.2 : this.type === 'charger' ? 2.8 : this.type === 'repair' || this.type === 'factory' ? 2 : 0;
     this.pressureCooldown = this.isBoss ? (BOSSES[this.type as BossId].pressure?.interval ?? 0) : 0;
     this.lastHitAt = -Infinity;
     this.specialDamageTaken = 0;
+    this.summoned = false;
+    this.summonedChildren = 0;
     this.age = 0;
   }
 
   public update(seconds: number, elapsed: number, core: Point, movementMultiplier: number, speedMultiplier = 1): boolean {
     if (!this.active) return false;
     this.age += seconds;
+    if (this.type === 'charger' || this.type === 'repair' || this.type === 'factory') {
+      this.specialCooldown -= seconds;
+      if (this.specialCooldown <= 0) this.specialCooldown = this.type === 'charger' ? 2.8 : 2;
+      this.telegraph = this.specialCooldown <= (this.type === 'charger' ? 0.9 : 0.65);
+    }
     const isStopped = (this.isBoss && this.movementDistance <= 196) || (this.type === 'dropper' && this.movementDistance <= 250);
     const slow = elapsed < this.slowUntil ? 0.55 : 1;
     if (!isStopped) this.movementDistance = Math.max(0, this.movementDistance - this.speed * slow * movementMultiplier * speedMultiplier * seconds);
@@ -105,6 +114,9 @@ export class Enemy {
       this.telegraph = this.distanceToCore <= 250
         && this.shotCooldown > 0
         && this.shotCooldown <= DROPPER_TELEGRAPH_SECONDS;
+    }
+    if (this.type === 'charger' && !this.telegraph && this.specialCooldown > 2.35) {
+      this.movementDistance = Math.max(0, this.movementDistance - this.speed * 2.8 * seconds);
     }
     if (this.type === 'phase') {
       const cycle = this.age % 1.4;
@@ -124,7 +136,7 @@ export class Enemy {
 
   public damage(amount: number, elapsed: number, attackAngle: ImpactAngle = 0): { dealt: number; destroyed: boolean; blocked: boolean } {
     if (!this.active || this.invulnerable) return { dealt: 0, destroyed: false, blocked: true };
-    if (this.type === 'lattice' && this.shieldHits > 0) {
+    if ((this.type === 'lattice' || this.type === 'guard') && this.shieldHits > 0) {
       this.shieldHits -= 1;
       return { dealt: 0, destroyed: false, blocked: true };
     }

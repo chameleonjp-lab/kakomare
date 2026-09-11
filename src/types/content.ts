@@ -5,9 +5,11 @@ export type StageId = 'stage-1' | 'stage-2' | 'stage-3' | 'endless';
  * and eligible for in-run acquisition. */
 export type WeaponId =
   | 'needle' | 'ray' | 'cluster' | 'repulse' | 'chain' | 'orbit' | 'disc' | 'gravity'
-  | 'grid' | 'mine' | 'lance' | 'drone';
+  | 'grid' | 'mine' | 'lance' | 'drone'
+  | 'prism' | 'mortar' | 'ribbon' | 'shockwave' | 'barrage' | 'anchor' | 'flare'
+  | 'cutter' | 'beacon' | 'nova' | 'harpoon' | 'vortex' | 'ward';
 export type SupportId = 'output' | 'rhythm' | 'branch' | 'focus' | 'observe' | 'brake' | 'relay' | 'repair';
-export type EnemyId = 'shard' | 'runner' | 'shell' | 'lattice' | 'spore' | 'marker' | 'dropper' | 'phase';
+export type EnemyId = 'shard' | 'runner' | 'shell' | 'lattice' | 'spore' | 'marker' | 'dropper' | 'phase' | 'charger' | 'guard' | 'repair' | 'factory';
 export type BossId = 'crown' | 'designer' | 'echo';
 
 export type ContentId = WeaponId | SupportId | EnemyId | BossId;

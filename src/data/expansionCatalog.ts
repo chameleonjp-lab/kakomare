@@ -6,7 +6,7 @@ import type {
   SupportApplicability,
 } from '../types/expansion';
 
-export const EXPANSION_RULE_VERSION = 'expansion-v1-design';
+export const EXPANSION_RULE_VERSION = 'expansion-v4-runtime';
 
 export const EXPANSION_SUPPORT_ORDER = [
   'output', 'rhythm', 'branch', 'focus', 'observe', 'brake',
@@ -209,8 +209,11 @@ const makeSynergy = (weaponId: string, index: number, seed: SynergySeed): Expans
   testId: `C04-${weaponId}-${index === 0 ? 'A' : 'B'}`,
 });
 
+const V4_RUNTIME_WEAPONS = new Set(['prism', 'mortar', 'ribbon', 'shockwave', 'barrage', 'anchor', 'flare', 'cutter', 'beacon', 'nova', 'harpoon', 'vortex', 'ward']);
+
 export const EXPANSION_WEAPONS: ExpansionWeaponDesign[] = EXPANSION_WEAPON_SEEDS.map((seed) => ({
   ...seed,
+  status: V4_RUNTIME_WEAPONS.has(seed.id) ? 'implemented' : seed.status,
   supportProfile: PROFILES[seed.archetype],
   nonApplicableReasons: Object.fromEntries(
     Object.entries(PROFILES[seed.archetype])

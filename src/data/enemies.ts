@@ -9,6 +9,10 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
   marker: { id: 'marker', name: '標識体', description: '周囲120px以内の敵の速度を20%上げます。', hp: 48, speed: 34, contactDamage: 6, threatCost: 3, color: 0xf4e285, hitRadius: 19 },
   dropper: { id: 'dropper', name: '投下体', description: 'コアから離れた位置で停止し、発射前の予告後に弾を撃ちます。', hp: 42, speed: 31, contactDamage: 10, threatCost: 3, color: 0xff8bd8, hitRadius: 20 },
   phase: { id: 'phase', name: '位相体', description: '一定間隔で短時間だけ攻撃を受けなくなります。', hp: 50, speed: 40, contactDamage: 8, threatCost: 3.2, color: 0x78a8ff, hitRadius: 18 },
+  charger: { id: 'charger', name: '突進体', description: '停止して予告した後、短く突進します。突進後に隙があります。', hp: 40, speed: 50, contactDamage: 8, threatCost: 2.8, color: 0xff6b6b, hitRadius: 20 },
+  guard: { id: 'guard', name: '護衛体', description: '前方の限定した角度へ盾を張り、近くの敵を守ります。', hp: 120, speed: 22, contactDamage: 10, threatCost: 4.2, color: 0x818cf8, hitRadius: 24 },
+  repair: { id: 'repair', name: '修復体', description: '予告後、近くの敵を少量だけ回復します。', hp: 60, speed: 28, contactDamage: 7, threatCost: 3.8, color: 0x34d399, hitRadius: 19 },
+  factory: { id: 'factory', name: '造兵体', description: '一定間隔で小型の召喚体を作ります。子からは報酬が出ません。', hp: 100, speed: 18, contactDamage: 9, threatCost: 4.8, color: 0xf59e0b, hitRadius: 23 },
 };
 
-export const ENEMY_ORDER: EnemyId[] = ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker', 'dropper', 'phase'];
+export const ENEMY_ORDER: EnemyId[] = ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker', 'dropper', 'phase', 'charger', 'guard', 'repair', 'factory'];

@@ -10,19 +10,19 @@ export const STAGES: Record<StageId, StageDefinition> = {
   'stage-2': {
     id: 'stage-2', name: '断続波', timeLimit: 210,
     description: '外殻と標識体が作る組み合わせへ、武器の役割を合わせます。',
-    enemies: ['shard', 'runner', 'shell', 'spore', 'marker', 'dropper'], boss: 'designer', clearBonus: 5_000,
+    enemies: ['shard', 'runner', 'shell', 'spore', 'marker', 'dropper', 'charger'], boss: 'designer', clearBonus: 5_000,
     budgetBase: 1.7, budgetRise: 0.016, enemyLimit: 125, bossAt: 170, difficultyFactor: 0.0038,
   },
   'stage-3': {
     id: 'stage-3', name: '閉鎖環', timeLimit: 240,
     description: 'すべての敵と反響核に対応し、組み上げた装置を完成させます。',
-    enemies: ['shard', 'runner', 'lattice', 'shell', 'spore', 'marker', 'dropper', 'phase'], boss: 'echo', clearBonus: 8_000,
+    enemies: ['shard', 'runner', 'lattice', 'shell', 'spore', 'marker', 'dropper', 'phase', 'charger', 'guard', 'repair'], boss: 'echo', clearBonus: 8_000,
     budgetBase: 2, budgetRise: 0.02, enemyLimit: 160, bossAt: 195, difficultyFactor: 0.0045,
   },
   endless: {
     id: 'endless', name: '無限モード', timeLimit: Number.POSITIVE_INFINITY,
     description: '5分ごとに危険度が上がる、制限時間のない記録挑戦です。',
-    enemies: ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker', 'dropper', 'phase'], boss: 'echo', clearBonus: 0,
+    enemies: ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker', 'dropper', 'phase', 'charger', 'guard', 'repair', 'factory'], boss: 'echo', clearBonus: 0,
     budgetBase: 1.8, budgetRise: 0.018, enemyLimit: 180, bossAt: 300, difficultyFactor: 0.0045, isEndless: true,
   },
 };

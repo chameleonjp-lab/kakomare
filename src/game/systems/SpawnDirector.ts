@@ -72,6 +72,7 @@ export class SpawnDirector {
   private pendingSpecialWave: PendingSpecialWave | null = null;
   private nextSpecialWaveAt = SPECIAL_WAVE_FIRST_AT_SECONDS;
   private specialWaveCount = 0;
+  private endlessBossIndex = 0;
 
   public constructor(private readonly stageId: StageId, seedOrRng: number | DeterministicRng, private readonly testMode = false) {
     this.rng = seedOrRng instanceof DeterministicRng ? seedOrRng : new DeterministicRng(seedOrRng);
@@ -83,7 +84,8 @@ export class SpawnDirector {
   }
 
   public get bossId() {
-    return STAGES[this.stageId].boss;
+    if (this.stageId !== 'endless') return STAGES[this.stageId].boss;
+    return (['echo', 'crown', 'designer'] as const)[this.endlessBossIndex % 3];
   }
 
   public get enemyLimit(): number {
@@ -203,7 +205,7 @@ export class SpawnDirector {
     if (!this.bossPending) return;
     this.bossPending = false;
     this.bossSent = true;
-    if (this.stageId === 'endless') this.nextBossAt += 300;
+    if (this.stageId === 'endless') { this.nextBossAt += 300; this.endlessBossIndex += 1; }
   }
 
   public get rngForEvents(): DeterministicRng {
@@ -222,7 +224,7 @@ export class SpawnDirector {
     if (this.stageId === 'stage-2') {
       if (elapsed < 45) return inStage(['shard', 'runner', 'shell']);
       if (elapsed < 110) return inStage(['shard', 'runner', 'shell', 'spore', 'marker']);
-      return inStage(['shard', 'runner', 'shell', 'spore', 'marker', 'dropper']);
+      return inStage(['shard', 'runner', 'shell', 'spore', 'marker', 'dropper', 'charger']);
     }
     if (this.stageId === 'stage-3') {
       if (elapsed < 45) return inStage(['shard', 'runner', 'lattice']);
@@ -232,11 +234,12 @@ export class SpawnDirector {
     if (elapsed >= 900) {
       const common = new Set<EnemyId>(['shard', 'runner']);
       const special = stage.enemies.filter((id) => !common.has(id));
-      return [...stage.enemies, ...special, ...special];
+      return [...special, ...special, ...special, ...common];
     }
     const window = elapsed % 300;
     if (window < 45) return ['shard', 'runner', 'shell'];
-    if (window < 120) return ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker'];
+    if (window < 120) return ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker', 'charger'];
+    if (window < 210) return ['shard', 'runner', 'guard', 'repair', 'dropper'];
     return stage.enemies;
   }
 

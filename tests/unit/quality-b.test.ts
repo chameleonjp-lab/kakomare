@@ -21,7 +21,7 @@ describe('V3 の実効値と表現', () => {
     }
   });
 
-  it('12武器×8補助の96組すべてで隣接効果を計算できる', () => {
+  it('25武器×8補助の200組すべてで隣接効果を計算できる', () => {
     const expectedAtLevelThree = {
       output: { primary: 0.2, secondary: 0.2 },
       rhythm: { primary: 0.16, secondary: 0.16 },
@@ -42,7 +42,7 @@ describe('V3 の実効値と表現', () => {
         combinations += 1;
       }
     }
-    expect(combinations).toBe(96);
+    expect(combinations).toBe(25 * 8);
   });
 
   it('補助2基の上限は成長値を隠さず、射程と弾速を別々に制限する', () => {

@@ -6,7 +6,7 @@ import type { CompetitiveRulesDesign } from '../types/expansion';
  * runtime rules until V2/V4/V6 implement and verify each part.
  */
 export const COMPETITIVE_RULES: CompetitiveRulesDesign = {
-  version: 'expansion-v1-design',
+  version: 'expansion-v4-runtime',
   initial: {
     coreHp: 100,
     baseDamage: 8,

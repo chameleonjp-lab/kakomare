@@ -527,6 +527,23 @@ export class BattleScene extends Phaser.Scene {
       if (enemy.type === 'dropper' && !wasTelegraph && enemy.telegraph) {
         this.options.callbacks.onStatus('投下体が遠隔弾を準備しています');
       }
+      if ((enemy.type === 'charger' || enemy.type === 'repair' || enemy.type === 'factory') && wasTelegraph && !enemy.telegraph) {
+        if (enemy.type === 'repair') {
+          const target = this.enemies.find((other) => other.active && !other.isBoss && other.id !== enemy.id && Math.hypot(other.x - enemy.x, other.y - enemy.y) <= 180);
+          if (target) {
+            target.hp = Math.min(target.maxHp, target.hp + 6);
+            this.options.callbacks.onStatus('修復体が近くの敵を回復しました');
+          }
+        } else if (enemy.type === 'factory' && enemy.summonedChildren < 4) {
+          const remaining = 4 - enemy.summonedChildren;
+          for (let index = 0; index < Math.min(2, remaining); index += 1) {
+            if (this.spawnEnemy('shard', enemy.angle + (index === 0 ? -0.16 : 0.16), false, true)) enemy.summonedChildren += 1;
+          }
+          this.options.callbacks.onStatus('造兵体が小型の召喚体を作りました');
+        } else if (enemy.type === 'charger') {
+          this.options.callbacks.onStatus('突進体が突進を開始しました');
+        }
+      }
       if (enemy.slowUntil > this.elapsed) this.recorder.recordControl('slowed', seconds);
       if (reached) {
         const damage = applyContactDamage(this.core, enemy);
@@ -613,8 +630,36 @@ export class BattleScene extends Phaser.Scene {
     else if (weapon.id === 'grid') this.fireGrid(weapon, target, angle, damage);
     else if (weapon.id === 'mine') this.fireMine(weapon, target, angle, damage);
     else if (weapon.id === 'lance') this.fireLance(weapon, angle, damage);
-    else this.deployDrones(weapon);
+    else if (weapon.id === 'drone') this.deployDrones(weapon);
+    else this.fireAdditionalWeapon(weapon, target, angle, damage);
     if (!allowBranch) return;
+  }
+
+  /** V4 weapons reuse bounded projectile primitives while keeping distinct
+   * target/timing parameters and source identity for later balance analysis. */
+  private fireAdditionalWeapon(weapon: Weapon, target: Enemy | null, angle: number, damage: number): void {
+    this.options.callbacks.onAudioCue?.('shot');
+    this.recorder.recordWeaponEvent(weapon.id, 'shots');
+    const origin = this.weaponOrigin(weapon);
+    const stats = this.combatStats(weapon);
+    const count = Math.max(1, Math.min(4, weapon.stats.count ?? 1));
+    const spread = weapon.id === 'barrage' || weapon.id === 'prism' ? 0.14 : 0.06;
+    const speed = stats.projectileSpeed ?? 360;
+    const life = weapon.id === 'mortar' || weapon.id === 'nova' ? 0.9 : 1.25;
+    for (let index = 0; index < count; index += 1) {
+      const offset = count === 1 ? 0 : (index - (count - 1) / 2) * spread;
+      this.addProjectile({
+        kind: 'needle', x: origin.x, y: origin.y,
+        vx: Math.cos(angle + offset) * speed, vy: Math.sin(angle + offset) * speed,
+        radius: Math.min(11, 5 + (weapon.stats.width ?? 0) / 12),
+        damage: damage * (weapon.id === 'mortar' || weapon.id === 'nova' ? 1.35 : 0.72),
+        life, piercing: weapon.id === 'harpoon' || weapon.id === 'cutter' ? 2 : 0,
+        sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+      });
+    }
+    if (weapon.evolutionId && target && (weapon.id === 'shockwave' || weapon.id === 'nova' || weapon.id === 'vortex')) {
+      this.hitArea(weapon, target.x, target.y, weapon.stats.radius ?? 52, damage * 0.35, null, new Set<number>());
+    }
   }
 
   private fireNeedle(weapon: Weapon, angle: number, damage: number, allowEvolution = true): void {
@@ -1337,12 +1382,13 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private spawnEnemy(type: EnemyId, angle: number, bossReinforcement = false): boolean {
+  private spawnEnemy(type: EnemyId, angle: number, bossReinforcement = false, summoned = false): boolean {
     const reservedSlots = bossReinforcement ? 0 : this.pendingBossEnemySlots();
     if (this.availableEnemySlots() <= reservedSlots) return false;
     const stage = STAGES[this.options.stageId];
     const difficulty = stage.isEndless ? Math.pow(1.22, Math.floor(this.elapsed / 300)) : 1 + this.elapsed * stage.difficultyFactor;
     const enemy = this.enemyPool.acquire(type, angle, this.arenaRadius() + 5, difficulty, stage.isEndless ? 1.4 : 1.25);
+    enemy.summoned = summoned;
     if (!this.enemies.includes(enemy)) this.enemies.push(enemy);
     const notice = ENEMIES[type].name;
     if (notice !== this.lastEnemyNotice) { this.lastEnemyNotice = notice; this.options.callbacks.onStatus(`${notice}が接近中`); }
@@ -1407,6 +1453,7 @@ export class BattleScene extends Phaser.Scene {
     }
     const enemyId = enemy.type as EnemyId;
     this.options.callbacks.onAudioCue?.('defeat');
+    if (enemy.summoned) return;
     this.recorder.kills += 1;
     this.recorder.recordEnemyKill(enemyId);
     this.addScore(10 * (1 + ENEMIES[enemyId].threatCost));
