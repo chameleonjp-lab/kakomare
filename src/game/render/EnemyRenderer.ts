@@ -39,6 +39,16 @@ export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySna
     graphics.lineStyle(2, 0x9be7ff, 0.9);
     graphics.strokeCircle(x, y, enemy.hitRadius + 6);
   }
+  if (enemy.marked) {
+    graphics.lineStyle(2, 0xf8d477, 0.95);
+    graphics.strokeCircle(x, y, enemy.hitRadius + 11);
+    graphics.lineBetween(x - 4, y - enemy.hitRadius - 15, x + 4, y - enemy.hitRadius - 7);
+  }
+  if (enemy.burning) {
+    graphics.lineStyle(2, 0xff785e, 0.95);
+    graphics.strokeCircle(x, y, enemy.hitRadius + 13);
+    graphics.lineBetween(x - 5, y + enemy.hitRadius + 7, x + 5, y + enemy.hitRadius + 15);
+  }
 }
 
 function drawBoss(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x: number, y: number, alpha: number): void {
@@ -56,6 +66,25 @@ function drawBoss(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x
     graphics.lineStyle(2, 0xfff1a8, alpha);
     graphics.lineBetween(x - 20, y, x + 20, y);
     graphics.lineBetween(x, y - 20, x, y + 20);
+  } else if (id === 'gate') {
+    graphics.lineStyle(4, color, alpha);
+    graphics.strokeRect(x - 34, y - 34, 68, 68);
+    graphics.lineStyle(2, 0xfff1a8, alpha);
+    graphics.lineBetween(x - 30, y - 12, x + 30, y - 12);
+    graphics.lineBetween(x - 30, y + 12, x + 30, y + 12);
+  } else if (id === 'weaver') {
+    drawPolygon(graphics, polygonPoints(x, y, 36, 8, enemy.shieldRotation ?? 0), color, alpha * 0.22, color);
+    graphics.lineStyle(2, 0xfff1a8, alpha);
+    graphics.strokeCircle(x, y, 22);
+    graphics.lineBetween(x - 28, y - 28, x + 28, y + 28);
+    graphics.lineBetween(x + 28, y - 28, x - 28, y + 28);
+  } else if (id === 'reactor') {
+    graphics.lineStyle(4, color, alpha);
+    graphics.strokeCircle(x, y, 38);
+    graphics.lineStyle(2, 0xfff1a8, alpha);
+    for (const angle of [0, Math.PI * 2 / 3, Math.PI * 4 / 3]) {
+      graphics.lineBetween(x, y, x + Math.cos(angle) * 34, y + Math.sin(angle) * 34);
+    }
   } else {
     graphics.lineStyle(3, color, alpha);
     graphics.strokeCircle(x, y, 30);

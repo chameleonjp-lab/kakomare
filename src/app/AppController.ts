@@ -751,7 +751,14 @@ export class AppController {
   private finishBattle(result: BattleResult): void {
     if (!this.runLifecycle.finish()) return;
     const previous = result.stageId === 'endless' ? null : this.state.save.records.stageBest[result.stageId];
-    const firstClear = !result.retired && result.outcome === 'victory' && result.newUnlock !== null && !this.state.save.progress.unlockedStages.includes(result.newUnlock);
+    // Stage 3 preserves the direct endless route and also opens the V5 branch.
+    // Both unlocks are committed atomically with the result.
+    const unlocksFromResult: StageId[] = [
+      result.newUnlock,
+      result.stageId === 'stage-3' ? 'stage-4' : null,
+    ].filter((stageId): stageId is StageId => stageId !== null);
+    const firstClear = !result.retired && result.outcome === 'victory'
+      && unlocksFromResult.some((stageId) => !this.state.save.progress.unlockedStages.includes(stageId));
     const finalResult = firstClear ? { ...result, partsEarned: result.partsEarned + FIRST_CLEAR_PART_BONUS } : result;
     this.lastResult = finalResult;
     this.gameHost.stop();
@@ -772,7 +779,11 @@ export class AppController {
     const previousSector = this.state.save.records.sectorDamage[result.stageId] ?? [0, 0, 0, 0, 0, 0];
     const sectorDamage = result.retired ? previousSector : previousSector.map((value, index) => value + (result.sectorDamage[index] ?? 0));
     const unlockedStages = [...this.state.save.progress.unlockedStages];
-    if (!result.retired && result.outcome === 'victory' && result.newUnlock && !unlockedStages.includes(result.newUnlock)) unlockedStages.push(result.newUnlock);
+    if (!result.retired && result.outcome === 'victory') {
+      for (const stageId of unlocksFromResult) {
+        if (!unlockedStages.includes(stageId)) unlockedStages.push(stageId);
+      }
+    }
     const next: SaveData = {
       ...this.state.save,
       progress: { ...this.state.save.progress, parts: this.state.save.progress.parts + settledParts, unlockedStages },

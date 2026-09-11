@@ -1,12 +1,12 @@
 import type { CompetitiveRulesDesign } from '../types/expansion';
 
 /**
- * V1 fixes the data contract for later implementation. It does not enable
- * ranking submission and it is intentionally separate from the current
- * runtime rules until V2/V4/V6 implement and verify each part.
+ * V5 carries the complete content registry into the runtime contract. It does
+ * not enable ranking submission; the actual experiment-site integration stays
+ * in V6 behind a separate permission gate.
  */
 export const COMPETITIVE_RULES: CompetitiveRulesDesign = {
-  version: 'expansion-v4-runtime',
+  version: 'expansion-v5-runtime',
   initial: {
     coreHp: 100,
     baseDamage: 8,

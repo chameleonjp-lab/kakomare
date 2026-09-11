@@ -85,7 +85,7 @@ export class SpawnDirector {
 
   public get bossId() {
     if (this.stageId !== 'endless') return STAGES[this.stageId].boss;
-    return (['echo', 'crown', 'designer'] as const)[this.endlessBossIndex % 3];
+    return (['echo', 'crown', 'designer', 'gate', 'weaver', 'reactor'] as const)[this.endlessBossIndex % 6];
   }
 
   public get enemyLimit(): number {
@@ -229,6 +229,21 @@ export class SpawnDirector {
     if (this.stageId === 'stage-3') {
       if (elapsed < 45) return inStage(['shard', 'runner', 'lattice']);
       if (elapsed < 120) return inStage(['shard', 'runner', 'lattice', 'shell', 'spore', 'marker']);
+      return inStage(stage.enemies);
+    }
+    if (this.stageId === 'stage-4') {
+      if (elapsed < 55) return inStage(['shard', 'runner', 'dropper']);
+      if (elapsed < 135) return inStage(['shard', 'runner', 'dropper', 'marker', 'charger']);
+      return inStage(stage.enemies);
+    }
+    if (this.stageId === 'stage-5') {
+      if (elapsed < 55) return inStage(['shard', 'runner', 'repair']);
+      if (elapsed < 150) return inStage(['shard', 'runner', 'shell', 'spore', 'repair', 'factory']);
+      return inStage(stage.enemies);
+    }
+    if (this.stageId === 'stage-6') {
+      if (elapsed < 60) return inStage(['shard', 'runner', 'charger', 'dropper']);
+      if (elapsed < 165) return inStage(['shard', 'runner', 'shell', 'lattice', 'marker', 'guard', 'repair']);
       return inStage(stage.enemies);
     }
     if (elapsed >= 900) {

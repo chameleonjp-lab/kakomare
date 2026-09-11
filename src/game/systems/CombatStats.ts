@@ -21,10 +21,11 @@ export function effectiveWeaponStats(
   projectileSpeedMultiplier = 1,
   polishStacks = 0,
 ): EffectiveWeaponStats {
-  const outputBonus = Math.min(0.4,
+  const veilPenalty = supportEffectsFor(supports, 'veil', weapon.slot).secondary;
+  const outputBonus = Math.max(0, Math.min(0.4,
     supportEffectsFor(supports, 'output', weapon.slot).primary
     + supportEffectsFor(supports, 'relay', weapon.slot).primary,
-  );
+  ) - veilPenalty);
   const intervalBonus = supportEffectsFor(supports, 'rhythm', weapon.slot).primary;
   const rangeBonus = supportEffectsFor(supports, 'focus', weapon.slot).primary;
   const speedBonus = supportEffectsFor(supports, 'focus', weapon.slot).secondary;

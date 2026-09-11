@@ -11,11 +11,18 @@ const WEAPON_COLORS: Record<WeaponSnapshot['id'], number> = {
   prism: 0xff7dd3, mortar: 0xffa07a, ribbon: 0x8be9fd, shockwave: 0xffd166,
   barrage: 0xfca5a5, anchor: 0x94a3b8, flare: 0xfde68a, cutter: 0xc4b5fd,
   beacon: 0xf9a8d4, nova: 0xfb7185, harpoon: 0x67e8f9, vortex: 0xa7f3d0, ward: 0xfef08a,
+  fan: 0xf472b6, swell: 0x60a5fa, seeker: 0x38bdf8, drill: 0xf59e0b, mist: 0x94a3b8,
+  spark: 0xfacc15, coil: 0xc084fc, bloom: 0xfb7185, shuttle: 0x2dd4bf, siphon: 0x22d3ee,
+  mirror: 0xe879f9, stasis: 0x67e8f9, quake: 0xf97316, spoke: 0x818cf8, hollow: 0xa78bfa,
+  snare: 0x34d399, chime: 0xf0abfc, thunder: 0xfde047, frost: 0x93c5fd, swarm: 0x86efac,
+  counter: 0x64748b, dive: 0x14b8a6, axis: 0x818cf8, seed: 0x84cc16, requiem: 0xe879f9,
 };
 
 const SUPPORT_COLORS: Record<SupportSnapshot['id'], number> = {
   output: 0xffbe5c, rhythm: 0x63d7e6, branch: 0xff8bd8, focus: 0x78a8ff, observe: 0xf4e285, brake: 0x76e6a7,
-  relay: 0xff9f68, repair: 0x9be7ff,
+  relay: 0xff9f68, repair: 0x9be7ff, shatter: 0xf97316, conductive: 0x22d3ee, ignite: 0xfb7185,
+  brink: 0xef4444, anchor: 0x94a3b8, veil: 0xc4b5fd, vector: 0x60a5fa, pulse: 0xf59e0b,
+  reserve: 0xeab308, lattice: 0x818cf8, orbit: 0x34d399, catalyst: 0xa78bfa,
 };
 
 export function drawDevice(graphics: Phaser.GameObjects.Graphics, centerX: number, centerY: number, weapons: WeaponSnapshot[], supports: SupportSnapshot[], unlockedLayer = 1): void {

@@ -6,7 +6,7 @@ import { angularDistance } from '../systems/Angle';
 import type { ImpactAngle } from '../systems/ImpactDirection';
 
 function isBossId(type: EnemyId | BossId): type is BossId {
-  return type === 'crown' || type === 'designer' || type === 'echo';
+  return type === 'crown' || type === 'designer' || type === 'echo' || type === 'gate' || type === 'weaver' || type === 'reactor';
 }
 
 export const DROPPER_SHOT_INTERVAL_SECONDS = 1.1;
@@ -28,6 +28,8 @@ export class Enemy {
   public telegraphPhase = 0;
   public shieldRotation = 0;
   public slowUntil = 0;
+  public markedUntil = 0;
+  public burningUntil = 0;
   public active = true;
   public splitDone = false;
   public contactDamage: number;
@@ -79,6 +81,8 @@ export class Enemy {
     this.telegraphPhase = 0;
     this.shieldRotation = 0;
     this.slowUntil = 0;
+    this.markedUntil = 0;
+    this.burningUntil = 0;
     this.active = true;
     this.splitDone = false;
     this.shotCooldown = this.type === 'dropper' ? DROPPER_SHOT_INTERVAL_SECONDS : 0;
@@ -130,7 +134,8 @@ export class Enemy {
       const phase = this.age % 16;
       this.shieldRotation = (phase <= 8 ? phase : 16 - phase) * 0.9;
     }
-    if (this.type === 'designer' || this.type === 'echo') this.telegraph = this.specialCooldown <= 0;
+    if (this.type === 'gate') this.telegraph = this.pressureCooldown <= 0;
+    if (this.type === 'designer' || this.type === 'echo' || this.type === 'weaver' || this.type === 'reactor') this.telegraph = this.specialCooldown <= 0;
     return !this.isBoss && this.distanceToCore <= 52;
   }
 
@@ -231,6 +236,8 @@ export class Enemy {
       telegraphPhase: this.type === 'phase' ? this.telegraphPhase : undefined,
       slowFactor,
       shieldRotation: this.isBoss ? this.shieldRotation : undefined,
+      marked: this.markedUntil > elapsed,
+      burning: this.burningUntil > elapsed,
       state,
     };
   }

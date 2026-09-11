@@ -19,6 +19,24 @@ export const STAGES: Record<StageId, StageDefinition> = {
     enemies: ['shard', 'runner', 'lattice', 'shell', 'spore', 'marker', 'dropper', 'phase', 'charger', 'guard', 'repair'], boss: 'echo', clearBonus: 8_000,
     budgetBase: 2, budgetRise: 0.02, enemyLimit: 160, bossAt: 195, difficultyFactor: 0.0045,
   },
+  'stage-4': {
+    id: 'stage-4', name: '交差射線', timeLimit: 270,
+    description: '敵弾の迎撃と射手の処理を切り替え、交差する予告線を読みます。',
+    enemies: ['shard', 'runner', 'dropper', 'marker', 'guard', 'charger', 'phase'], boss: 'gate', clearBonus: 10_000,
+    budgetBase: 2.2, budgetRise: 0.022, enemyLimit: 180, bossAt: 220, difficultyFactor: 0.0048,
+  },
+  'stage-5': {
+    id: 'stage-5', name: '再生群', timeLimit: 300,
+    description: '修復体と造兵体を先に止め、有限の支援網を崩します。',
+    enemies: ['shard', 'runner', 'shell', 'spore', 'repair', 'factory', 'guard', 'marker'], boss: 'weaver', clearBonus: 12_000,
+    budgetBase: 2.4, budgetRise: 0.024, enemyLimit: 190, bossAt: 245, difficultyFactor: 0.005,
+  },
+  'stage-6': {
+    id: 'stage-6', name: '多重包囲', timeLimit: 330,
+    description: '突進・遠隔・支援が同時に現れる完成構成向けの混成戦です。',
+    enemies: ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker', 'dropper', 'phase', 'charger', 'guard', 'repair', 'factory'], boss: 'reactor', clearBonus: 15_000,
+    budgetBase: 2.7, budgetRise: 0.026, enemyLimit: 200, bossAt: 270, difficultyFactor: 0.0052,
+  },
   endless: {
     id: 'endless', name: '無限モード', timeLimit: Number.POSITIVE_INFINITY,
     description: '5分ごとに危険度が上がる、制限時間のない記録挑戦です。',
@@ -27,7 +45,10 @@ export const STAGES: Record<StageId, StageDefinition> = {
   },
 };
 
-export const STAGE_ORDER: StageId[] = ['stage-1', 'stage-2', 'stage-3', 'endless'];
+// Endless remains the direct post-stage-3 unlock.  Stages 4–6 are a separate
+// branch unlocked at the same clear, so existing saves and the original
+// infinite-mode route remain valid.
+export const STAGE_ORDER: StageId[] = ['stage-1', 'stage-2', 'stage-3', 'endless', 'stage-4', 'stage-5', 'stage-6'];
 
 export function stageIsUnlocked(stageId: StageId, unlockedStages: StageId[]): boolean {
   return unlockedStages.includes(stageId);
@@ -37,5 +58,7 @@ export function nextStageId(stageId: StageId): StageId | null {
   if (stageId === 'stage-1') return 'stage-2';
   if (stageId === 'stage-2') return 'stage-3';
   if (stageId === 'stage-3') return 'endless';
+  if (stageId === 'stage-4') return 'stage-5';
+  if (stageId === 'stage-5') return 'stage-6';
   return null;
 }

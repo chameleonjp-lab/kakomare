@@ -1,16 +1,22 @@
-export type StageId = 'stage-1' | 'stage-2' | 'stage-3' | 'endless';
+export type StageId = 'stage-1' | 'stage-2' | 'stage-3' | 'stage-4' | 'stage-5' | 'stage-6' | 'endless';
 
-/** Runtime V3 weapon set.  The expansion catalogue keeps the remaining 38
- * designs separate, so adding an id here means it is intentionally playable
- * and eligible for in-run acquisition. */
+/** Runtime V5 weapon set. Every id here is playable and eligible for in-run
+ * acquisition; design-only entries must stay out of this union and registry. */
 export type WeaponId =
   | 'needle' | 'ray' | 'cluster' | 'repulse' | 'chain' | 'orbit' | 'disc' | 'gravity'
   | 'grid' | 'mine' | 'lance' | 'drone'
   | 'prism' | 'mortar' | 'ribbon' | 'shockwave' | 'barrage' | 'anchor' | 'flare'
-  | 'cutter' | 'beacon' | 'nova' | 'harpoon' | 'vortex' | 'ward';
-export type SupportId = 'output' | 'rhythm' | 'branch' | 'focus' | 'observe' | 'brake' | 'relay' | 'repair';
+  | 'cutter' | 'beacon' | 'nova' | 'harpoon' | 'vortex' | 'ward'
+  | 'fan' | 'swell' | 'seeker' | 'drill' | 'mist' | 'spark' | 'coil' | 'bloom'
+  | 'shuttle' | 'siphon' | 'mirror' | 'stasis' | 'quake' | 'spoke' | 'hollow'
+  | 'snare' | 'chime' | 'thunder' | 'frost' | 'swarm' | 'counter' | 'dive' | 'axis'
+  | 'seed' | 'requiem';
+export type SupportId =
+  | 'output' | 'rhythm' | 'branch' | 'focus' | 'observe' | 'brake' | 'relay' | 'repair'
+  | 'shatter' | 'conductive' | 'ignite' | 'brink' | 'anchor' | 'veil' | 'vector'
+  | 'pulse' | 'reserve' | 'lattice' | 'orbit' | 'catalyst';
 export type EnemyId = 'shard' | 'runner' | 'shell' | 'lattice' | 'spore' | 'marker' | 'dropper' | 'phase' | 'charger' | 'guard' | 'repair' | 'factory';
-export type BossId = 'crown' | 'designer' | 'echo';
+export type BossId = 'crown' | 'designer' | 'echo' | 'gate' | 'weaver' | 'reactor';
 
 export type ContentId = WeaponId | SupportId | EnemyId | BossId;
 

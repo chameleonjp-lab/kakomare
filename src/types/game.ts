@@ -23,6 +23,9 @@ export interface EnemySnapshot {
   telegraphPhase?: number;
   slowFactor: number;
   shieldRotation?: number;
+  /** Time-bounded status markers used by conditional support effects. */
+  marked?: boolean;
+  burning?: boolean;
   /** A non-colour status cue for telegraph/invulnerable/slow readability. */
   state?: 'normal' | 'telegraph' | 'invulnerable' | 'slowed' | 'shielded';
 }

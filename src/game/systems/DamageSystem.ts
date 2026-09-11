@@ -13,10 +13,10 @@ export function applyDamage(enemy: Enemy, amount: number, elapsed: number, attac
   return { amount: result.dealt, blocked: result.blocked, destroyed: result.destroyed };
 }
 
-export function applyContactDamage(core: Core, enemy: Enemy): number {
+export function applyContactDamage(core: Core, enemy: Enemy, damageMultiplier = 1): number {
   // Bosses stop on the inner ring and use their own special attacks. They are
   // never allowed to become an invisible contact-damage source at the core.
   if (!enemy.active || enemy.isBoss) return 0;
   enemy.active = false;
-  return core.damage(enemy.contactDamage);
+  return core.damage(enemy.contactDamage * Math.max(0, damageMultiplier));
 }
