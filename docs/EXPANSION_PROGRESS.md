@@ -9,13 +9,16 @@
 - V5の戦闘経路には、追加25武器の個体別発射、破砕・導電・誘爆・背水・定着・薄幕・脈動・蓄勢・格子・軌道・触媒の有限効果、追加ステージ4〜6、射線門・織り手・三相炉を接続した。stage-3クリア時は従来の無限解放を保ちつつ、stage-4を分岐解放する。無限ボスは6種を循環させる。
 - V5の範囲外は、V6の保存v3・途中再開・結果精算・ランキング受付、本番DB／実験場設定変更、V7の長時間本戦・独立レビュー・iPhone Safari実機・公開受入である。これらをV5の成功へ繰り上げない。
 
-### V5の検査状態（作業中）
+### V5の検査状態（提出済み・CI確認済み）
 
 - V5固有の単体・統合検査として、基本50・補助20・1,000組、全武器のレベル／分岐／発展、追加ステージの敵、stage-4〜6の専用ボス循環、追加25武器の個体別発射元を確認するテストを追加した。局所検査は `tests/unit/spawn-and-simulation.test.ts` と `tests/integration/battle-quality.test.ts` で実行済み。
 - 誘爆環は印または燃焼の有効時間内の撃破だけを条件とし、同じ敵IDへ一度だけ誘爆することを統合検査へ追加した。印・燃焼はスナップショット上でも色に依存しない輪郭記号で示す。
 - `npm ci --ignore-scripts --no-audit --no-fund`（162パッケージ）、`npm run lint`、`npm run typecheck`、`npm test -- --run --testTimeout=30000`（24ファイル・181件）、`npm run generate:expansion-docs`、`npm run verify:expansion-docs`、`npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check` はこのV5作業ツリーで成功した。Viteの500 kB超チャンク警告は継続しているが、検査失敗とは扱わない。
 - `npm run test:e2e:chromium` は32件すべて起動前に失敗した（`/root/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell` が存在しない）。`npm run test:e2e:webkit` も32件すべて起動前に失敗した（`/root/.cache/ms-playwright/webkit-2336/pw_run.sh` が存在しない）。テスト本体の失敗ではなくローカル環境未実施として扱い、提出コミットのGitHub Actions結果と分ける。
 - ローカルPlaywright実行ファイルの有無、GitHub Actionsの提出コミット、iPhone Safari実機は別々に記録する。未実施のブラウザ本体検査や実機検査を、既存V4の成功runから流用しない。通常720試行、無限60試行、30/60/120回描画比較、保存v3、ランキング受付・本番DB、独立レビューも未確認である。
+- 初回提出コミット `e034157e8d8f5e0492d4a0a2499afa8b6a765e48` の [Quality #65](https://github.com/chameleonjp-lab/kakomare/actions/runs/34611107511) は、静的・単体は成功したが、Chromium 32件中31件成功・1件失敗で停止した。失敗は `tests/e2e/core.spec.ts:179` の候補装着検査が、V5で補助候補も追加された後に「武器面2」を固定していたためである。WebKitと後続build検査を未実行のまま成功扱いにせず、同じブランチで候補タイトルと実際の新規装着面を照合する条件へ修正した。
+- 修正コミット `34189758d957426b4848f203503e66495b1470be` では、上記E2Eの固定武器名を廃し、`aria-disabled` の新規候補カードから候補名を取得して、装着後の構成一覧に同じ名前が現れることを確認する。修正後に静的・型・単体／統合検査（24ファイル・181件）を再実行した。
+- 修正後提出コミットに対する [Quality #66](https://github.com/chameleonjp-lab/kakomare/actions/runs/34611876158) は、公式Playwrightコンテナ `quality` とPages同条件 `pages-runner-quality` の両jobで全step成功した。各jobで静的・単体24ファイル181件、Chromium 32件、WebKit 32件、文書生成・整合性、build、`verify:dist`、`verify:originality` を確認した。これはGitHub Actionsの自動検査であり、iPhone Safari実機、長時間本戦、V6の保存・ランキング本番受入を意味しない。
 
 ## V4の25武器・競技無限進行・敵コンテンツ
 

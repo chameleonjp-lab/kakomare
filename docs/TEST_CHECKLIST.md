@@ -16,10 +16,13 @@
 - [x] `npm run verify:dist`
 - [x] `npm run verify:originality`
 - [x] `git diff --check`
-- [ ] `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（ローカル実行ファイル不足で起動前に失敗。Chromiumの`chromium_headless_shell-1234`、WebKitの`webkit-2336/pw_run.sh`がなく、CIの提出コミットで確認する）
+- [ ] ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（実行ファイル不足で起動前に失敗。Chromiumの`chromium_headless_shell-1234`、WebKitの`webkit-2336/pw_run.sh`がないため、テスト本体の実行環境未実施）
+- [x] 提出コミットのGitHub Actions [Quality #66](https://github.com/chameleonjp-lab/kakomare/actions/runs/34611876158)（`quality`／`pages-runner-quality`の両jobで静的・単体24ファイル181件、Chromium32件、WebKit32件、build・配布物検証が成功）
 - [ ] 50武器・20補助の実戦相乗効果、通常720試行、無限60試行、30/60/120回描画比較、iPhone Safari実機、保存v3、ランキング受付
 
 V5固有の検査は、`tests/unit/content.test.ts` の50武器・20補助・6ボス・stage-4〜6、`tests/unit/expansion-catalog.test.ts` の実装済み50と1,000セル、`tests/unit/quality-b.test.ts` の全補助値・上限、`tests/unit/spawn-and-simulation.test.ts` の追加面の出現とボス循環、`tests/integration/battle-quality.test.ts` の追加25武器の個体別発射を含む。内部メソッドを直接呼ぶ統合検査と、画面操作によるE2E検査を別の証拠として扱う。
+
+初回提出の [Quality #65](https://github.com/chameleonjp-lab/kakomare/actions/runs/34611107511) では、V5で追加された補助候補を旧来の「武器面2」固定で検査していたためChromium 1件が失敗した。候補の種類を固定しない画面検査へ修正後、Quality #66で両ブラウザの32件ずつを確認した。
 
 ## V3実装：12武器・8補助・発展・配置変更（2026-09-11）
 
