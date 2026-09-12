@@ -5,6 +5,7 @@
 ## V7実装：最終本戦・性能・main公開確認（2026-09-12）
 
 対象branchは `codex/v7-final-verification-20260911`（提出時）。基準mainは、ユーザーがマージしたPR #24のマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`（head `69abd6024471b47d044d378d9f044dd03bb51001`）。Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25) の最終提出commitは `a4df4613abc1013d4e6136c7afc021804d34c586` で、ユーザーがマージしたmainのマージcommitは `7f6456cb50157e6fa87a50d0c6daeb662897209d`。V7では、競技ルール版を `expansion-v7-runtime` へ分離し、競技得点へ生存時間・残HPを混ぜない修正、通常720試行、競技無限60試行、30／60／120回描画比較を実際の `BattleScene` 更新経路で検査する。基本武器50・補助20・全1,000組はV5から維持し、12・25種類を完成扱いにしない。
+公開確認の文書追補は `codex/v7-public-verification-20260912` からDraft [PR #26](https://github.com/chameleonjp-lab/kakomare/pull/26) として提出し、head `9ba076e1c49e5623ebf494a36ce93483a7ab4c0c` の [Quality #76](https://github.com/chameleonjp-lab/kakomare/actions/runs/34680971109) で全job・全step成功を確認した。
 
 - [x] `npm run lint`
 - [x] `npm run typecheck`
@@ -19,6 +20,7 @@
 - [x] V7最終headに対するGitHub Actions [Quality #75](https://github.com/chameleonjp-lab/kakomare/actions/runs/34645194667)（`quality`、`pages-runner-quality`、`v7-final-gates` の全job・全step成功）
 - [ ] ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（実行ファイル不在のため本体未実施。提出CIと分離）
 - [x] PR #25マージ後mainの公開Pages配備 [run 34679314243](https://github.com/chameleonjp-lab/kakomare/actions/runs/34679314243)（head `7f6456cb50157e6fa87a50d0c6daeb662897209d`）とクラウドブラウザの正式URL・release metadata・名前入力→ホーム→stage-1戦闘→強化候補→一時停止→再開。停止中の残り時間 `166`→`166`、再開後 `165` を確認
+- [x] 公開確認の文書追補Draft [PR #26](https://github.com/chameleonjp-lab/kakomare/pull/26) と [Quality #76](https://github.com/chameleonjp-lab/kakomare/actions/runs/34680971109)（`quality`、`pages-runner-quality`、`v7-final-gates` 全job・全step成功）
 - [ ] iPhone Safari実機、VoiceOver、片手操作、発熱、長時間操作
 - [ ] 実験場の本番受付・DB・認証・権限・受付側再計算・ランキング有効化（ユーザー許可待ち。変更していない）
 
