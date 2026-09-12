@@ -2,12 +2,12 @@ import Phaser from 'phaser';
 import { BOSSES } from '../../data/bosses';
 import { ENEMIES } from '../../data/enemies';
 import { STAGES, nextStageId } from '../../data/stages';
-import { WEAPONS } from '../../data/weapons';
+import { WEAPONS, WEAPON_ORDER } from '../../data/weapons';
 import { Core } from '../entities/Core';
 import { DROPPER_SHOT_INTERVAL_SECONDS, Enemy } from '../entities/Enemy';
 import { Projectile } from '../entities/Projectile';
 import { SUPPORT_EFFECT_CAPS, SupportModule, supportEffectsFor } from '../entities/SupportModule';
-import { SUPPORTS } from '../../data/supports';
+import { SUPPORTS, SUPPORT_ORDER } from '../../data/supports';
 import { Weapon } from '../entities/Weapon';
 import { EnemyPool } from '../pools/EnemyPool';
 import { ParticlePool } from '../pools/ParticlePool';
@@ -22,7 +22,13 @@ import { EffectBudget, selectVisibleEntities, type EffectsLevel } from '../syste
 import { FixedStepClock } from '../systems/FixedStepClock';
 import { RunRecorder } from '../systems/RunRecorder';
 import { collideEnemyProjectiles, collideProjectiles } from '../systems/CollisionSystem';
-import { createUpgradeCandidateList, applyUpgradeCandidate, type ContinuousUpgradeId } from '../systems/UpgradeSystem';
+import {
+  createUpgradeCandidateList,
+  applyUpgradeCandidate,
+  isReplacementCandidate,
+  replacementTargetFor,
+  type ContinuousUpgradeId,
+} from '../systems/UpgradeSystem';
 import { DeterministicRng, seedFromStage, SpawnDirector, type SpawnDirectorSnapshot, type SpawnWaveWarning } from '../systems/SpawnDirector';
 import { MANUAL_AIM_HALF_ANGLE, selectTarget } from '../systems/TargetingSystem';
 import { impactAngleFromSource, impactAngleFromVelocity } from '../systems/ImpactDirection';
@@ -40,6 +46,7 @@ import { createCompetitiveRandomStreams, type CompetitiveRandomStreams } from '.
 import { effectiveWeaponStats } from '../systems/CombatStats';
 import { COMPETITIVE_RULES } from '../../data/competitiveRules';
 import type { BuildLayer } from '../../types/build';
+import { MAX_DEVICE_SLOT_COUNT } from '../deviceLayout';
 
 export interface BattleSceneOptions {
   stageId: StageId;
@@ -53,6 +60,8 @@ export interface BattleSceneOptions {
   testOutcome?: 'victory' | 'defeat';
   testUpgrade?: boolean;
   testUpgradeExperience?: number;
+  /** Local test fixture only; never enabled by normal UI/configuration. */
+  testFullLoadout?: boolean;
   /** Enables the V1 common initial conditions without enabling ranking I/O. */
   competitive?: boolean;
   /** Stable local run identity; it is not a server play_id. */
@@ -62,7 +71,7 @@ export interface BattleSceneOptions {
   callbacks: BattleCallbacks;
 }
 
-interface FlashEffect { x: number; y: number; color: number; life: number; maxLife: number; radius: number; kind?: 'impact' | 'telegraph' }
+interface FlashEffect { x: number; y: number; color: number; life: number; maxLife: number; radius: number; kind: 'impact' | 'telegraph' | 'decoration' }
 interface LineEffect { angle: number; color: number; life: number; maxLife: number; width: number; startX?: number; startY?: number; length?: number }
 interface GravityField {
   x: number;
@@ -107,6 +116,11 @@ const MAX_ENEMY_PROJECTILES = 80;
 const MAX_GRAVITY_FIELDS = 24;
 const MAX_MINES = 48;
 const MAX_DRONES = 24;
+// Combat cues use a fixed, effects-independent pool sized for the largest
+// supported in-run device set. Only defeat flashes are reduced with effects.
+const MAX_ATTACK_LINES = 48;
+const MAX_ATTACK_FLASHES = 64;
+const DECORATIVE_FLASH_LIMITS: Record<EffectsLevel, number> = { standard: 8, low: 4, minimum: 2 };
 const LOGICAL_RENDER_SIZE = 720;
 const BASE_ARENA_RADIUS = 325;
 const CLUSTER_TELEGRAPH_SECONDS = 0.45;
@@ -192,6 +206,9 @@ export class BattleScene extends Phaser.Scene {
   private readonly enemies: Enemy[] = [];
   private readonly projectiles: Projectile[] = [];
   private readonly weapons: Weapon[];
+  /** Outgoing weapon copies retained only while their projectiles/fields are
+   * still in flight, so replacement cannot rewrite source attribution. */
+  private readonly retiredWeapons = new Map<string, Weapon>();
   private readonly supports: SupportModule[] = [];
   private readonly buildGraph = new BuildGraph();
   private readonly buildCapacity = new BuildCapacity();
@@ -235,6 +252,7 @@ export class BattleScene extends Phaser.Scene {
   private readonly progression = new ProgressionSystem();
   private weaponPolishStacks = 0;
   private pendingPartsBonus = 0;
+  private stabilizerStacks = 0;
   private aimAngle = -Math.PI / 2;
   private manualAim = false;
   private aimPointerId: number | null = null;
@@ -298,6 +316,7 @@ export class BattleScene extends Phaser.Scene {
     this.effectBudget = new EffectBudget(options.effectsLevel);
     this.rerollsLeft = this.competitive ? COMPETITIVE_RULES.initial.rerolls : 1 + Math.min(2, this.combatResearchEffects.rerolls);
     this.bansLeft = this.competitive ? COMPETITIVE_RULES.initial.exclusions : 1 + Math.min(2, this.combatResearchEffects.bans);
+    if (options.testMode && options.testFullLoadout && !this.resumeCheckpoint) this.installTestFullLoadout();
     if (this.resumeCheckpoint) this.restoreCheckpoint(this.resumeCheckpoint);
   }
 
@@ -355,16 +374,57 @@ export class BattleScene extends Phaser.Scene {
       this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
       return;
     }
-    const selectedCandidate = { ...storedCandidate, placementSlot: candidate.placementSlot };
-    if (!selectedCandidate.isExisting && (selectedCandidate.kind === 'weapon' || selectedCandidate.kind === 'support') && !this.availablePlacementSlots(selectedCandidate.kind).includes(selectedCandidate.placementSlot ?? -1)) {
-      this.options.callbacks.onStatus('装置を置く空き面を選んでください');
+    // Competitive endless has no profile-parts progression. Keep this guard
+    // at the application boundary as well as in candidate generation so a
+    // stale/tampered checkpoint cannot turn the legacy normal-mode exit into
+    // an irreversible reward.
+    if (this.competitive && storedCandidate.id === 'continuous:parts') {
+      this.options.callbacks.onStatus('競技モードではこの継続報酬を選べません');
       this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
       return;
     }
-    if (!selectedCandidate.isExisting && (selectedCandidate.kind === 'weapon' || selectedCandidate.kind === 'support') && !this.buildCapacity.canFit(1)) {
-      this.options.callbacks.onStatus('稼働容量が足りないため、この装置は確定できません');
-      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
-      return;
+    // Only the slot/branch echo is mutable UI input. The candidate identity,
+    // replacement target list, and all content text come from the token-bound
+    // payload kept by the scene.
+    const selectedPlacementSlot = candidate.placementSlot ?? (
+      candidate.replacementTargetInstanceId === undefined
+        ? undefined
+        : storedCandidate.replacementTargets?.find((target) => target.instanceId === candidate.replacementTargetInstanceId)?.slot
+    );
+    const selectedCandidate = {
+      ...storedCandidate,
+      placementSlot: selectedPlacementSlot,
+      ...(candidate.replacementBranch !== undefined ? { replacementBranch: candidate.replacementBranch } : {}),
+      ...(candidate.replacementTargetInstanceId !== undefined ? { replacementTargetInstanceId: candidate.replacementTargetInstanceId } : {}),
+    };
+    const replacement = isReplacementCandidate(selectedCandidate)
+      ? replacementTargetFor(selectedCandidate)
+      : undefined;
+    if (!selectedCandidate.isExisting && (selectedCandidate.kind === 'weapon' || selectedCandidate.kind === 'support')) {
+      if (replacement) {
+        const replacementItem = selectedCandidate.kind === 'weapon'
+          ? this.weapons.find((item) => item.instanceId === replacement.instanceId && item.id === replacement.id && item.slot === replacement.slot)
+          : this.supports.find((item) => item.instanceId === replacement.instanceId && item.id === replacement.id && item.slot === replacement.slot);
+        const graphInstance = this.buildGraph.instanceAt(selectedCandidate.kind, replacement.slot);
+        const replacementAllocation = this.buildCapacity.allocation(replacement.instanceId);
+        if (!replacementItem || replacement.id === selectedCandidate.targetId || graphInstance !== replacement.instanceId
+          || !replacementAllocation || replacementAllocation.kind !== selectedCandidate.kind
+          || !this.buildGraph.nodeFor(selectedCandidate.kind, replacement.slot)?.unlocked
+          || !this.buildCapacity.canFit(1, replacement.instanceId)) {
+          this.options.callbacks.onStatus('入れ替え対象が現在の構成と合わないため、強化を確定できません');
+          this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+          return;
+        }
+      } else if (!this.availablePlacementSlots(selectedCandidate.kind).includes(selectedCandidate.placementSlot ?? -1)) {
+        this.options.callbacks.onStatus('装置を置く空き面を選んでください');
+        this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+        return;
+      }
+      if (!replacement && !this.buildCapacity.canFit(1)) {
+        this.options.callbacks.onStatus('稼働容量が足りないため、この装置は確定できません');
+        this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+        return;
+      }
     }
     if (selectedCandidate.kind === 'expansion' && !selectedCandidate.expansionLayer) {
       this.options.callbacks.onStatus('この拡張候補は現在の配置と合いません');
@@ -374,8 +434,26 @@ export class BattleScene extends Phaser.Scene {
       this.options.callbacks.onStatus('経験値が足りないため、この強化は確定できません');
       return;
     }
+    const deviceKind: 'weapon' | 'support' | null = !selectedCandidate.isExisting
+      && (selectedCandidate.kind === 'weapon' || selectedCandidate.kind === 'support')
+      ? selectedCandidate.kind
+      : null;
+    const isDeviceCandidate = deviceKind !== null;
+    const weaponsBefore = isDeviceCandidate ? [...this.weapons] : null;
+    const supportsBefore = isDeviceCandidate ? [...this.supports] : null;
+    const graphBefore = isDeviceCandidate ? this.buildGraph.snapshot() : null;
+    const capacityBefore = isDeviceCandidate ? this.buildCapacity.snapshot() : null;
+    const outgoingWeapon = replacement && selectedCandidate.kind === 'weapon'
+      ? weaponsBefore?.find((weapon) => weapon.instanceId === replacement.instanceId)
+      : undefined;
+    const rollbackDevice = (): void => {
+      if (!isDeviceCandidate || !weaponsBefore || !supportsBefore || !graphBefore || !capacityBefore) return;
+      this.weapons.splice(0, this.weapons.length, ...weaponsBefore);
+      this.supports.splice(0, this.supports.length, ...supportsBefore);
+      this.buildGraph.restore(graphBefore);
+      this.buildCapacity.restore(capacityBefore);
+    };
     let expansionApplied = false;
-    this.recorder.recordInput({ kind: 'upgrade', tick: this.inputTick(), selectionId: payload.selectionId, candidateId: selectedCandidate.id, placementSlot: selectedCandidate.placementSlot });
     const applied = applyUpgradeCandidate(
       selectedCandidate,
       this.weapons,
@@ -386,41 +464,104 @@ export class BattleScene extends Phaser.Scene {
         onExpansion: (layer) => { expansionApplied = this.unlockBuildLayer(layer); },
       },
     );
-    if (!applied || (selectedCandidate.kind === 'expansion' && !expansionApplied) || !this.progression.confirmChoice()) {
+    if (!applied || (selectedCandidate.kind === 'expansion' && !expansionApplied)) {
+      rollbackDevice();
       this.options.callbacks.onStatus('候補が現在の構成と合わないため、強化を確定できません');
       this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
       return;
     }
-    if (!selectedCandidate.isExisting && (selectedCandidate.kind === 'weapon' || selectedCandidate.kind === 'support')) {
+    if (deviceKind) {
+      const kind = deviceKind;
       const slot = selectedCandidate.placementSlot;
-      const installed = selectedCandidate.kind === 'weapon'
-        ? [...this.weapons].reverse().find((weapon) => weapon.id === selectedCandidate.targetId && weapon.slot === slot)
-        : [...this.supports].reverse().find((support) => support.id === selectedCandidate.targetId && support.slot === slot);
-      if (installed) {
-        const instanceId = installed.instanceId;
-        this.buildGraph.install(instanceId, selectedCandidate.kind, slot ?? installed.slot);
-        this.buildCapacity.reserve(instanceId, selectedCandidate.kind);
+      const installed = kind === 'weapon'
+        ? [...this.weapons].reverse().find((weapon) => weapon.id === selectedCandidate.targetId && weapon.slot === slot && (!replacement || weapon.instanceId !== replacement.instanceId))
+        : [...this.supports].reverse().find((support) => support.id === selectedCandidate.targetId && support.slot === slot && (!replacement || support.instanceId !== replacement.instanceId));
+      if (!installed) {
+        rollbackDevice();
+        this.options.callbacks.onStatus('候補が現在の構成と合わないため、強化を確定できません');
+        this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+        return;
+      }
+      if (replacement) {
+        const oldGraphInstance = this.buildGraph.instanceAt(kind, replacement.slot);
+        if (oldGraphInstance === replacement.instanceId && !this.buildGraph.remove(kind, replacement.slot, replacement.instanceId)) {
+          rollbackDevice();
+          this.options.callbacks.onStatus('入れ替え面を確定できません');
+          this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+          return;
+        }
+        if (!this.buildGraph.install(installed.instanceId, kind, replacement.slot)) {
+          rollbackDevice();
+          this.options.callbacks.onStatus('入れ替え面を確定できません');
+          this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+          return;
+        }
+        const oldAllocation = this.buildCapacity.allocation(replacement.instanceId);
+        if (oldAllocation) this.buildCapacity.release(replacement.instanceId);
+        if (!this.buildCapacity.reserve(installed.instanceId, kind)) {
+          rollbackDevice();
+          this.options.callbacks.onStatus('稼働容量を確定できません');
+          this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+          return;
+        }
+      } else if (!this.buildGraph.install(installed.instanceId, kind, installed.slot) || !this.buildCapacity.reserve(installed.instanceId, kind)) {
+        rollbackDevice();
+        this.options.callbacks.onStatus('装置を配置できないため、強化を確定できません');
+        this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+        return;
       }
     }
+    if (!this.progression.confirmChoice()) {
+      rollbackDevice();
+      this.options.callbacks.onStatus('経験値が足りないため、この強化は確定できません');
+      this.options.callbacks.onUpgrade({ ...payload, candidates: [...payload.candidates] });
+      return;
+    }
+    if (outgoingWeapon) this.retiredWeapons.set(outgoingWeapon.instanceId, outgoingWeapon);
+    this.recorder.recordInput({
+      kind: 'upgrade',
+      tick: this.inputTick(),
+      selectionId: payload.selectionId,
+      candidateId: selectedCandidate.id,
+      placementSlot: selectedCandidate.placementSlot,
+      ...(replacement ? { replacementTargetInstanceId: replacement.instanceId } : {}),
+      ...(selectedCandidate.replacementBranch === undefined ? {} : { replacementBranch: selectedCandidate.replacementBranch }),
+    });
     if (selectedCandidate.kind === 'repair') this.repairsUsed += 1;
     this.recorder.upgrades.push(selectedCandidate.title);
     if (selectedCandidate.id.includes(':branch:')) this.recorder.branches.push(selectedCandidate.title);
     this.upgradePayload = null;
     this.choicesSinceBreak += 1;
     this.releaseAimInput();
-    this.emitSnapshot(true);
+    // Publish only a stable post-choice state. In particular, never emit a
+    // checkpoint while `state === 'upgrade'` and `upgradePayload === null`:
+    // that combination cannot be resumed safely and would strand the run.
     this.state = 'playing';
     if (this.progression.pendingChoices > 0) {
       if (this.choicesSinceBreak >= 3) {
         this.state = 'upgrade';
         this.presentUpgradeBreak();
+        this.emitSnapshot(true);
       }
-      else if (!this.openUpgrade()) this.upgradeRequestQueued = true;
+      else if (!this.openUpgrade()) {
+        this.upgradeRequestQueued = true;
+        // Keep a safe resume boundary even if a deferred choice could not be
+        // opened immediately. The live scene remains playing, while the
+        // persisted checkpoint resumes behind an explicit pause notice.
+        this.emitSnapshot(true, true);
+      } else {
+        this.emitSnapshot(true);
+      }
       return;
     }
     this.choicesSinceBreak = 0;
     this.options.callbacks.onStatus(`${selectedCandidate.title}を取得しました`);
     this.notifyUpgradeClosed();
+    // A final choice leaves the live scene in `playing`, but it is still a
+    // safe persistence boundary. `checkpointPlaying` serializes that stable
+    // state as the normal paused-on-reload envelope without ever exposing the
+    // invalid upgrade/null-payload combination.
+    this.emitSnapshot(true, true);
   }
 
   public rerollUpgrade(selectionId?: number): void {
@@ -745,13 +886,28 @@ export class BattleScene extends Phaser.Scene {
     const isWide = weapon.id === 'barrage' || weapon.id === 'prism' || weapon.id === 'fan' || weapon.id === 'swarm' || weapon.id === 'bloom';
     const isHeavy = weapon.id === 'mortar' || weapon.id === 'nova' || weapon.id === 'drill' || weapon.id === 'thunder' || weapon.id === 'requiem';
     const isBouncing = weapon.id === 'mirror' || weapon.id === 'shuttle';
-    const count = Math.max(1, Math.min(4, (weapon.stats.count ?? 1) + (weapon.id === 'swarm' ? 1 : 0)));
-    const spread = isWide ? 0.18 : weapon.id === 'axis' || weapon.id === 'spoke' ? 0.28 : 0.06;
+    const isSpreadBranch = weapon.branch === 'spread';
+    const isPiercingBranch = weapon.branch === 'piercing';
+    const baseCount = Math.max(1, Math.min(4, (weapon.stats.count ?? 1) + (weapon.id === 'swarm' ? 1 : 0)));
+    // Every additional weapon has the same two Lv3 choices, but the choice
+    // must alter the live attack rather than only the saved card. Spread gets
+    // one extra shot up to the four-shot cap and a visibly wider fan; the
+    // piercing branch keeps the normal count and spends its budget on travel.
+    const count = Math.max(1, Math.min(4, baseCount + (isSpreadBranch ? 1 : 0)));
+    const spread = (isWide ? 0.18 : weapon.id === 'axis' || weapon.id === 'spoke' ? 0.28 : 0.06) * (isSpreadBranch ? 1.8 : 1);
     const speed = stats.projectileSpeed ?? 360;
-    const life = isHeavy ? 0.9 : weapon.id === 'swell' ? 1.55 : 1.25;
+    // Target selection and collision both use effective range. Lifetime must
+    // cover that same distance, otherwise slow heavy weapons expire before a
+    // valid edge-of-range target can be reached.
+    const life = stats.range / Math.max(1, speed);
     const projectileKind: 'needle' | 'disc' = isBouncing ? 'disc' : 'needle';
     const damageFactor = isHeavy ? 1.35 : weapon.id === 'counter' || weapon.id === 'ward' ? 0.58 : 0.72;
-    const piercing = weapon.id === 'harpoon' || weapon.id === 'cutter' || weapon.id === 'drill' || weapon.id === 'shuttle' ? 2 : weapon.id === 'dive' ? 1 : 0;
+    const basePiercing = weapon.id === 'harpoon' || weapon.id === 'cutter' || weapon.id === 'drill' ? 2 : weapon.id === 'dive' ? 1 : 0;
+    // Disc-like weapons use bounce count instead of piercing; keeping the
+    // fields separate prevents a reflected disc from looking like a shot
+    // that can pass through enemies.
+    const piercing = projectileKind === 'needle' ? basePiercing + (isPiercingBranch ? 2 : 0) : 0;
+    const bounces = isBouncing ? 2 + (isPiercingBranch ? 2 : 0) : 0;
     for (let index = 0; index < count; index += 1) {
       const offset = count === 1 ? 0 : (index - (count - 1) / 2) * spread;
       this.addProjectile({
@@ -759,7 +915,7 @@ export class BattleScene extends Phaser.Scene {
         vx: Math.cos(angle + offset) * speed, vy: Math.sin(angle + offset) * speed,
         radius: Math.min(11, 5 + (weapon.stats.width ?? 0) / 12),
         damage: damage * damageFactor,
-        life, piercing, bounces: isBouncing ? 2 : 0, hitCooldown: isBouncing ? 0.35 : 0,
+        life, piercing, bounces, hitCooldown: isBouncing ? 0.35 : 0,
         sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
       });
     }
@@ -786,7 +942,7 @@ export class BattleScene extends Phaser.Scene {
     this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const origin = this.weaponOrigin(weapon);
     const spread = weapon.branch === 'spread' ? 3 : 1;
-    const piercing = (weapon.stats.pierce ?? 0) + (weapon.branch === 'piercing' ? 2 : 0);
+    const piercing = weapon.needlePiercing;
     const piercingDamage = weapon.branch === 'piercing' ? damage * 1.12 : damage;
     const speed = (this.combatStats(weapon).projectileSpeed ?? 480) * (weapon.branch === 'piercing' ? 1.18 : 1);
     for (let index = 0; index < spread; index += 1) {
@@ -891,7 +1047,9 @@ export class BattleScene extends Phaser.Scene {
     // The burst originates at the impact center.  Each victim therefore gets
     // the face-facing-center direction; a victim exactly at the center is an
     // omnidirectional hit and has no arbitrary shield plate selected.
-    this.hitArea(weapon, x, y, radius, projectile.damage, null, hitIds);
+    // The telegraph already supplies the impact ring for this burst. Keep a
+    // single cue instead of stacking a second ring at the same coordinates.
+    this.hitArea(weapon, x, y, radius, projectile.damage, null, hitIds, false);
     if (this.state === 'finished') return;
     if (weapon.branch === 'split' && !projectile.clusterSplitChild) {
       for (let index = 0; index < 3; index += 1) {
@@ -1148,7 +1306,7 @@ export class BattleScene extends Phaser.Scene {
         projectile.active = false;
         intercepted += 1;
         this.recorder.recordWeaponEvent(weapon.id, 'intercepts');
-        this.addFlash({ x: projectile.x, y: projectile.y, color: WEAPONS.grid.color, life: 0.25, maxLife: 0.25, radius: 16 });
+        this.addFlash({ x: projectile.x, y: projectile.y, color: WEAPONS.grid.color, life: 0.25, maxLife: 0.25, radius: 16, kind: 'impact' });
         const repair = this.supportEffect('repair', weapon.slot);
         if (repair > 0) this.core.heal(Math.min(3, repair));
       }
@@ -1207,20 +1365,22 @@ export class BattleScene extends Phaser.Scene {
     this.options.callbacks.onAudioCue?.('heavy');
     this.recorder.recordWeaponEvent(weapon.id, 'shots');
     const origin = this.weaponOrigin(weapon);
-    const speed = this.combatStats(weapon).projectileSpeed ?? 620;
-    const range = this.combatStats(weapon).range;
+    const combatStats = this.combatStats(weapon);
+    const speed = combatStats.projectileSpeed ?? 620;
+    const range = combatStats.range * (weapon.branch === 'long' ? 1.18 : 1);
+    const lanceWidth = (weapon.stats.width ?? 10) + (weapon.branch === 'long' ? 4 : 0);
     const piercing = (weapon.stats.pierce ?? 3) + (weapon.branch === 'shatter' ? 2 : 0);
     const lanceDamage = weapon.branch === 'shatter' ? damage * 1.2 : damage;
     const life = range / Math.max(1, speed);
     this.addProjectile({
       kind: 'lance', x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-      radius: weapon.stats.width ?? 10, damage: lanceDamage, life, piercing, sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+      radius: lanceWidth, damage: lanceDamage, life, piercing, sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
     });
-    this.addLine({ angle, color: WEAPONS.lance.color, life: 0.22, maxLife: 0.22, width: weapon.stats.width ?? 10, startX: origin.x, startY: origin.y, length: 110 });
+    this.addLine({ angle, color: WEAPONS.lance.color, life: 0.22, maxLife: 0.22, width: lanceWidth, startX: origin.x, startY: origin.y, length: weapon.branch === 'long' ? 140 : 110 });
     if (weapon.evolutionId === 'lance-double') {
       this.addProjectile({
         kind: 'lance', x: origin.x, y: origin.y, vx: Math.cos(angle + 0.04) * speed * 0.92, vy: Math.sin(angle + 0.04) * speed * 0.92,
-        radius: Math.max(5, (weapon.stats.width ?? 10) * 0.72), damage: lanceDamage * 0.48, life: life * 0.96, piercing: Math.max(0, piercing - 1), sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
+        radius: Math.max(5, lanceWidth * 0.72), damage: lanceDamage * 0.48, life: life * 0.96, piercing: Math.max(0, piercing - 1), sourceWeaponId: weapon.id, sourceWeaponInstanceId: weapon.instanceId,
       });
     }
   }
@@ -1240,7 +1400,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateDrones(seconds: number): void {
-    for (const weapon of this.weapons.filter((item) => item.id === 'drone')) {
+    for (const weapon of this.allSourceWeapons().filter((item) => item.id === 'drone')) {
       const units = this.drones.get(weapon.instanceId);
       if (!units || units.length === 0) continue;
       const origin = this.weaponOrigin(weapon);
@@ -1311,11 +1471,12 @@ export class BattleScene extends Phaser.Scene {
       if (!target) continue;
       mine.triggered = true;
       mine.life = 0;
-      const weapon = this.weapons.find((item) => item.instanceId === mine.sourceWeaponInstanceId);
+      const weapon = this.weaponByInstanceId(mine.sourceWeaponInstanceId);
       if (!weapon) continue;
       this.recorder.recordWeaponEvent(weapon.id, 'detonations');
-      this.addFlash({ x: mine.x, y: mine.y, color: WEAPONS.mine.color, life: 0.32, maxLife: 0.32, radius: mine.radius });
-      this.hitArea(weapon, mine.x, mine.y, mine.radius, mine.damage, null);
+      this.addFlash({ x: mine.x, y: mine.y, color: WEAPONS.mine.color, life: 0.32, maxLife: 0.32, radius: mine.radius, kind: 'impact' });
+      // The detonation flash is the impact cue for this exact center/radius.
+      this.hitArea(weapon, mine.x, mine.y, mine.radius, mine.damage, null, undefined, false);
       const repair = this.supportEffect('repair', weapon.slot);
       if (repair > 0) this.core.heal(Math.min(2, repair));
       if (this.state === 'finished') return;
@@ -1323,8 +1484,14 @@ export class BattleScene extends Phaser.Scene {
     for (let index = this.mines.length - 1; index >= 0; index -= 1) if (this.mines[index]?.life <= 0) this.mines.splice(index, 1);
   }
 
-  private hitArea(weapon: Weapon, x: number, y: number, radius: number, damage: number, attackAngle: number | null, hitIds?: Set<number>): void {
+  private hitArea(weapon: Weapon, x: number, y: number, radius: number, damage: number, attackAngle: number | null, hitIds?: Set<number>, showImpact = true): void {
     if (this.state === 'finished') return;
+    if (showImpact && damage > 0 && radius > 0) {
+      // Area attacks do not have a travelling projectile to render at the
+      // moment of impact. Keep a bounded impact cue even at minimum effects,
+      // where damage numbers and particles are intentionally suppressed.
+      this.addFlash({ x, y, color: WEAPONS[weapon.id].color, life: 0.2, maxLife: 0.2, radius, kind: 'impact' });
+    }
     for (const enemy of this.enemies) {
       if (!enemy.active || hitIds?.has(enemy.id) || Math.hypot(enemy.x - x, enemy.y - y) > radius + enemy.hitRadius) continue;
       hitIds?.add(enemy.id);
@@ -1372,7 +1539,7 @@ export class BattleScene extends Phaser.Scene {
           this.recorder.recordControl('slowed', seconds);
         }
         if (field.damage > 0 && field.damageTimer <= 0) {
-          const fieldWeapon = field.sourceWeaponInstanceId ? this.weapons.find((item) => item.instanceId === field.sourceWeaponInstanceId) : this.weapons.find((item) => item.id === 'gravity');
+          const fieldWeapon = field.sourceWeaponInstanceId ? this.weaponByInstanceId(field.sourceWeaponInstanceId) : this.weapons.find((item) => item.id === 'gravity');
           const result = applyDamage(enemy, this.adjustForSpecialEnemy(enemy, field.damage, fieldWeapon?.slot ?? 0), this.elapsed, impactAngleFromSource(field.x, field.y, enemy.x, enemy.y));
           this.recordHitDamage('gravity', result.amount, enemy.x, enemy.y, fieldWeapon?.instanceId);
           if (result.destroyed) this.handleEnemyDestroyed(enemy);
@@ -1385,7 +1552,7 @@ export class BattleScene extends Phaser.Scene {
       const field = this.gravityFields[index];
       if (field && field.life <= 0) {
         if (field.collapse) {
-          const weapon = field.sourceWeaponInstanceId ? this.weapons.find((item) => item.instanceId === field.sourceWeaponInstanceId) : this.weapons.find((item) => item.id === 'gravity');
+          const weapon = field.sourceWeaponInstanceId ? this.weaponByInstanceId(field.sourceWeaponInstanceId) : this.weapons.find((item) => item.id === 'gravity');
           if (weapon) this.hitArea(weapon, field.x, field.y, field.radius, field.collapseDamage, null);
           if (this.state === 'finished') return;
         }
@@ -1412,11 +1579,12 @@ export class BattleScene extends Phaser.Scene {
       const disc = this.weaponForProjectile(projectile);
       if (disc?.branch === 'trail' && this.elapsed >= (this.discTrailAt.get(projectile.id) ?? 0)) {
         this.discTrailAt.set(projectile.id, this.elapsed + 0.18);
-        this.addFlash({ x: projectile.x, y: projectile.y, color: WEAPONS.disc.color, life: 0.2, maxLife: 0.2, radius: 24 });
+        this.addFlash({ x: projectile.x, y: projectile.y, color: WEAPONS.disc.color, life: 0.2, maxLife: 0.2, radius: 28, kind: 'impact' });
         // Trail damage is an area centered on the disc's current position.
         // Let each victim derive its own source-facing side instead of using
         // the disc's travel direction for every enemy in the area.
-        this.hitArea(disc, projectile.x, projectile.y, 28, projectile.damage * 0.2, null);
+        // The trail flash above is already the ring for this exact area hit.
+        this.hitArea(disc, projectile.x, projectile.y, 28, projectile.damage * 0.2, null, undefined, false);
         if (this.state === 'finished') return;
       }
       const distance = Math.hypot(projectile.x, projectile.y);
@@ -1700,7 +1868,7 @@ export class BattleScene extends Phaser.Scene {
     this.recorder.recordEnemyKill(enemyId);
     this.addScore(10 * (1 + ENEMIES[enemyId].threatCost));
     this.progression.addExperience(enemyId === 'spore' ? 8 : 4);
-    this.addFlash({ x: enemy.x, y: enemy.y, color: ENEMIES[enemyId].color, life: 0.32, maxLife: 0.32, radius: 26 });
+    this.addFlash({ x: enemy.x, y: enemy.y, color: ENEMIES[enemyId].color, life: 0.32, maxLife: 0.32, radius: 26, kind: 'decoration' });
     this.emitParticles(enemy.x, enemy.y, ENEMIES[enemyId].color);
     if (enemyId === 'spore' && !enemy.splitDone) {
       enemy.splitDone = true;
@@ -1770,23 +1938,66 @@ export class BattleScene extends Phaser.Scene {
         this.candidateRng,
         bans,
         this.core.maxHealth,
-        { weaponPolishStacks: this.weaponPolishStacks, pendingPartsBonus: this.pendingPartsBonus },
+        { weaponPolishStacks: this.weaponPolishStacks, pendingPartsBonus: this.pendingPartsBonus, stabilizerStacks: this.stabilizerStacks },
         {
           weaponSlots: this.availablePlacementSlots('weapon'),
           supportSlots: this.availablePlacementSlots('support'),
           maxWeapons: this.buildGraph.unlockedSlots('weapon').length,
           maxSupports: this.buildGraph.unlockedSlots('support').length,
+          enableReplacements: this.competitive,
+          competitive: this.competitive,
           expansionCandidates: this.expansionCandidates(),
         },
       );
       if (candidates.length !== 3) return [];
       const annotated = candidates.map((candidate) => {
-        return candidate.isExisting ? candidate : { ...candidate, placementSlots: this.availablePlacementSlots(candidate.kind) };
+        if (candidate.isExisting) return candidate;
+        if (isReplacementCandidate(candidate)) return { ...candidate, placementSlots: candidate.replacementSlots };
+        return { ...candidate, placementSlots: this.availablePlacementSlots(candidate.kind) };
       });
       fallback = annotated;
       if (!avoidSignature || this.signature(annotated) !== avoidSignature) return annotated;
     }
     return fallback;
+  }
+
+  /**
+   * Deterministic browser-test fixture for replacement UX. It is reachable
+   * only when both testMode and the local-only option are set by the host.
+   * Every unlocked face is occupied and every installed device is at Lv3 so
+   * the replacement branch choice is visible for every weapon card.
+   */
+  private installTestFullLoadout(): void {
+    if (!this.unlockBuildLayer(2) || !this.unlockBuildLayer(3)) return;
+
+    const firstWeapon = this.weapons[0];
+    if (firstWeapon) firstWeapon.level = Math.min(3, firstWeapon.definition.maxLevel);
+    let weaponIndex = 0;
+    for (let slot = 1; slot < MAX_DEVICE_SLOT_COUNT; slot += 1) {
+      while (weaponIndex < WEAPON_ORDER.length && this.weapons.some((weapon) => weapon.id === WEAPON_ORDER[weaponIndex])) weaponIndex += 1;
+      const id = WEAPON_ORDER[weaponIndex++];
+      if (!id) return;
+      const weapon = new Weapon(id, slot);
+      weapon.level = Math.min(3, weapon.definition.maxLevel);
+      if (!this.buildGraph.install(weapon.instanceId, 'weapon', slot) || !this.buildCapacity.reserve(weapon.instanceId, 'weapon')) {
+        this.buildGraph.remove('weapon', slot, weapon.instanceId);
+        return;
+      }
+      this.weapons.push(weapon);
+    }
+
+    let supportIndex = 0;
+    for (let slot = 0; slot < MAX_DEVICE_SLOT_COUNT; slot += 1) {
+      const id = SUPPORT_ORDER[supportIndex++];
+      if (!id) return;
+      const support = new SupportModule(id, slot);
+      support.level = Math.min(3, support.definition.maxLevel);
+      if (!this.buildGraph.install(support.instanceId, 'support', slot) || !this.buildCapacity.reserve(support.instanceId, 'support')) {
+        this.buildGraph.remove('support', slot, support.instanceId);
+        return;
+      }
+      this.supports.push(support);
+    }
   }
 
   private signature(candidates: UpgradeCandidate[]): string {
@@ -1833,6 +2044,10 @@ export class BattleScene extends Phaser.Scene {
     if (id === 'polish') this.weaponPolishStacks += 1;
     if (id === 'armor') this.core.reinforce(2);
     if (id === 'parts') this.pendingPartsBonus += 1;
+    if (id === 'stabilizer') {
+      this.stabilizerStacks += 1;
+      this.core.reinforce(1);
+    }
   }
 
   private presentUpgradeBreak(): void {
@@ -1929,17 +2144,48 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private addLine(effect: LineEffect): void {
-    const limit = this.effectBudget.effectsLevel === 'standard' ? 48 : this.effectBudget.effectsLevel === 'low' ? 28 : 14;
+    const limit = MAX_ATTACK_LINES;
+    // Lines are reserved for attack paths (rays, chains, fields, and lance
+    // cues); defeat decoration uses the separate flash pool. Keep this pool
+    // finite for reduced-effects rendering without letting a kill flash evict
+    // an active attack line.
     const reusable = this.lines.find((item) => item.life <= 0) ?? (this.lines.length >= limit ? this.lines.reduce((oldest, item) => item.life < oldest.life ? item : oldest) : null);
     if (reusable) Object.assign(reusable, effect);
     else this.lines.push(effect);
   }
 
   private addFlash(effect: FlashEffect): void {
-    const limit = this.effectBudget.effectsLevel === 'standard' ? 32 : this.effectBudget.effectsLevel === 'low' ? 20 : 10;
-    const reusable = this.flashes.find((item) => item.life <= 0) ?? (this.flashes.length >= limit ? this.flashes.reduce((oldest, item) => item.life < oldest.life ? item : oldest) : null);
-    if (reusable) Object.assign(reusable, effect);
-    else this.flashes.push(effect);
+    const reusable = this.flashes.find((item) => item.life <= 0);
+    if (reusable) {
+      Object.assign(reusable, effect);
+      return;
+    }
+    const activeAttackFlashes = this.flashes.filter((item) => item.life > 0 && item.kind !== 'decoration');
+    const activeDecorations = this.flashes.filter((item) => item.life > 0 && item.kind === 'decoration');
+    if (effect.kind === 'decoration' && activeDecorations.length < DECORATIVE_FLASH_LIMITS[this.effectBudget.effectsLevel]) {
+      this.flashes.push(effect);
+      return;
+    }
+    if (effect.kind === 'decoration') {
+      // Decorations have their own small pool. They cannot evict an attack
+      // cue, and the oldest decoration is the only valid replacement when
+      // their reduced-effects quota is full.
+      const oldestDecoration = activeDecorations.reduce<FlashEffect | null>((current, item) => current === null || item.life < current.life ? item : current, null);
+      if (oldestDecoration) Object.assign(oldestDecoration, effect);
+      return;
+    }
+    if (activeAttackFlashes.length < MAX_ATTACK_FLASHES) {
+      this.flashes.push(effect);
+      return;
+    }
+    // Telegraphs are actionable warnings and impacts are the only feedback
+    // for an area hit at minimum effects. If the finite attack pool is full,
+    // recycle the oldest impact first; when every slot is a telegraph, keep
+    // the warning and drop the new lower-priority cue.
+    const candidates = activeAttackFlashes.filter((item) => item.kind !== 'telegraph');
+    if (candidates.length === 0) return;
+    const oldest = candidates.reduce((current, item) => item.life < current.life ? item : current);
+    Object.assign(oldest, effect);
   }
 
   private emitParticles(x: number, y: number, color: number): void {
@@ -1960,7 +2206,7 @@ export class BattleScene extends Phaser.Scene {
   private recordWeaponDamage(id: WeaponId, amount: number, instanceId?: string): void {
     if (amount <= 0) return;
     this.recorder.recordWeaponDamage(id, amount, instanceId);
-    const weapon = instanceId ? this.weapons.find((item) => item.instanceId === instanceId) : this.weapons.find((item) => item.id === id);
+    const weapon = instanceId ? this.weaponByInstanceId(instanceId) : this.weapons.find((item) => item.id === id);
     if (weapon) weapon.damageDealt += amount;
   }
 
@@ -2016,7 +2262,8 @@ export class BattleScene extends Phaser.Scene {
       this.supports,
       this.combatResearchEffects.powerMultiplier * (1 + brink),
       this.combatResearchEffects.projectileSpeedMultiplier,
-      this.weaponPolishStacks,
+      this.weaponPolishStacks + this.stabilizerStacks * 0.5,
+      this.manualAim,
     );
   }
 
@@ -2084,15 +2331,24 @@ export class BattleScene extends Phaser.Scene {
     }
     for (let index = this.enemies.length - 1; index >= 0; index -= 1) if (!this.enemies[index]?.active) this.enemies.splice(index, 1);
     const activeEnemyIds = new Set(this.enemies.map((enemy) => enemy.id));
+    // Ignite is a one-shot guard keyed by the pool's monotonic enemy ID. Once
+    // an enemy leaves the active set, retaining its ID only grows checkpoint
+    // payloads during endless runs; IDs are never reused by EnemyPool.
+    for (const enemyId of this.igniteTriggered) if (!activeEnemyIds.has(enemyId)) this.igniteTriggered.delete(enemyId);
     for (const key of this.orbitHits.keys()) {
       const enemyId = Number(key.split(':')[1]);
       if (!activeEnemyIds.has(enemyId)) this.orbitHits.delete(key);
     }
-    const activeWeaponIds = new Set(this.weapons.map((weapon) => weapon.instanceId));
-    for (const instanceId of this.orbitAngles.keys()) if (!activeWeaponIds.has(instanceId)) this.orbitAngles.delete(instanceId);
-    for (const instanceId of this.targetLocks.keys()) if (!activeWeaponIds.has(instanceId)) this.targetLocks.delete(instanceId);
-    for (const instanceId of this.lanceCharge.keys()) if (!activeWeaponIds.has(instanceId)) this.lanceCharge.delete(instanceId);
-    for (const instanceId of this.drones.keys()) if (!activeWeaponIds.has(instanceId)) this.drones.delete(instanceId);
+    const liveWeaponIds = new Set(this.weapons.map((weapon) => weapon.instanceId));
+    const sourceWeaponIds = new Set(this.allSourceWeapons().map((weapon) => weapon.instanceId));
+    // These maps describe an active installed weapon, not a delayed effect.
+    // Clear them as soon as a face is replaced; projectiles/fields/mines and
+    // drone units retain their own source ID and are handled separately.
+    for (const instanceId of this.orbitAngles.keys()) if (!liveWeaponIds.has(instanceId)) this.orbitAngles.delete(instanceId);
+    for (const instanceId of this.targetLocks.keys()) if (!liveWeaponIds.has(instanceId)) this.targetLocks.delete(instanceId);
+    for (const instanceId of this.lanceCharge.keys()) if (!liveWeaponIds.has(instanceId)) this.lanceCharge.delete(instanceId);
+    for (const instanceId of this.drones.keys()) if (!sourceWeaponIds.has(instanceId)) this.drones.delete(instanceId);
+    this.pruneRetiredWeapons();
   }
 
   private updateEffects(seconds: number): void {
@@ -2112,17 +2368,38 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private weaponForProjectile(projectile: Projectile): Weapon | undefined {
-    return (projectile.sourceWeaponInstanceId ? this.weapons.find((weapon) => weapon.instanceId === projectile.sourceWeaponInstanceId) : undefined)
-      ?? (projectile.sourceWeaponId ? this.weapons.find((weapon) => weapon.id === projectile.sourceWeaponId) : undefined);
+    return (projectile.sourceWeaponInstanceId ? this.weaponByInstanceId(projectile.sourceWeaponInstanceId) : undefined)
+      ?? (projectile.sourceWeaponId
+        ? this.weapons.find((weapon) => weapon.id === projectile.sourceWeaponId)
+          ?? [...this.retiredWeapons.values()].find((weapon) => weapon.id === projectile.sourceWeaponId)
+        : undefined);
   }
 
-  private emitSnapshot(force: boolean): void {
+  private weaponByInstanceId(instanceId: string): Weapon | undefined {
+    return this.weapons.find((weapon) => weapon.instanceId === instanceId) ?? this.retiredWeapons.get(instanceId);
+  }
+
+  private allSourceWeapons(): Weapon[] {
+    return [...this.weapons, ...this.retiredWeapons.values()];
+  }
+
+  /** Keep outgoing copies alive only for effects that still reference them. */
+  private pruneRetiredWeapons(): void {
+    const inFlight = new Set<string>();
+    for (const projectile of this.projectiles) if (projectile.active && projectile.sourceWeaponInstanceId) inFlight.add(projectile.sourceWeaponInstanceId);
+    for (const mine of this.mines) if (mine.life > 0) inFlight.add(mine.sourceWeaponInstanceId);
+    for (const field of this.gravityFields) if (field.life > 0 && field.sourceWeaponInstanceId) inFlight.add(field.sourceWeaponInstanceId);
+    for (const [instanceId, units] of this.drones) if (units.some((unit) => unit.life > 0)) inFlight.add(instanceId);
+    for (const instanceId of this.retiredWeapons.keys()) if (!inFlight.has(instanceId)) this.retiredWeapons.delete(instanceId);
+  }
+
+  private emitSnapshot(force: boolean, checkpointPlaying = false): void {
     if (!force && this.elapsed - this.lastSnapshotAt < 0.1) return;
     this.lastSnapshotAt = this.elapsed;
     const snapshot = this.createSnapshot();
     this.options.callbacks.onSnapshot(snapshot);
     const shouldCheckpoint = force
-      ? this.state === 'paused' || this.state === 'upgrade' || this.pendingUpgradeDeferred
+      ? checkpointPlaying || this.state === 'paused' || this.state === 'upgrade' || this.pendingUpgradeDeferred
       : this.elapsed - this.lastCheckpointAt >= 5;
     if (shouldCheckpoint) this.emitCheckpoint(this.createSnapshot(true));
   }
@@ -2150,7 +2427,8 @@ export class BattleScene extends Phaser.Scene {
       kills: this.recorder.kills,
       enemies: snapshotEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),
       projectiles: visibleProjectiles.map((projectile) => projectile.snapshot()),
-      weapons: this.weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, nodeId: weapon.nodeId, slot: weapon.slot, level: weapon.level, damageDealt: weapon.damageDealt, branch: weapon.branch, finalBranch: weapon.finalBranch, evolutionId: weapon.evolutionId, evolutionName: weapon.evolutionDefinition?.name, cooldownRemaining: weapon.cooldown, precisionBonus: weapon.precisionBonus, shotsFired: weapon.shotsFired })),
+      weapons: this.weapons.map((weapon) => this.weaponSnapshot(weapon)),
+      retiredWeaponSources: this.retiredWeapons.size > 0 ? [...this.retiredWeapons.values()].map((weapon) => this.weaponSnapshot(weapon)) : undefined,
       supports: this.supports.map((support) => ({ id: support.id, instanceId: support.instanceId, nodeId: support.nodeId, level: support.level, slot: support.slot })),
       aimAngle: this.aimAngle,
       manualAim: this.manualAim,
@@ -2208,6 +2486,7 @@ export class BattleScene extends Phaser.Scene {
         choicesSinceBreak: this.choicesSinceBreak,
         weaponPolishStacks: this.weaponPolishStacks,
         pendingPartsBonus: this.pendingPartsBonus,
+        stabilizerStacks: this.stabilizerStacks,
         bossDefeated: this.bossDefeated,
         endlessMilestone: this.endlessMilestone,
         testUpgradeOpened: this.testUpgradeOpened,
@@ -2266,6 +2545,7 @@ export class BattleScene extends Phaser.Scene {
       if (Number.isInteger(runtime.choicesSinceBreak)) this.choicesSinceBreak = Math.max(0, runtime.choicesSinceBreak as number);
       if (finiteNumber(runtime.weaponPolishStacks)) this.weaponPolishStacks = Math.max(0, runtime.weaponPolishStacks);
       if (finiteNumber(runtime.pendingPartsBonus)) this.pendingPartsBonus = Math.max(0, runtime.pendingPartsBonus);
+      if (finiteNumber(runtime.stabilizerStacks)) this.stabilizerStacks = Math.max(0, runtime.stabilizerStacks);
       if (Number.isInteger(runtime.endlessMilestone)) this.endlessMilestone = Math.max(0, runtime.endlessMilestone as number);
       this.pendingUpgradeDeferred = runtime.pendingUpgradeDeferred === true;
       this.upgradeRequestQueued = runtime.upgradeRequestQueued === true;
@@ -2351,18 +2631,48 @@ export class BattleScene extends Phaser.Scene {
 
   private restoreWeapons(snapshot: BattleSnapshot): void {
     this.weapons.splice(0, this.weapons.length);
+    this.retiredWeapons.clear();
     for (const item of snapshot.weapons) {
-      const weapon = new Weapon(item.id, item.slot, item.instanceId);
-      weapon.level = Math.max(1, Math.min(WEAPONS[item.id].levels.length, Math.floor(item.level)));
-      weapon.damageDealt = Math.max(0, item.damageDealt);
-      weapon.branch = item.branch;
-      weapon.finalBranch = item.finalBranch;
-      weapon.evolutionId = item.evolutionId;
-      weapon.cooldown = Math.max(0, item.cooldownRemaining ?? 0);
-      weapon.precisionBonus = Math.max(0, item.precisionBonus ?? 0);
-      weapon.shotsFired = Math.max(0, Math.floor(item.shotsFired ?? 0));
-      this.weapons.push(weapon);
+      const weapon = this.restoreWeapon(item);
+      if (weapon) this.weapons.push(weapon);
     }
+    for (const item of snapshot.retiredWeaponSources ?? []) {
+      const weapon = this.restoreWeapon(item);
+      if (weapon && !this.weapons.some((current) => current.instanceId === weapon.instanceId)) this.retiredWeapons.set(weapon.instanceId, weapon);
+    }
+  }
+
+  private restoreWeapon(item: BattleSnapshot['weapons'][number]): Weapon | undefined {
+    const definition = WEAPONS[item.id];
+    if (!definition) return undefined;
+    const weapon = new Weapon(item.id, item.slot, item.instanceId);
+    weapon.level = Math.max(1, Math.min(definition.levels.length, Math.floor(item.level)));
+    weapon.damageDealt = Math.max(0, item.damageDealt);
+    weapon.branch = item.branch;
+    weapon.finalBranch = item.finalBranch;
+    weapon.evolutionId = item.evolutionId;
+    weapon.cooldown = Math.max(0, item.cooldownRemaining ?? 0);
+    weapon.precisionBonus = Math.max(0, item.precisionBonus ?? 0);
+    weapon.shotsFired = Math.max(0, Math.floor(item.shotsFired ?? 0));
+    return weapon;
+  }
+
+  private weaponSnapshot(weapon: Weapon): BattleSnapshot['weapons'][number] {
+    return {
+      id: weapon.id,
+      instanceId: weapon.instanceId,
+      nodeId: weapon.nodeId,
+      slot: weapon.slot,
+      level: weapon.level,
+      damageDealt: weapon.damageDealt,
+      branch: weapon.branch,
+      finalBranch: weapon.finalBranch,
+      evolutionId: weapon.evolutionId,
+      evolutionName: weapon.evolutionDefinition?.name,
+      cooldownRemaining: weapon.cooldown,
+      precisionBonus: weapon.precisionBonus,
+      shotsFired: weapon.shotsFired,
+    };
   }
 
   private restoreSupports(snapshot: BattleSnapshot): void {
@@ -2481,8 +2791,9 @@ export class BattleScene extends Phaser.Scene {
       (first, second) => Math.hypot(first.x, first.y) - Math.hypot(second.x, second.y) || first.id - second.id,
     );
     // Hostile projectiles are gameplay hazards and are therefore all drawn.
-    // Friendly projectiles may still use a visual budget because losing a
-    // decorative shot does not conceal an incoming hit.
+    // Friendly projectiles use the same 280-shot cap as addProjectile at every
+    // effects level; a live attack must not disappear merely because effects
+    // were reduced.
     const hostile = this.projectiles.filter((projectile) => projectile.active && projectile.enemyProjectile);
     return [...friendly, ...hostile];
   }
@@ -2611,7 +2922,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawDrones(graphics: Phaser.GameObjects.Graphics, cx: number, cy: number): void {
-    for (const weapon of this.weapons.filter((item) => item.id === 'drone')) {
+    for (const weapon of this.allSourceWeapons().filter((item) => item.id === 'drone')) {
       const units = this.drones.get(weapon.instanceId) ?? [];
       const origin = this.weaponOrigin(weapon);
       for (const drone of units) {
@@ -2662,7 +2973,7 @@ export class BattleScene extends Phaser.Scene {
     this.recorder.recordInput({ kind: 'aim', tick: this.inputTick(), angle: this.aimAngle });
     this.aimMoved = true;
     this.manualAim = true;
-    this.aimReleaseAt = this.elapsed + (this.options.aimAssist === 'strong' ? 1.1 : 0.8);
+    this.aimReleaseAt = this.elapsed + this.aimReleaseDelay();
   }
 
   private handlePointerUp(pointer: Phaser.Input.Pointer): void {
@@ -2670,7 +2981,7 @@ export class BattleScene extends Phaser.Scene {
     this.aimPointerId = null;
     this.aimStart = null;
     if (!this.aimMoved) return;
-    this.aimReleaseAt = this.elapsed + (this.options.aimAssist === 'strong' ? 1.1 : 0.8);
+    this.aimReleaseAt = this.elapsed + this.aimReleaseDelay();
     this.manualAim = true;
     this.aimMoved = false;
   }
@@ -2681,6 +2992,12 @@ export class BattleScene extends Phaser.Scene {
     this.aimMoved = false;
     this.manualAim = false;
     this.aimReleaseAt = 0;
+  }
+
+  private aimReleaseDelay(): number {
+    // Competitive endless has one fixed control contract; profile aim-assist
+    // settings must not create a hidden timing advantage in ranked runs.
+    return this.competitive ? 0.8 : this.options.aimAssist === 'strong' ? 1.1 : 0.8;
   }
 }
 

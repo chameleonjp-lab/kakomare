@@ -137,9 +137,18 @@ function drainUpgrade(scene: unknown, policy: FinalGateSelectionPolicy): number 
       .filter((item) => item.requiresNewItemFirst !== true)
       .sort((left, right) => candidateRank(left, policy) - candidateRank(right, policy) || left.id.localeCompare(right.id))[0];
     if (!candidate) throw new Error(`V7 trial ${payload.selectionId} has no selectable candidate`);
+    const replacementTarget = candidate.replacementTargets?.find((target) => target.slot === candidate.placementSlots?.[0]);
+    const replacementBranch = replacementTarget && Math.min(replacementTarget.level, 3) >= 3
+      ? candidate.replacementBranchOptions?.[0]?.id
+      : undefined;
     const choice = candidate.placementSlots?.[0] === undefined
       ? candidate
-      : { ...candidate, placementSlot: candidate.placementSlots[0] };
+      : {
+        ...candidate,
+        placementSlot: candidate.placementSlots[0],
+        ...(replacementTarget ? { replacementTargetInstanceId: replacementTarget.instanceId } : {}),
+        ...(replacementBranch ? { replacementBranch } : {}),
+      };
     privateValue<(candidate: UpgradeCandidate, selectionId: number) => void>(scene, 'chooseUpgrade').bind(scene)(choice, payload.selectionId);
     if (privateValue<string>(scene, 'state') === 'upgrade' && privateValue<UpgradePayload | null>(scene, 'upgradePayload')?.selectionId === payload.selectionId) {
       throw new Error(`V7 trial ${payload.selectionId} could not apply ${candidate.id}`);

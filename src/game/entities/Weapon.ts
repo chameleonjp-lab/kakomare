@@ -36,6 +36,19 @@ export class Weapon {
     return this.definition.levels[this.level - 1];
   }
 
+  /** Baseline projectile pierce is the number of extra victims after the first hit. */
+  public get basePiercing(): number {
+    const value = this.stats.pierce ?? 0;
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  }
+
+  public get needlePiercing(): number {
+    // Spread is the multi-direction choice and intentionally does not carry
+    // the level-based pierce budget. Only an explicitly selected piercing
+    // branch can make a needle pass through more than its first target.
+    return this.branch === 'spread' ? 0 : this.basePiercing + (this.branch === 'piercing' ? 2 : 0);
+  }
+
   public get damageMultiplier(): number {
     return (1 + this.precisionBonus * 0.06)
       * (this.finalBranchDefinition?.damageMultiplier ?? 1)

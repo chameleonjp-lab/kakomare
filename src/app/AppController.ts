@@ -13,16 +13,16 @@ import { createDefaultSave, type SaveData } from '../types/save';
 import { button, element, isValidPlayerName } from '../ui/viewUtils';
 import { createNameView } from '../ui/NameView';
 import { createHomeView } from '../ui/HomeView';
-import { createStageSelectView } from '../ui/StageSelectView';
+import { createPlacementPreview, placementLabel } from '../ui/PlacementPreview';
+import { getSupportHelp, getWeaponHelp, renderEquipmentHelp } from '../ui/EquipmentHelp';
 import { createRulesView } from '../ui/RulesView';
 import { createSettingsView } from '../ui/SettingsView';
 import { createResultView } from '../ui/ResultView';
-import { createResearchView } from '../ui/ResearchView';
-import { getResearchEffects, purchaseResearch } from '../data/research';
-import { STAGES, stageIsUnlocked } from '../data/stages';
+import { getResearchEffects } from '../data/research';
+import { STAGES } from '../data/stages';
 import { SUPPORTS } from '../data/supports';
 import { WEAPONS } from '../data/weapons';
-import type { StageId } from '../types/content';
+import type { StageId, SupportId, WeaponId } from '../types/content';
 import type { RankingSnapshot } from '../types/ranking';
 import type { RunSaveEnvelope } from '../types/runSave';
 import { isLocalTestHost } from './testMode';
@@ -30,16 +30,12 @@ import { RunLifecycleGuard } from './RunLifecycleGuard';
 import { MAX_DEVICE_SLOT_COUNT, DEVICE_SLOT_COUNT, itemAtExpandedSlot } from '../game/deviceLayout';
 import { COMPETITIVE_RULES } from '../data/competitiveRules';
 
-function stageLabel(stageId: StageId): string {
-  return stageId === 'endless' ? 'ENDLESS' : stageId.replace('stage-', 'STAGE ');
-}
-
 const FIRST_CLEAR_PART_BONUS = 25;
 
-function runStageIsCompatible(checkpoint: RunSaveEnvelope, save: SaveData): boolean {
+function runStageIsCompatible(checkpoint: RunSaveEnvelope): boolean {
   const endless = checkpoint.stageId === 'endless';
   const expectedRuleVersion = endless ? COMPETITIVE_RULES.version : 'runtime-v0';
-  return stageIsUnlocked(checkpoint.stageId, save.progress.unlockedStages)
+  return endless
     && checkpoint.contentVersion === 'catalog-v5'
     && checkpoint.ruleVersion === expectedRuleVersion
     && checkpoint.competitive === endless
@@ -112,8 +108,7 @@ export class AppController {
       return;
     }
     if (view === 'home') { this.root.append(this.homeView()); return; }
-    if (view === 'stage-select') { this.root.append(createStageSelectView(this.state.save, (id) => this.startStage(id), () => this.render('home'))); return; }
-    if (view === 'research') { this.root.append(this.researchView()); return; }
+    if (view === 'stage-select' || view === 'research') { this.render('home'); return; }
     if (view === 'rules') { this.root.append(createRulesView(() => this.render('home'))); return; }
     if (view === 'settings') { this.root.append(this.settingsView()); return; }
     if (view === 'countdown') { this.renderCountdown(); return; }
@@ -162,12 +157,10 @@ export class AppController {
 
   private homeView(): HTMLElement {
     const view = createHomeView(this.state.save, {
-      start: () => this.render('stage-select'),
+      start: () => this.startStage('endless'),
       resume: this.runSaveService.hasSavedRun() ? () => this.resumeSavedRun() : undefined,
-      stages: () => this.render('stage-select'),
       settings: () => this.render('settings'),
       rules: () => this.render('rules'),
-      research: () => this.render('research'),
       share: () => { void this.shareHome(); },
     });
     this.addNotice(view);
@@ -196,7 +189,7 @@ export class AppController {
   }
 
   private startStage(stageId: StageId): void {
-    if (this.runLifecycle.active || !stageIsUnlocked(stageId, this.state.save.progress.unlockedStages)) return;
+    if (this.runLifecycle.active || stageId !== 'endless') return;
     if (!isValidPlayerName(this.state.save.profile.name)) {
       this.state.notice = 'プレイを始める前に、1〜20文字の名前を入力してください。';
       this.render('name-entry');
@@ -230,7 +223,7 @@ export class AppController {
       this.render('name-entry');
       return;
     }
-    if (!runStageIsCompatible(loaded.data, this.state.save)) {
+    if (!runStageIsCompatible(loaded.data)) {
       this.state.notice = 'この途中状態は現在の保存内容と互換性がありません。';
       this.render('home');
       return;
@@ -281,7 +274,7 @@ export class AppController {
     const shell = element('section', 'battle-shell');
     shell.dataset.testid = 'battle-screen';
     const header = element('header', 'battle-header');
-    header.append(element('p', 'eyebrow', `カコマレ / ${stageLabel(this.state.selectedStage)}`));
+    header.append(element('p', 'eyebrow', 'カコマレ'));
     const pause = button('一時停止', 'button button-secondary pause-button');
     pause.dataset.testid = 'pause-button';
     pause.addEventListener('click', () => this.openPause(false, '', runId));
@@ -302,7 +295,7 @@ export class AppController {
 
     const panel = element('aside', 'battle-panel');
     const hud = element('div', 'battle-hud');
-    const maxCore = getResearchEffects(this.state.save).maxCore;
+    const maxCore = COMPETITIVE_RULES.initial.coreHp;
     const health = this.hudItem('耐久力', `${maxCore} / ${maxCore}`, 'hud-health');
     const time = this.hudItem(STAGES[this.state.selectedStage].isEndless ? '経過時間' : '残り時間', STAGES[this.state.selectedStage].isEndless ? '0秒' : `${Math.ceil(STAGES[this.state.selectedStage].timeLimit)}秒`, 'hud-time');
     const level = this.hudItem('現在Lv', 'Lv1', 'hud-level');
@@ -346,11 +339,12 @@ export class AppController {
       effectsLevel: this.state.save.settings.effects,
       reducedMotion: this.state.save.settings.reducedMotion,
       screenShake: this.state.save.settings.screenShake,
-      aimAssist: this.state.save.settings.aimAssist,
-      researchEffects: getResearchEffects(this.state.save),
+      aimAssist: 'standard',
+      researchEffects: getResearchEffects(createDefaultSave()),
       testMode,
       testOutcome: testMode && (outcome === 'victory' || outcome === 'defeat') ? outcome : undefined,
       testUpgrade: testMode && query.get('upgrade') === '1',
+      testFullLoadout: testMode && query.get('fullLoadout') === '1',
       testUpgradeExperience: testMode && Number.isInteger(requestedTestExperience) && requestedTestExperience > 0 && requestedTestExperience <= 10000 ? requestedTestExperience : undefined,
       seed: testMode && requestedSeed !== undefined && Number.isFinite(requestedSeed) ? requestedSeed : undefined,
       competitive: this.state.selectedStage === 'endless',
@@ -443,7 +437,7 @@ export class AppController {
     dialog.append(element('p', 'eyebrow', '装置を更新')); const title = element('h2', '', '強化候補を1つ選ぶ'); title.id = 'upgrade-title'; dialog.append(title);
     dialog.append(element('p', 'modal-copy', '戦闘を完全に停止しています。変更前と変更後を確認してください。'));
     dialog.append(element('p', 'upgrade-pending', `未選択の強化 ${payload.pendingCount}回`));
-    if (getResearchEffects(this.state.save).candidateDetails) dialog.append(element('p', 'modal-copy', '詳細解析: 数値の変化と得意な敵を表示しています。'));
+    dialog.append(element('p', 'upgrade-tools-help', `除外は残り${payload.bansLeft}回。この候補だけを今回のプレイ中に出なくします。武器・補助の種類全体を除く操作ではありません。`));
     const list = element('div', 'upgrade-list');
     let locked = true;
     const selectionId = payload.selectionId;
@@ -451,7 +445,7 @@ export class AppController {
     const selectionButtons: HTMLButtonElement[] = [];
     let selectedIndex = 0;
     for (const [candidateIndex, candidate] of payload.candidates.entries()) {
-      const card = element('article', 'upgrade-card');
+      const card = element('article', `upgrade-card upgrade-kind-${candidate.kind}`);
       card.dataset.testid = 'upgrade-card';
       card.dataset.candidateId = candidate.id;
       const choose = button(candidate.title, 'upgrade-choice');
@@ -464,35 +458,91 @@ export class AppController {
       description.id = `upgrade-description-${candidateIndex}`;
       const change = element('p', 'upgrade-change', `${candidate.before} → ${candidate.after}`);
       change.id = `upgrade-change-${candidateIndex}`;
-      card.append(choose, description, change, element('p', 'upgrade-role', `得意: ${candidate.role}`));
+      card.append(element('p', 'upgrade-category', candidate.kind === 'weapon' ? '武器｜敵を攻撃する' : candidate.kind === 'support' ? '補助｜接続した武器を助ける' : 'コア・配置の強化'), choose, description, change, element('p', 'upgrade-role', `得意: ${candidate.role}`));
       if (candidate.isExisting) {
+        const snapshot = this.latestBattleSnapshot;
+        const weapon = snapshot?.weapons.find((item) => candidate.targetInstanceId ? item.instanceId === candidate.targetInstanceId : item.id === candidate.targetId);
+        const support = snapshot?.supports.find((item) => candidate.targetInstanceId ? item.instanceId === candidate.targetInstanceId : item.id === candidate.targetId);
+        const help = candidate.kind === 'weapon' && weapon ? getWeaponHelp(weapon, snapshot?.supports, snapshot?.weapons)
+          : candidate.kind === 'support' && support ? getSupportHelp(support, snapshot?.weapons) : null;
+        if (help) {
+          const details = element('details', 'upgrade-help-details');
+          details.append(element('summary', '', '現在の効果・接続・組み合わせ'), renderEquipmentHelp(help));
+          card.append(details);
+        }
         selectionButtons.push(choose);
         choose.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(choose); });
         choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate, selectionId, runId); });
       } else {
         choose.setAttribute('aria-disabled', 'true');
         choose.title = '装着する面を下から選んでください';
-        card.append(element('p', 'upgrade-details upgrade-slot-hint', '空いている面を1回タップして装着します。'));
+        card.append(createPlacementPreview(this.latestBattleSnapshot, { kind: candidate.kind === 'support' ? 'support' : 'weapon', slots: candidate.placementSlots }));
+        card.append(element('p', 'upgrade-details upgrade-slot-hint', '見本で場所を確認し、下のボタンで装着します。'));
         const placementList = element('div', 'upgrade-placement-list');
+        const replacementConfirm = element('div', 'upgrade-replacement-confirmation');
         for (const slot of candidate.placementSlots ?? [0, 1, 2]) {
-          const placement = button(`面${slot + 1}`, 'button button-small upgrade-placement');
+          const target = candidate.replacementTargets?.find((item) => item.slot === slot);
+          const targetName = target ? (candidate.kind === 'support' ? this.supportName(target.id as SupportId) : this.weaponName(target.id as WeaponId)) : '';
+          const resultingLevel = target ? Math.min(target.level, 3) : 1;
+          const placement = button(`${placementLabel(candidate.kind === 'support' ? 'support' : 'weapon', slot)}${target ? `：${targetName} Lv${target.level}を交換 → 新装備Lv${resultingLevel}` : ''}`, 'button button-small upgrade-placement');
           placement.dataset.testid = 'upgrade-placement';
-          placement.setAttribute('aria-label', `${candidate.title}を面${slot + 1}へ装着`);
+          placement.dataset.slot = String(slot);
+          placement.setAttribute('aria-label', target ? `${placement.textContent}。交換内容を確認` : `${candidate.title}を面${slot + 1}へ装着`);
           placement.disabled = true;
           placement.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(placement); });
           placement.addEventListener('click', () => {
             if (locked) return;
+            if (target) {
+              replacementConfirm.replaceChildren(element('p', 'upgrade-details', `${targetName} Lv${target.level}を外し、新しい装備をLv${resultingLevel}で置きます。元の分岐と発展は引き継ぎません。`));
+              const options = resultingLevel >= 3 && candidate.kind === 'weapon' ? candidate.replacementBranchOptions ?? [] : [];
+              const commit = (branch?: UpgradeCandidate['replacementBranch']): void => {
+                if (locked) return;
+                locked = true;
+                this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot, replacementTargetInstanceId: target.instanceId, replacementBranch: branch }, selectionId, runId);
+              };
+              for (const option of options) {
+                const confirm = button(`${option.name}で交換する`, 'button button-primary');
+                confirm.dataset.testid = 'upgrade-replacement-confirm';
+                confirm.addEventListener('click', () => commit(option.id));
+                replacementConfirm.append(element('p', 'upgrade-description', option.description), confirm);
+                selectionButtons.push(confirm);
+              }
+              if (options.length === 0) {
+                const confirm = button(`Lv${resultingLevel}で交換する`, 'button button-primary');
+                confirm.dataset.testid = 'upgrade-replacement-confirm';
+                confirm.addEventListener('click', () => commit());
+                replacementConfirm.append(confirm);
+                selectionButtons.push(confirm);
+              }
+              replacementConfirm.querySelector('button')?.focus();
+              return;
+            }
             locked = true;
             this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot }, selectionId, runId);
           });
           selectionButtons.push(placement);
           placementList.append(placement);
+          if (candidate.kind === 'support') {
+            const help = getSupportHelp({ id: candidate.targetId as SupportId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel }, this.latestBattleSnapshot?.weapons);
+            const connection = element('p', 'upgrade-connection', `${placementLabel('support', slot)}の接続：${help.connections.join('／')}`);
+            placementList.append(connection);
+            const details = element('details', 'upgrade-help-details');
+            details.append(element('summary', '', 'この場所で働く効果・組み合わせ'), renderEquipmentHelp(help));
+            placementList.append(details);
+          } else if (candidate.kind === 'weapon') {
+            const help = getWeaponHelp({ id: candidate.targetId as WeaponId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel, damageDealt: 0, branch: null, finalBranch: null, evolutionId: null }, this.latestBattleSnapshot?.supports, this.latestBattleSnapshot?.weapons);
+            placementList.append(element('p', 'upgrade-connection', `${placementLabel('weapon', slot)}につながる補助：${help.connections.join('／')}`));
+            const details = element('details', 'upgrade-help-details');
+            details.dataset.slot = String(slot);
+            details.append(element('summary', '', 'この場所で働く効果・組み合わせ'), renderEquipmentHelp(help));
+            placementList.append(details);
+          }
         }
-        card.append(placementList);
+        card.append(placementList, replacementConfirm);
       }
       if (candidate.requiresNewItemFirst) card.append(element('p', 'upgrade-details', '候補を3つ保つため、新しい装置を先に取得すると選べます。'));
-      if (getResearchEffects(this.state.save).candidateDetails && candidate.details) card.append(element('p', 'upgrade-details', candidate.details));
-      const ban = button('この候補を除外', 'button button-small upgrade-ban');
+      if (candidate.details) card.append(element('p', 'upgrade-details', candidate.details));
+      const ban = button(`この候補を除外（残り${payload.bansLeft}回）`, 'button button-small upgrade-ban');
       ban.disabled = true;
       if (candidate.canBan === false) ban.title = '成長を止めないため除外できません';
       ban.addEventListener('click', () => {
@@ -503,7 +553,7 @@ export class AppController {
       });
       card.append(ban);
       card.addEventListener('click', (event) => {
-        if ((event.target as HTMLElement).closest('button')) return;
+        if ((event.target as HTMLElement).closest('button, details')) return;
         choose.click();
       });
       list.append(card);
@@ -518,7 +568,7 @@ export class AppController {
     const moveSelection = (direction: 1 | -1): void => {
       for (let offset = 1; offset <= selectionButtons.length; offset += 1) {
         const nextIndex = (selectedIndex + direction * offset + selectionButtons.length) % selectionButtons.length;
-        if (!selectionButtons[nextIndex]?.disabled) {
+        if (selectionButtons[nextIndex]?.isConnected && !selectionButtons[nextIndex]?.disabled) {
           selectedIndex = nextIndex;
           selectionButtons[selectedIndex]?.focus();
           return;
@@ -663,8 +713,9 @@ export class AppController {
     view.replaceChildren();
     const copy = element('div', 'pause-rules pause-loadout');
     copy.dataset.testid = 'pause-loadout';
-    copy.append(element('h3', '', '現在の装置'));
+    copy.append(element('h3', '', '現在の装備と配置'));
     const snapshot = this.latestBattleSnapshot;
+    copy.append(createPlacementPreview(snapshot));
     const loadout = snapshot
       ? Array.from({ length: Math.min(MAX_DEVICE_SLOT_COUNT, (snapshot.build?.unlockedLayer ?? 1) * DEVICE_SLOT_COUNT) * 2 }, (_, index) => {
         const slot = Math.floor(index / 2);
@@ -680,55 +731,69 @@ export class AppController {
     for (const item of loadout) list.append(element('li', '', item));
     copy.append(list);
     if (snapshot) {
+      const equipmentDetails = element('details', 'loadout-help');
+      equipmentDetails.append(element('summary', '', '装備の効果・接続・相乗効果を確認'));
+      for (const weapon of snapshot.weapons) {
+        const details = element('details', 'equipment-help-details');
+        details.append(element('summary', '', `${placementLabel('weapon', weapon.slot)}：${this.weaponName(weapon.id)} Lv${weapon.level}`), renderEquipmentHelp(getWeaponHelp(weapon, snapshot.supports, snapshot.weapons)));
+        equipmentDetails.append(details);
+      }
+      for (const support of snapshot.supports) {
+        const details = element('details', 'equipment-help-details');
+        details.append(element('summary', '', `${placementLabel('support', support.slot)}：${this.supportName(support.id)} Lv${support.level}`), renderEquipmentHelp(getSupportHelp(support, snapshot.weapons)));
+        equipmentDetails.append(details);
+      }
+      copy.append(equipmentDetails);
       const graph = snapshot.build?.graph;
       const installed = [
         ...snapshot.weapons.map((item) => ({ ...item, kind: 'weapon' as const })),
         ...snapshot.supports.map((item) => ({ ...item, kind: 'support' as const })),
       ];
       const controls = element('div', 'loadout-controls');
-      controls.append(element('h4', '', '配置を調整（停止中のみ）'));
-      controls.append(element('p', 'battle-help', '移設は空いている同種の面へ、入替は同種の装置同士で行います。レベル・待ち時間は保持します。'));
+      controls.append(element('h4', '', '位置を入れ替える（停止中のみ）'));
+      controls.append(element('p', 'battle-help', '①動かす装備 → ②移動先 → ③確定の順で選びます。武器は武器の面、補助は補助の面へ動かせます。レベルは変わりません。別の種類への交換は、レベルアップの候補で行います。'));
       const refresh = (): void => this.showPauseLoadout(menu, view, back, resume, runId);
+      const destination = element('div', 'loadout-destination');
       for (const item of installed) {
         const row = element('div', 'loadout-control-row');
         const label = item.kind === 'weapon' ? this.weaponName(item.id) : this.supportName(item.id);
         const evolution = item.kind === 'weapon' && item.evolutionName ? `・${item.evolutionName}` : '';
-        row.append(element('span', 'loadout-control-label', `${item.kind === 'weapon' ? '武器' : '補助'}面${item.slot + 1} ${label} Lv${item.level}${evolution}`));
-        const actions = element('div', 'loadout-control-actions');
-        const freeSlots = graph?.nodes
-          .filter((node) => node.kind === item.kind && node.unlocked && !node.occupiedInstanceId)
-          .map((node) => node.slot)
-          .sort((first, second) => first - second) ?? [];
-        const moveTarget = freeSlots[0];
-        const move = button(moveTarget === undefined ? '空き面なし' : `面${moveTarget + 1}へ移設`, 'button button-small');
-        move.disabled = moveTarget === undefined;
-        move.dataset.testid = `move-${item.kind}-${item.instanceId}`;
-        move.addEventListener('click', () => {
-          if (moveTarget !== undefined && this.gameHost.moveDevice(item.instanceId, moveTarget, runId)) refresh();
+        const source = button(`${placementLabel(item.kind, item.slot)}：${label} Lv${item.level}${evolution}を動かす`, `button loadout-source equipment-${item.kind}`);
+        source.dataset.testid = 'placement-source';
+        source.addEventListener('click', () => {
+          if (!view.isConnected || runId !== this.battleRunSequence) return;
+          destination.replaceChildren(element('h4', '', `② ${label}の移動先を選ぶ`), createPlacementPreview(snapshot, { kind: item.kind, selectedSlot: item.slot }));
+          const confirmArea = element('div', 'placement-confirm-area');
+          for (const node of graph?.nodes.filter((node) => node.kind === item.kind && node.unlocked && node.slot !== item.slot) ?? []) {
+            const other = installed.find((device) => device.kind === item.kind && device.slot === node.slot);
+            const otherName = other ? (other.kind === 'weapon' ? this.weaponName(other.id) : this.supportName(other.id)) : '空き';
+            const target = button(`${placementLabel(item.kind, node.slot)}：${otherName}`, `button equipment-${item.kind}`);
+            target.dataset.testid = 'placement-destination';
+            target.dataset.slot = String(node.slot);
+            target.addEventListener('click', () => {
+              const confirmation = other
+                ? `${label}と${otherName}の位置を入れ替えます。どちらもレベルは変わりません。`
+                : `${label}を${placementLabel(item.kind, node.slot)}へ動かします。レベルは変わりません。`;
+              const confirm = button('この配置にする', 'button button-primary');
+              confirm.dataset.testid = 'placement-confirm';
+              confirm.addEventListener('click', () => {
+                if (!confirm.isConnected || runId !== this.battleRunSequence) return;
+                const success = other ? this.gameHost.swapDevices(item.instanceId, other.instanceId, runId) : this.gameHost.moveDevice(item.instanceId, node.slot, runId);
+                if (success) refresh();
+                else this.announce('配置を変更できませんでした。選び直してください。');
+              });
+              confirmArea.replaceChildren(element('p', '', confirmation), confirm);
+              confirm.focus();
+            });
+            destination.append(target);
+          }
+          destination.append(confirmArea);
+          destination.querySelector<HTMLButtonElement>('button')?.focus();
         });
-        actions.append(move);
-
-        const others = installed.filter((other) => other.kind === item.kind && other.instanceId !== item.instanceId);
-        const swapSelect = document.createElement('select');
-        swapSelect.className = 'loadout-swap-select';
-        swapSelect.setAttribute('aria-label', `${label}の入替先`);
-        for (const other of others) {
-          const option = document.createElement('option');
-          const otherLabel = other.kind === 'weapon' ? this.weaponName(other.id) : this.supportName(other.id);
-          option.value = other.instanceId;
-          option.textContent = `面${other.slot + 1} ${otherLabel}`;
-          swapSelect.append(option);
-        }
-        const swap = button('入れ替え', 'button button-small');
-        swap.disabled = others.length === 0;
-        swap.dataset.testid = `swap-${item.kind}-${item.instanceId}`;
-        swap.addEventListener('click', () => {
-          if (swapSelect.value && this.gameHost.swapDevices(item.instanceId, swapSelect.value, runId)) refresh();
-        });
-        actions.append(swapSelect, swap);
-        row.append(actions);
+        row.append(source);
         controls.append(row);
       }
+      controls.append(destination);
       copy.append(controls);
     }
     this.appendPauseViewActions(copy, back, resume);
@@ -872,7 +937,6 @@ export class AppController {
     }
     this.lastResult = finalResult;
     this.gameHost.stop();
-    const nextBest = !result.retired && (result.stageId === 'endless' ? result.score > this.state.save.records.endlessBest : !previous || result.score > previous.bestScore);
     const settledKills = result.retired ? 0 : result.kills;
     const weaponUsage = { ...this.state.save.statistics.weaponUsage };
     if (!result.retired) for (const [id, amount] of Object.entries(result.weaponDamage)) weaponUsage[id as keyof typeof weaponUsage] = (weaponUsage[id as keyof typeof weaponUsage] ?? 0) + Math.round(amount ?? 0);
@@ -948,7 +1012,7 @@ export class AppController {
       },
     };
     this.runSaveService.clear();
-    if (this.commitSave(next)) this.state.notice = nextBest ? '自己最高記録を更新しました。' : '';
+    if (this.commitSave(next)) this.state.notice = '';
     this.render('result');
     this.audio.cue(result.retired ? 'pause' : result.outcome === 'victory' ? 'victory' : 'defeat');
     this.announce(result.retired ? 'プレイを終了しました' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗');
@@ -957,8 +1021,8 @@ export class AppController {
 
   private resultView(result: BattleResult): HTMLElement {
     const view = createResultView(result, {
-      again: () => this.startStage(result.stageId),
-      next: () => { if (result.newUnlock) this.startStage(result.newUnlock); },
+      again: () => this.startStage('endless'),
+      next: () => this.startStage('endless'),
       home: () => this.render('home'),
       share: () => { void this.shareResult(result); },
       ranking: this.rankingClient.snapshot(),
@@ -998,20 +1062,6 @@ export class AppController {
     this.render('result');
   }
 
-  private researchView(): HTMLElement {
-    const view = createResearchView(this.state.save, {
-      purchase: (id) => {
-        const next = purchaseResearch(this.state.save, id);
-        if (!next) { this.announce('部品が足りないか、すでに取得済みです'); return; }
-        if (this.commitSave(next)) this.state.notice = '研究を取得しました。';
-        this.render('research');
-      },
-      back: () => this.render('home'),
-    });
-    this.addNotice(view);
-    return view;
-  }
-
   private async shareHome(): Promise<void> {
     const result = await this.shareService.share('カコマレ', '全方位防衛ゲーム「カコマレ」\n六方向から迫る敵を防ぎ、装置を組み上げよう。');
     if (result.method === 'cancelled') return;
@@ -1020,9 +1070,7 @@ export class AppController {
   }
 
   private async shareResult(result: BattleResult): Promise<void> {
-    const stage = STAGES[result.stageId];
-    const outcome = result.retired ? 'リタイア' : result.outcome === 'victory' ? '突破' : '防衛失敗';
-    const text = `カコマレで${stage.name}を${outcome}。${result.score.toLocaleString('ja-JP')}点、${Math.floor(result.survivalTime)}秒生存、${result.kills}体撃破しました。`;
+    const text = `カコマレで${result.score.toLocaleString('ja-JP')}点、${Math.floor(result.survivalTime)}秒生存、${result.kills}体撃破しました。`;
     const shared = await this.shareService.share('カコマレの結果', text);
     if (shared.method === 'cancelled') return;
     if (!shared.success) this.showManualShare(text);

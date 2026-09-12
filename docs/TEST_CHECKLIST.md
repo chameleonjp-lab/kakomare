@@ -2,6 +2,23 @@
 
 > 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
 
+## 無限専用化・説明と操作（2026-09-13 JST）
+
+基準mainはPR #26マージ後の`78ee95b6`。下記は今回の要求と検査の対応であり、実行結果・提出SHA・失敗後の再修正は進行正本へまとめる。
+
+|対象|今回の検査|
+|---|---|
+|開始入口・設定・結果|E2Eの無限直接開始、旧解放を要求しない3再戦、保存管理非表示、結果非表示項目、上位3件の単体検査|
+|配置の見本・面番号|`placement-preview.test.ts`で本番座標と18面を照合、E2Eで面選択→確定→実配置|
+|満枠の交換|UpgradeSystem単体・BattleScene統合・武器/補助それぞれの実画面E2E。旧Lv1/2/3/8、古い個体/番号、保存、旧攻撃、入力記録|
+|抽選|`competitive-candidate-coverage.test.ts`で初期以外49武器と20補助、満枠で両分類の交換。50種類の固有動作検査とは別|
+|説明・相乗効果|`equipment-help.test.ts`、CombatStats条件/接続/補助上限、実際の印・燃焼・減速・誘爆と説明の照合|
+|拡散・貫通・盾|`damage.test.ts`、BattleSceneの実弾と複数敵、EnemyRenderer残り枚数と低演出|
+|回帰|旧X/P16、全単体・統合、生成文書、manifest、本番build・dist・独自名称、V7固定更新試行|
+|本戦・公開|V7の通常720は内部互換回帰として保持。現行利用者に通常ステージを提供する要件ではない。無限60と描画頻度比較を継続。実機・公開URL・本番受付は別途|
+
+テストのskip・削除による強制成功は行わない。画面はローカル限定fixtureから開始し、交換・分岐・確定は利用者と同じ操作を使う。
+
 ## V7実装：最終本戦・性能・main公開確認（2026-09-12）
 
 対象branchは `codex/v7-final-verification-20260911`（提出時）。基準mainは、ユーザーがマージしたPR #24のマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`（head `69abd6024471b47d044d378d9f044dd03bb51001`）。Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25) の最終提出commitは `a4df4613abc1013d4e6136c7afc021804d34c586` で、ユーザーがマージしたmainのマージcommitは `7f6456cb50157e6fa87a50d0c6daeb662897209d`。V7では、競技ルール版を `expansion-v7-runtime` へ分離し、競技得点へ生存時間・残HPを混ぜない修正、通常720試行、競技無限60試行、30／60／120回描画比較を実際の `BattleScene` 更新経路で検査する。基本武器50・補助20・全1,000組はV5から維持し、12・25種類を完成扱いにしない。

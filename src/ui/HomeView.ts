@@ -4,19 +4,21 @@ import { button, card, element, heading, pageShell } from './viewUtils';
 export interface HomeActions {
   start: () => void;
   resume?: () => void;
-  stages: () => void;
-  settings: () => void;
-  rules: () => void;
-  research: () => void;
-  share: () => void;
+  /** Optional secondary navigation kept for hosts that expose preferences. */
+  settings?: () => void;
+  rules?: () => void;
+  share?: () => void;
+  /** Legacy routes are accepted by older hosts but are no longer rendered. */
+  stages?: () => void;
+  research?: () => void;
 }
 
 export function createHomeView(save: SaveData, actions: HomeActions): HTMLElement {
-  const shell = pageShell('カコマレ', '六方向から迫る敵を防ぎ、装置を組み上げる全方位防衛ゲーム。');
+  const shell = pageShell('カコマレ', '六方向から迫る敵を防ぎ、無限モードでどこまでスコアを伸ばせるか挑戦します。');
   const hero = card('hero-card');
-  const title = heading('防衛を始める', 2);
+  const title = heading('無限モードに挑戦', 2);
   title.className = 'hero-title';
-  const start = button('ゲーム開始', 'button button-primary button-large');
+  const start = button('プレイする', 'button button-primary button-large');
   start.dataset.testid = 'start-game';
   start.addEventListener('click', actions.start);
   hero.append(title, element('p', 'hero-copy', `${save.profile.name}さん、コアを守りましょう。`), start);
@@ -28,28 +30,24 @@ export function createHomeView(save: SaveData, actions: HomeActions): HTMLElemen
   }
   shell.append(hero);
 
-  const stats = card('summary-card');
-  stats.append(heading('現在の記録', 2));
-  const stageBest = save.records.stageBest['stage-1'];
-  stats.append(element('p', 'summary-line', `ステージ1最高得点: ${stageBest?.bestScore ?? 0}`));
-  stats.append(element('p', 'summary-line', `プレイ回数: ${save.statistics.playCount}`));
-  stats.append(element('p', 'summary-line', `部品: ${save.progress.parts}`));
-  shell.append(stats);
-
   const actionsGrid = element('div', 'action-grid');
-  const stageButton = button('ステージ選択');
-  stageButton.addEventListener('click', actions.stages);
-  const researchButton = button('研究と記録');
-  researchButton.addEventListener('click', actions.research);
-  const rulesButton = button('遊び方');
-  rulesButton.addEventListener('click', actions.rules);
-  const settingsButton = button('設定');
-  settingsButton.addEventListener('click', actions.settings);
-  const shareButton = button('ホームを共有');
-  shareButton.dataset.testid = 'share-home';
-  shareButton.addEventListener('click', actions.share);
-  actionsGrid.append(stageButton, researchButton, rulesButton, settingsButton, shareButton);
-  shell.append(actionsGrid);
+  if (actions.rules) {
+    const rulesButton = button('遊び方');
+    rulesButton.addEventListener('click', actions.rules);
+    actionsGrid.append(rulesButton);
+  }
+  if (actions.settings) {
+    const settingsButton = button('設定');
+    settingsButton.addEventListener('click', actions.settings);
+    actionsGrid.append(settingsButton);
+  }
+  if (actions.share) {
+    const shareButton = button('ゲームを共有');
+    shareButton.dataset.testid = 'share-home';
+    shareButton.addEventListener('click', actions.share);
+    actionsGrid.append(shareButton);
+  }
+  if (actionsGrid.childElementCount > 0) shell.append(actionsGrid);
 
   const external = element('a', 'experiment-link', 'カメレオンJPの実験場');
   external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/';

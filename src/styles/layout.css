@@ -81,3 +81,25 @@
   .result-device-entry { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .result-device-value { grid-column: 1; grid-row: auto; text-align: left; }
 }
+
+/* Endless result summary: keep the score and next actions compact and
+   reserve the detail area for the few devices that actually contributed. */
+.result-actions-top { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+.result-actions-top .button { width: 100%; }
+.result-score { margin-bottom: 10px; }
+.result-summary-details, .result-equipment-card { margin-top: 12px; }
+.result-weapon-list { margin: 0; padding: 0; list-style: none; }
+.result-weapon-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 0; border-top: 1px solid rgba(55, 106, 128, .45); }
+.result-weapon-entry:first-child { border-top: 0; }
+.result-weapon-name { grid-column: 1; font-weight: 800; }
+.result-weapon-entry .result-device-role { grid-column: 1; }
+.result-weapon-entry .result-device-value { grid-column: 2; grid-row: 1 / span 2; }
+.result-support-summary { margin: 0; color: #d8e7e9; overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .result-actions-top { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 400px) {
+  .result-actions-top { grid-template-columns: 1fr; }
+}

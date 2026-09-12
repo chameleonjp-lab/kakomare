@@ -38,6 +38,7 @@ export class Projectile {
   public damage: number;
   public life: number;
   public maxLife: number;
+  /** Number of additional enemy hits after the first contact (0 = one hit). */
   public piercing: number;
   public enemyProjectile: boolean;
   public sourceWeaponId: WeaponId | null;

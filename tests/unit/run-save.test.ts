@@ -186,4 +186,43 @@ describe('RunSaveService', () => {
     }];
     expect(validateRunSave(source)).toBeNull();
   });
+
+  it('accepts and round trips a retired weapon source referenced by an in-flight projectile', () => {
+    const source = checkpoint();
+    source.snapshot.retiredWeaponSources = [{
+      id: 'ray', instanceId: 'retired-ray-s1', nodeId: 'weapon-l1-s1', slot: 1, level: 3, damageDealt: 9,
+      branch: 'wide', finalBranch: null, evolutionId: null, cooldownRemaining: 0.3, precisionBonus: 0, shotsFired: 1,
+    }];
+    source.snapshot.projectiles = [{
+      id: 1, kind: 'needle', x: 0, y: 0, vx: 1, vy: 0, radius: 2, damage: 8, life: 1, maxLife: 1,
+      piercing: 0, enemyProjectile: false, bounces: 0, sourceWeaponId: 'ray', sourceWeaponInstanceId: 'retired-ray-s1', boundaryRadius: 325,
+    }];
+    expect(validateRunSave(source)).not.toBeNull();
+    const duplicate = structuredClone(source) as RunSaveEnvelope;
+    duplicate.snapshot.retiredWeaponSources![0]!.instanceId = duplicate.snapshot.weapons[0]!.instanceId;
+    expect(validateRunSave(duplicate)).toBeNull();
+  });
+
+  it('validates replacement target and branch metadata in a deferred upgrade payload', () => {
+    const source = checkpoint() as unknown as Record<string, unknown>;
+    source.phase = 'upgrade';
+    source.runtimeState = {
+      state: 'upgrade', pauseReturnState: 'upgrade',
+      upgradePayload: {
+        phase: 'selection', selectionId: 1, rerollsLeft: 0, bansLeft: 0, pendingCount: 1, choicesSinceBreak: 0,
+        candidates: [{
+          id: 'weapon:ray:replace', kind: 'weapon', targetId: 'ray', title: '光路刃 Lv2', description: '交換', before: 'Lv2', after: 'Lv2', role: '直線', isExisting: false,
+          replacementSlots: [0], placementSlots: [0], replacementTargets: [{ instanceId: 'weapon-needle-s0', id: 'needle', slot: 0, level: 2 }],
+          replacementBranchOptions: [{ id: 'wide', name: '幅広型', description: '幅' }], replacementBranch: 'wide',
+        }],
+      },
+    };
+    expect(validateRunSave(source)).not.toBeNull();
+    const malformed = structuredClone(source) as Record<string, unknown>;
+    const runtime = malformed.runtimeState as Record<string, unknown>;
+    const payload = runtime.upgradePayload as Record<string, unknown>;
+    const candidate = (payload.candidates as Array<Record<string, unknown>>)[0]!;
+    candidate.replacementBranch = 'power';
+    expect(validateRunSave(malformed)).toBeNull();
+  });
 });

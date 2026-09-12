@@ -20,6 +20,12 @@ import { BUILD_CAPACITY_BY_LAYER } from '../game/build/BuildCapacity';
 import { MAX_PENDING_CHOICES, MAX_PROGRESSION_EXPERIENCE, MAX_PROGRESSION_LEVEL } from '../game/systems/ProgressionSystem';
 import { FixedStepClock } from '../game/systems/FixedStepClock';
 
+// Replacements can leave several generations of source weapons alive while
+// their short-lived projectiles/fields resolve. Bound the serialized source
+// list separately from the nine active faces to keep malformed saves cheap to
+// inspect while preserving every legitimate in-flight attribution.
+const MAX_RETIRED_WEAPON_SOURCES = MAX_DEVICE_SLOT_COUNT * 8;
+
 export interface RunSaveLoadResult {
   data: RunSaveEnvelope | null;
   recovered: boolean;
@@ -98,11 +104,17 @@ function isSnapshot(value: unknown): value is BattleSnapshot {
   if (!Array.isArray(value.enemies) || value.enemies.length > 180 || !value.enemies.every(isEnemySnapshot)) return false;
   if (!Array.isArray(value.projectiles) || value.projectiles.length > 360 || !value.projectiles.every(isProjectileSnapshot)) return false;
   if (!Array.isArray(value.weapons) || value.weapons.length > MAX_DEVICE_SLOT_COUNT || !value.weapons.every(isWeaponSnapshot)) return false;
+  if (value.retiredWeaponSources !== undefined
+    && (!Array.isArray(value.retiredWeaponSources) || value.retiredWeaponSources.length > MAX_RETIRED_WEAPON_SOURCES || !value.retiredWeaponSources.every(isWeaponSnapshot))) return false;
   if (!Array.isArray(value.supports) || value.supports.length > MAX_DEVICE_SLOT_COUNT || !value.supports.every(isSupportSnapshot)) return false;
   const enemyIds = new Set(value.enemies.map((enemy) => enemy.id));
   const projectileIds = new Set(value.projectiles.map((projectile) => projectile.id));
-  const instanceIds = new Set([...value.weapons, ...value.supports].map((item) => item.instanceId));
-  if (enemyIds.size !== value.enemies.length || projectileIds.size !== value.projectiles.length || instanceIds.size !== value.weapons.length + value.supports.length) return false;
+  const retiredWeapons = (value.retiredWeaponSources ?? []) as unknown as Array<{ instanceId: string; nodeId: string; slot: number }>;
+  const activeInstanceIds = new Set([...value.weapons, ...value.supports].map((item) => item.instanceId));
+  const instanceIds = new Set([...value.weapons, ...value.supports, ...retiredWeapons].map((item) => item.instanceId));
+  if (enemyIds.size !== value.enemies.length || projectileIds.size !== value.projectiles.length
+    || instanceIds.size !== value.weapons.length + value.supports.length + retiredWeapons.length) return false;
+  if (retiredWeapons.some((weapon) => activeInstanceIds.has(weapon.instanceId) || weapon.nodeId !== nodeIdForSlot('weapon', weapon.slot))) return false;
   for (const projectile of value.projectiles) {
     if (projectile.sourceWeaponId !== null && !(projectile.sourceWeaponId in WEAPONS)) return false;
     if (projectile.sourceWeaponInstanceId !== null && !instanceIds.has(projectile.sourceWeaponInstanceId)) return false;
@@ -318,7 +330,7 @@ function isRuntimeState(value: unknown): boolean {
   if (value.pauseReturnState !== undefined && value.pauseReturnState !== 'playing' && value.pauseReturnState !== 'upgrade') return false;
   for (const key of ['pendingUpgradeDeferred', 'upgradeRequestQueued', 'testUpgradeOpened', 'bossDefeated']) if (value[key] !== undefined && typeof value[key] !== 'boolean') return false;
   for (const key of ['rerollsLeft', 'bansLeft', 'repairsUsed', 'upgradeSequence', 'choicesSinceBreak', 'endlessMilestone', 'nextMineId', 'enemyPoolNextId', 'projectilePoolNextId', 'crownWavesTriggered']) if (value[key] !== undefined && (!Number.isSafeInteger(value[key]) || (value[key] as number) < 0 || (value[key] as number) > 1_000_000_000)) return false;
-  for (const key of ['weaponPolishStacks', 'pendingPartsBonus']) if (value[key] !== undefined && (!finite(value[key]) || (value[key] as number) < 0 || (value[key] as number) > 1_000_000_000)) return false;
+  for (const key of ['weaponPolishStacks', 'pendingPartsBonus', 'stabilizerStacks']) if (value[key] !== undefined && (!finite(value[key]) || (value[key] as number) < 0 || (value[key] as number) > 1_000_000_000)) return false;
   if (value.lastEnemyNotice !== undefined && !isBoundedText(value.lastEnemyNotice, 240, true)) return false;
   if (value.banned !== undefined) {
     if (!Array.isArray(value.banned) || value.banned.length > 1000) return false;
@@ -450,8 +462,59 @@ function isUpgradePayload(value: unknown): boolean {
     }
     if (candidate.targetInstanceId !== undefined && !isBoundedText(candidate.targetInstanceId)) return false;
     if (candidate.details !== undefined && !isBoundedText(candidate.details, 1000)) return false;
+    if (!isUpgradeReplacementFields(candidate)) return false;
   }
   for (const key of ['rerollsLeft', 'bansLeft', 'pendingCount', 'choicesSinceBreak']) if (value[key] !== undefined && (!Number.isSafeInteger(value[key]) || (value[key] as number) < 0 || (value[key] as number) > 1_000_000_000)) return false;
+  return true;
+}
+
+/** Validate the token-bound replacement metadata without trusting UI echoes. */
+function isUpgradeReplacementFields(candidate: Record<string, unknown>): boolean {
+  const replacementSlots = candidate.replacementSlots;
+  const replacementTargets = candidate.replacementTargets;
+  const hasReplacementFields = replacementSlots !== undefined || replacementTargets !== undefined
+    || candidate.replacementTargetInstanceId !== undefined || candidate.replacementBranch !== undefined
+    || candidate.replacementBranchOptions !== undefined;
+  if (!hasReplacementFields) return true;
+  if (candidate.isExisting === true || (candidate.kind !== 'weapon' && candidate.kind !== 'support')) return false;
+  if (typeof candidate.targetId !== 'string'
+    || (candidate.kind === 'weapon' ? !(candidate.targetId in WEAPONS) : !(candidate.targetId in SUPPORTS))) return false;
+  if (!Array.isArray(replacementSlots) || replacementSlots.length === 0 || replacementSlots.length > MAX_DEVICE_SLOT_COUNT
+    || !Array.isArray(replacementTargets) || replacementTargets.length !== replacementSlots.length) return false;
+  const slots = new Set<number>();
+  for (const slot of replacementSlots) {
+    if (!Number.isSafeInteger(slot) || (slot as number) < 0 || (slot as number) >= MAX_DEVICE_SLOT_COUNT || slots.has(slot as number)) return false;
+    slots.add(slot as number);
+  }
+  const instances = new Set<string>();
+  for (const target of replacementTargets) {
+    if (!isRecord(target) || !isBoundedText(target.instanceId) || instances.has(target.instanceId)
+      || !Number.isSafeInteger(target.slot) || !slots.has(target.slot as number) || !Number.isSafeInteger(target.level) || (target.level as number) < 1
+      || typeof target.id !== 'string' || (candidate.kind === 'weapon' ? !(target.id in WEAPONS) : !(target.id in SUPPORTS))
+      || target.id === candidate.targetId) return false;
+    const maximum = candidate.kind === 'weapon' ? WEAPONS[target.id as keyof typeof WEAPONS].levels.length : SUPPORTS[target.id as keyof typeof SUPPORTS].levels.length;
+    if ((target.level as number) > maximum) return false;
+    instances.add(target.instanceId);
+  }
+  if (candidate.placementSlot !== undefined && !slots.has(candidate.placementSlot as number)) return false;
+  if (candidate.replacementTargetInstanceId !== undefined
+    && (!isBoundedText(candidate.replacementTargetInstanceId) || !instances.has(candidate.replacementTargetInstanceId))) return false;
+  if (candidate.replacementBranch !== undefined) {
+    if (candidate.kind !== 'weapon' || typeof candidate.targetId !== 'string' || !(candidate.targetId in WEAPONS)
+      || typeof candidate.replacementBranch !== 'string' || !WEAPONS[candidate.targetId as keyof typeof WEAPONS].branches.some((branch) => branch.atLevel === 3 && branch.id === candidate.replacementBranch)) return false;
+  }
+  if (candidate.replacementBranchOptions !== undefined) {
+    if (candidate.kind !== 'weapon' || typeof candidate.targetId !== 'string' || !(candidate.targetId in WEAPONS)
+      || !Array.isArray(candidate.replacementBranchOptions) || candidate.replacementBranchOptions.length > 4) return false;
+    const optionIds = new Set<string>();
+    for (const option of candidate.replacementBranchOptions) {
+      if (!isRecord(option) || typeof option.id !== 'string' || optionIds.has(option.id)
+        || !isBoundedText(option.name, 240) || !isBoundedText(option.description, 1000)
+        || !WEAPONS[candidate.targetId as keyof typeof WEAPONS].branches.some((branch) => branch.atLevel === 3 && branch.id === option.id)) return false;
+      optionIds.add(option.id);
+    }
+    if (candidate.replacementBranch !== undefined && !optionIds.has(candidate.replacementBranch as string)) return false;
+  }
   return true;
 }
 

@@ -1,8 +1,10 @@
 import { normalizeAngle } from './Angle';
+import { WEAPONS } from '../../data/weapons';
+import type { WeaponBranch, WeaponId } from '../../types/content';
 
 export type NormalizedRunInput =
   | { tick: number; kind: 'aim'; angle: number }
-  | { tick: number; kind: 'upgrade'; selectionId: number; candidateId: string; placementSlot?: number }
+  | { tick: number; kind: 'upgrade'; selectionId: number; candidateId: string; placementSlot?: number; replacementTargetInstanceId?: string; replacementBranch?: WeaponBranch }
   | { tick: number; kind: 'build'; action: 'move' | 'swap'; instanceId: string; otherInstanceId?: string; slot?: number }
   | { tick: number; kind: 'pause' | 'resume' | 'retire' };
 
@@ -25,12 +27,20 @@ export class InputRecorder {
     } else if (input.kind === 'upgrade') {
       if (!Number.isSafeInteger(input.selectionId) || input.selectionId < 1 || typeof input.candidateId !== 'string' || input.candidateId.length === 0 || input.candidateId.length > 160) return false;
       if (input.placementSlot !== undefined && (!Number.isInteger(input.placementSlot) || input.placementSlot < 0)) return false;
+      if (input.replacementTargetInstanceId !== undefined && (!input.candidateId.endsWith(':replace') || typeof input.replacementTargetInstanceId !== 'string' || input.replacementTargetInstanceId.length === 0 || input.replacementTargetInstanceId.length > 160)) return false;
+      if (input.replacementBranch !== undefined) {
+        const [, weaponId, action] = input.candidateId.split(':');
+        const definition = WEAPONS[weaponId as WeaponId];
+        if (!input.candidateId.startsWith('weapon:') || action !== 'replace' || !Object.hasOwn(WEAPONS, weaponId) || !definition?.branches.some((branch) => branch.atLevel === 3 && branch.id === input.replacementBranch)) return false;
+      }
       this.events.push({
         tick: input.tick,
         kind: 'upgrade',
         selectionId: input.selectionId,
         candidateId: input.candidateId,
         ...(input.placementSlot === undefined ? {} : { placementSlot: input.placementSlot }),
+        ...(input.replacementTargetInstanceId === undefined ? {} : { replacementTargetInstanceId: input.replacementTargetInstanceId }),
+        ...(input.replacementBranch === undefined ? {} : { replacementBranch: input.replacementBranch }),
       });
     } else if (input.kind === 'build') {
       if (typeof input.instanceId !== 'string' || input.instanceId.length === 0 || input.instanceId.length > 160 || (input.action !== 'move' && input.action !== 'swap')) return false;

@@ -55,7 +55,6 @@ async function enterBattle(page: Page, query = '?test=1'): Promise<void> {
     await page.getByRole('button', { name: 'この名前で始める' }).click();
   }
   await page.getByTestId('start-game').click();
-  await page.getByTestId('select-stage-1').click();
   await expect(page.getByTestId('countdown-screen')).toBeVisible();
   await expect(page.getByTestId('countdown-number')).toHaveText('3');
   await expect(page.getByTestId('battle-screen')).toBeVisible({ timeout: 8000 });
@@ -73,10 +72,9 @@ test('初回の名前入力からホームへ進み、再読込で名前を保�
   await expect(page.getByText('ひかりさん、コアを守りましょう。')).toBeVisible();
 });
 
-test('ステージ開始を連打しても1プレイだけ開始して回数を1だけ増やす', async ({ page }) => {
+test('プレイするを連打しても無限の1プレイだけ開始して回数を1だけ増やす', async ({ page }) => {
   await enterHome(page);
-  await page.getByTestId('start-game').click();
-  const stage = page.getByTestId('select-stage-1');
+  const stage = page.getByTestId('start-game');
   await stage.evaluate((button) => {
     (button as HTMLButtonElement).click();
     (button as HTMLButtonElement).click();
@@ -91,7 +89,6 @@ test('3秒カウントダウン後に戦闘が始まり、ドラッグ照準と�
   await page.locator('.name-input').fill('照準確認');
   await page.getByRole('button', { name: 'この名前で始める' }).click();
   await page.getByTestId('start-game').click();
-  await page.getByTestId('select-stage-1').click();
   await expect(page.getByTestId('countdown-number')).toHaveText('3');
   await expect(page.getByTestId('countdown-number')).toHaveText('2', { timeout: 2500 });
   await expect(page.getByTestId('battle-screen')).toBeVisible({ timeout: 5000 });
@@ -182,13 +179,16 @@ test('除外を使い切った後も新しい装置を面へ装着できる', as
   await expect(candidates.first()).toBeVisible({ timeout: 3000 });
   const bans = page.locator('.upgrade-ban');
   await expect(bans).toHaveCount(3);
-  // Seed 1 intentionally puts a removable new-item candidate in the third
-  // card. The first two existing upgrades cannot be removed without leaving
-  // too few candidates, while this new item can be removed and consumes the
-  // last ban. V5 expands both the weapon and support catalogs, so assert the
-  // replacement by its candidate title rather than assuming a weapon slot.
+  // Endless has the same two exclusions for every player; consume both
+  // through the displayed controls before installing the next random item.
+  await expect(page.locator('.upgrade-tools-help')).toContainText('残り2回');
   await expect(bans.nth(2)).toBeEnabled();
   await bans.nth(2).click();
+  await expect(page.locator('.upgrade-tools-help')).toContainText('残り1回');
+  await expect(bans.nth(2)).toBeEnabled();
+  await bans.nth(2).click();
+  await expect(page.locator('.upgrade-tools-help')).toContainText('残り0回');
+  await expect(bans.nth(2)).toBeDisabled();
   const newItemCard = page.locator('[data-testid="upgrade-card"]').filter({
     has: page.locator('[data-testid="upgrade-candidate"][aria-disabled="true"]'),
   }).first();
@@ -261,15 +261,20 @@ test('リタイアでは未確定記録を保存せず共有も表示しない',
 });
 
 test('敗北結果へ進み、結果画面の共有導線と実験場リンクを表示する', async ({ page }) => {
-  await enterBattle(page, '?test=1&outcome=defeat');
+  await enterBattle(page, '?test=1&outcome=defeat&seed=1');
   await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 4000 });
   await expect(page.getByRole('heading', { name: '防衛失敗' })).toBeVisible();
   await expect(page.getByRole('button', { name: '結果を共有' })).toBeVisible();
   const deviceRecords = page.getByTestId('result-device-records');
-  await expect(deviceRecords).toContainText('連針砲');
-  await expect(deviceRecords).toContainText('遠隔重力点');
-  await expect(deviceRecords).toContainText('出力環');
-  await expect(deviceRecords).toContainText('未採用');
+  // This fixture ends before the first shot lands. Do not invent a weapon
+  // contribution merely because the starting weapon was installed.
+  await expect(deviceRecords).toContainText('記録された武器ダメージはありません');
+  await expect(deviceRecords).not.toContainText('遠隔重力点');
+  await expect(deviceRecords).not.toContainText('未採用');
+  await expect(page.getByTestId('result-screen')).not.toContainText('weapon-');
+  await expect(page.getByTestId('result-screen')).not.toContainText('方向別の被害');
+  await expect(page.getByTestId('result-screen')).not.toContainText('強化順');
+  await expect(page.getByTestId('result-screen')).not.toContainText('反響核');
   await expect(page.getByRole('link', { name: 'カメレオンJPの実験場' })).toHaveAttribute('href', 'https://chameleonjp-lab.github.io/chameleonjp_lab/');
 });
 
@@ -277,7 +282,7 @@ test('勝利結果へ進み、もう一度でカウントダウンを開始で�
   await enterBattle(page, '?test=1&outcome=victory');
   await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 5000 });
   await expect(page.getByRole('heading', { name: '防衛成功' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '次のステージへ' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '次のステージへ' })).toHaveCount(0);
   const settled = await page.evaluate(() => JSON.parse(localStorage.getItem('kakomare-save-v2') ?? '{}'));
   await page.waitForTimeout(1_200);
   const afterWait = await page.evaluate(() => JSON.parse(localStorage.getItem('kakomare-save-v2') ?? '{}'));
@@ -288,35 +293,34 @@ test('勝利結果へ進み、もう一度でカウントダウンを開始で�
   await expect(page.getByTestId('countdown-screen')).toBeVisible();
 });
 
-test('ステージ1から連勝してステージ3と無限モードを順に解放する', async ({ page }) => {
+test('旧ステージの解放を求めず毎回まっさらな無限プレイを始める', async ({ page }) => {
   test.setTimeout(35_000);
-  await enterBattle(page, '?test=1&outcome=victory');
-  for (const stageName of ['包囲開始', '断続波', '閉鎖環']) {
+  await enterBattle(page, '?test=1&outcome=defeat');
+  for (let run = 0; run < 3; run += 1) {
     await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByTestId('result-screen')).toContainText(stageName);
-    const nextLabel = stageName === '閉鎖環' ? '無限モードへ' : '次のステージへ';
-    await expect(page.getByRole('button', { name: nextLabel })).toBeVisible();
-    if (stageName !== '閉鎖環') await page.getByRole('button', { name: nextLabel }).click();
+    await page.getByRole('button', { name: 'もう一度', exact: true }).click();
+    await expect(page.getByTestId('battle-screen')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByTestId('hud-level')).toHaveText('Lv1');
+    await expect(page.getByTestId('build-list')).toContainText('連針砲 Lv1');
+    await expect(page.getByTestId('hud-health')).toHaveText('100 / 100');
   }
   const unlocked = await page.evaluate(() => {
     const raw = localStorage.getItem('kakomare-save-v2');
     if (!raw) throw new Error('保存データがありません。');
     return (JSON.parse(raw) as { progress: { unlockedStages: string[] } }).progress.unlockedStages;
   });
-  expect(unlocked).toEqual(['stage-1', 'stage-2', 'stage-3', 'endless', 'stage-4']);
+  expect(unlocked).toEqual(['stage-1']);
 });
 
-test('ホームから研究と記録、段階解放されたステージ選択へ進める', async ({ page }) => {
+test('ホームの開始は一つだけで、研究・記録・ステージ選択を表示しない', async ({ page }) => {
   await enterHome(page);
-  await expect(page.getByRole('button', { name: '研究と記録' })).toBeVisible();
-  await page.getByRole('button', { name: '研究と記録' }).click();
-  await expect(page.getByRole('heading', { name: '研究と記録' })).toBeVisible();
-  await expect(page.getByTestId('research-buy-core-health')).toBeVisible();
-  await page.getByRole('button', { name: 'ホームへ戻る' }).click();
-  await page.getByRole('button', { name: 'ステージ選択' }).click();
-  await expect(page.getByTestId('select-stage-1')).toBeEnabled();
-  await expect(page.getByTestId('select-stage-2')).toBeDisabled();
-  await expect(page.getByTestId('select-stage-3')).toBeDisabled();
+  await expect(page.getByRole('button', { name: '研究と記録' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'ステージ選択' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '現在の記録' })).toHaveCount(0);
+  await expect(page.getByTestId('start-game')).toHaveCount(1);
+  await expect(page.getByTestId('start-game')).toHaveText('プレイする');
+  await page.getByTestId('start-game').click();
+  await expect(page.getByTestId('countdown-screen')).toBeVisible();
 });
 
 test('320px幅でも横スクロールを発生させない', async ({ page }) => {
@@ -650,12 +654,11 @@ test('保存領域への書き込み失敗を画面遷移後も表示する', as
   await page.getByRole('button', { name: 'この名前で始める' }).click();
   await expect(page.locator('.notice')).toContainText('端末へ保存できませんでした');
   await page.getByTestId('start-game').click();
-  await page.getByTestId('select-stage-1').click();
   await expect(page.getByTestId('countdown-screen')).toBeVisible();
   await expect(page.locator('.notice')).toContainText('端末へ保存できませんでした');
 });
 
-test('破損保存を白画面にせず、退避データを画面からコピーできる', async ({ page }) => {
+test('破損保存を白画面にせず退避を保持し、設定にデータ操作を出さない', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('kakomare-save-v2', '{broken');
     Object.defineProperty(Navigator.prototype, 'clipboard', { configurable: true, value: undefined });
@@ -666,9 +669,11 @@ test('破損保存を白画面にせず、退避データを画面からコピ�
   await page.locator('.name-input').fill('復旧確認');
   await page.getByRole('button', { name: 'この名前で始める' }).click();
   await page.getByRole('button', { name: '設定' }).click();
-  await page.getByTestId('copy-damaged-save').click();
-  await expect(page.getByTestId('copy-damaged-modal')).toBeVisible();
-  await expect(page.locator('.share-text')).toHaveValue('{broken');
+  await expect(page.getByTestId('copy-damaged-save')).toHaveCount(0);
+  await expect(page.getByTestId('export-save')).toHaveCount(0);
+  await expect(page.getByTestId('import-save')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /初期化/ })).toHaveCount(0);
+  expect(await page.evaluate(() => Object.keys(localStorage).some((key) => localStorage.getItem(key) === '{broken'))).toBe(true);
 });
 
 
@@ -747,9 +752,13 @@ test('V3/A09: 停止中の装置確認から同種の空き面へ移設できる
   await expect(loadout).toBeVisible();
   await expect(loadout).toContainText('武器面1: 連針砲 Lv1');
 
-  const move = loadout.locator('[data-testid^="move-weapon-"]').first();
+  await expect(loadout.getByTestId('placement-preview').first()).toBeVisible();
+  const move = loadout.getByTestId('placement-source').first();
   await expect(move).toBeEnabled();
   await move.click();
+  await loadout.locator('[data-testid="placement-destination"][data-slot="1"]').click();
+  await expect(loadout).toContainText('レベルは変わりません');
+  await loadout.getByTestId('placement-confirm').click();
   await expect(loadout).toContainText('武器面2: 連針砲 Lv1');
   await expect(loadout).not.toContainText('武器面1: 連針砲 Lv1');
 
@@ -759,10 +768,68 @@ test('V3/A09: 停止中の装置確認から同種の空き面へ移設できる
 });
 
 test('P16-01: test指定なしの画面では経験値注入を有効にしない', async ({ page }) => {
-  await enterBattle(page, '?upgrade=1&testXp=154&seed=123');
+  await enterBattle(page, '?upgrade=1&testXp=154&seed=123&fullLoadout=1');
   await page.waitForTimeout(1000);
   await expect(page.locator('.upgrade-layer')).toHaveCount(0);
   await expect(page.getByTestId('pending-upgrade-button')).toBeDisabled();
+  await expect(page.getByTestId('build-list')).not.toContainText('補助面');
+});
+
+test('満枠でも武器を選び、番号見本と交換後Lv3・分岐を確認して一度だけ確定できる', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await enterBattle(page, '?test=1&upgrade=1&testXp=25&fullLoadout=1&seed=1');
+  const card = page.locator('[data-candidate-id="weapon:mortar:replace"]');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveClass(/upgrade-kind-weapon/);
+  await expect(card.locator('.placement-node')).toHaveCount(18);
+  await expect(card.getByTestId('upgrade-placement')).toHaveCount(9);
+  const oldXp = await page.getByTestId('hud-xp').textContent();
+  const outputHelp = card.locator('details[data-slot="0"]');
+  await outputHelp.locator('summary').click();
+  await expect(outputHelp.locator('.equipment-help')).toContainText('出力環: 接続中の武器の基礎威力に加算されます。');
+  await outputHelp.locator('summary').click();
+  const brakeHelp = card.locator('details[data-slot="3"]');
+  await brakeHelp.locator('summary').click();
+  await expect(brakeHelp.locator('.equipment-help')).toContainText('制動環は、この武器では固有の発動条件がありません。');
+  await expect(page.getByTestId('hud-xp')).toHaveText(oldXp ?? '');
+  await brakeHelp.locator('summary').click();
+  await card.locator('[data-testid="upgrade-placement"][data-slot="0"]').click();
+  await expect(card).toContainText('連針砲 Lv3を外し、新しい装備をLv3');
+  await expect(card.getByTestId('upgrade-replacement-confirm')).toHaveCount(2);
+  await expect(page.getByTestId('hud-xp')).toHaveText(oldXp ?? '');
+  await page.screenshot({ path: testInfo.outputPath('weapon-replacement.png'), fullPage: true });
+  await card.getByTestId('upgrade-replacement-confirm').first().evaluate((button) => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  await expect(page.locator('.upgrade-layer')).toHaveCount(0);
+  await expect(page.getByTestId('build-list')).toContainText('武器面1: 曲射砲 Lv3');
+  await expect(page.getByTestId('build-list')).not.toContainText('武器面1: 連針砲');
+  await expect(page.getByTestId('hud-level')).toContainText('Lv2');
+  await page.getByTestId('pause-button').click();
+  await page.getByRole('button', { name: '装置を確認', exact: true }).click();
+  await expect(page.getByTestId('pause-loadout').getByTestId('placement-preview').first()).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('numbered-placement.png'), fullPage: true });
+});
+
+test('満枠の補助交換を金色のカードで確認し、主な結果だけを表示する', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await enterBattle(page, '?test=1&upgrade=1&testXp=25&fullLoadout=1&seed=5');
+  const card = page.locator('[data-candidate-id="support:veil:replace"]');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveClass(/upgrade-kind-support/);
+  const colors = await page.locator('.upgrade-kind-weapon, .upgrade-kind-support').evaluateAll((cards) => cards.map((card) => getComputedStyle(card).borderColor));
+  expect(new Set(colors).size).toBe(2);
+  await card.locator('[data-testid="upgrade-placement"][data-slot="0"]').click();
+  await expect(card).toContainText('出力環 Lv3を外し、新しい装備をLv3');
+  await card.getByTestId('upgrade-replacement-confirm').click();
+  await expect(page.getByTestId('build-list')).toContainText('補助面1: 薄幕環 Lv3');
+  await page.getByTestId('pause-button').click();
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: 'リタイア', exact: true }).click();
+  const result = page.getByTestId('result-screen');
+  await expect(result).toBeVisible();
+  await expect(result).not.toContainText(/反響核|方向別|weapon-|強化順|獲得した装備|未使用/);
+  await expect(page.getByTestId('result-again')).toBeVisible();
+  expect(await result.locator('.result-weapon-entry').count()).toBeLessThanOrEqual(3);
+  await page.screenshot({ path: testInfo.outputPath('compact-result.png'), fullPage: true });
 });
 
 
