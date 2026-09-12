@@ -1,23 +1,24 @@
 # カコマレ 拡張実装進行記録
 
-更新日：2026-09-11（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
+更新日：2026-09-12（UTC）。[計画v2.0](EXPANSION_IMPLEMENTATION_PLAN.md) に従い、このファイルを唯一の進行正本とする。旧PR-1の変更・失敗・成功記録は [履歴](history/EXPANSION_PROGRESS_PR16.md) に保存し、現在の成功判定へ流用しない。
 
-## 現在の作業：V7の最終本戦・性能・公開前ゲート（Draft提出済み）
+## 現在の作業：V7の最終本戦・性能・公開前ゲート（PR #25マージ・main公開確認済み）
 
 - V6の [PR #24](https://github.com/chameleonjp-lab/kakomare/pull/24) はユーザーによりマージ済み。`git fetch origin main --prune` で確認した最新mainはマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`（PR #24 head `69abd6024471b47d044d378d9f044dd03bb51001`）で、作業開始時のopen PRは0件だった。このmainから作業branch `codex/v7-final-verification-20260911` を作成した。
 - V7では、計画第17章の通常720試行（6ステージ×開始値20×選択方針3×研究状態2）、競技無限60試行（開始値10×選択方針3×自動／危険対象照準2）、代表試行の30／60／120回描画比較を、本番の`BattleScene`固定更新経路で実行する。基本武器50・補助20・全1,000組はV5から維持し、12・25種類を完成数へ戻さない。
 - 監査で、競技ルールの`timeAndHpAreResultFields=true`に反して、`RunRecorder`の結果計算とHUDスナップショットが生存時間×5＋残HP×20を競技得点へ加えていたため修正した。競技は撃破・危険段階・ボス・達成危険の台帳だけを得点とし、通常モードの旧式得点は維持する。ルール版を`expansion-v7-runtime`、manifestのクライアント版を`kakomare-web-v7`へ分離し、V6途中状態を新規則へ黙って読み替えない。
 - V7の試行記述を`FinalGateProtocol`へ定義し、選択方針・研究状態・照準方針・開始値・観測上限を重複なく列挙する。上限は敵180、味方弾280、敵弾80で、固定時計・候補選択・実戦終了を省略しない。専用`npm run test:v7`とCIの`v7-final-gates` jobを追加し、通常品質jobで長時間検査を二重実行しない。
-- Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25) を `codex/v7-final-verification-20260911` から提出した。提出コードコミットは `2669a784df52621ce9e5195eb4c2a5780b532a06`、[Quality #74](https://github.com/chameleonjp-lab/kakomare/actions/runs/34644134706) は `quality`、`pages-runner-quality`、`v7-final-gates` の全job・全step成功である。PRはopen/Draftのまま、mainへの直接push・マージ・自動マージは行っていない。
+- Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25) を `codex/v7-final-verification-20260911` から提出した。コード提出時のコミットは `2669a784df52621ce9e5195eb4c2a5780b532a06`、[Quality #74](https://github.com/chameleonjp-lab/kakomare/actions/runs/34644134706) は `quality`、`pages-runner-quality`、`v7-final-gates` の全job・全step成功である。その後、ユーザーがPR #25をマージしたことをGitHub APIと `git fetch origin main --prune` の双方で確認した。最終headは `a4df4613abc1013d4e6136c7afc021804d34c586`、マージコミットは `7f6456cb50157e6fa87a50d0c6daeb662897209d`、文書追補後の [Quality #75](https://github.com/chameleonjp-lab/kakomare/actions/runs/34645194667) も全job・全step成功である。
+- PR #25マージ後の公開確認を `codex/v7-public-verification-20260912` で追補し、文書3ファイルのみを含むDraft [PR #26](https://github.com/chameleonjp-lab/kakomare/pull/26) をmain（`7f6456cb50157e6fa87a50d0c6daeb662897209d`）へ提出した。公開確認時点のheadは `40864b6a7a484d726bfb710dde219141542735bd`、その時点の [Quality #78](https://github.com/chameleonjp-lab/kakomare/actions/runs/34681805461) は `quality`、`pages-runner-quality`、`v7-final-gates` の全job・全step成功である。以後の文書追補は同じDraft PRへ継続し、PR #26はopen/Draftを維持している。mainへの直接push・マージ・自動マージは行っていない。
 
-### V7の検査状態（Draft提出前・ローカル最終ゲート成功）
+### V7の検査状態（CI確認済み・main公開確認済み）
 
 - `npm run test:v7 -- --testTimeout=900000` は1ファイル・3テスト、720通常＋60無限＋30／60／120Hz比較の全件に成功した（合計484.660秒。内訳：通常720＝153.882秒、無限60＝213.158秒、描画頻度比較＝117.085秒）。各試行は実際の`BattleScene.step`と`FixedStepClock`を使い、敗北または観測上限まで進め、固定更新コールバック内で上限超過を検査した。
 - `npm test -- --run --testTimeout=30000` は29ファイル・206件が成功した。競技／通常得点の分離、V7試行行列の重複なし、V6の保存・精算・ランキング契約、既存の保留・停止・武器50・補助20回帰を含む。
 - `tests/v7-final-gates.test.ts`は描画を作らないNode検査だが、テスト専用の戦闘計算ではなく、esbuildした本番`BattleScene`の更新・候補確定・終了経路を呼ぶ。画面の実操作、iPhone Safari、実験場受付側の再計算とは別の証拠として扱う。
 - `npm ci --ignore-scripts --no-audit --no-fund`（162パッケージ）、`npm run lint`、`npm run typecheck`、`npm test -- --run --testTimeout=30000`（29ファイル・206件）、`npm run verify:expansion-docs`、`npm run verify:ranking-manifest`、`git diff --check`、`npm run build`、`npm run verify:dist`、`npm run verify:originality`を最終差分で成功させた。Viteの500 kB超チャンク警告は継続しているが、検査失敗とは扱わない。
-- 公開Pagesのmain（V6マージ後）について、[Deploy run 34633650787](https://github.com/chameleonjp-lab/kakomare/actions/runs/34633650787)が`5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`で成功した。クラウドブラウザで公開URLの名前入力→ホーム→stage-1戦闘→一時停止を確認し、確認時のページ横溢れはなかった。これはV7作業branchの配備、iPhone Safari実機、VoiceOverの証拠ではない。
-- 未確認：V7 branchの公開配備後URL・配備commit一致、ローカルPlaywright実行ファイルを用いたChromium／WebKit本体（この環境では実行ファイル不在）、iPhone Safari・VoiceOver・片手操作・発熱、独立Sol・Highレビュー、実験場のRPC署名・登録値・認証・権限・受付側再計算、本番ランキング有効化。これらを自動試行成功へ繰り上げない。
+- PR #25マージ後のmainについて、[Deploy GitHub Pages run 34679314243](https://github.com/chameleonjp-lab/kakomare/actions/runs/34679314243) がhead `7f6456cb50157e6fa87a50d0c6daeb662897209d`で成功した。クラウドブラウザで正式URL `https://chameleonjp-lab.github.io/kakomare/` を開き、release metadata `kakomare-20260911-v7`、名前入力→ホーム→ステージ選択→stage-1戦闘→実際の強化候補→一時停止→再開を確認した。強化候補には完全停止の説明が表示され、一時停止中の残り時間は1.2秒前後で `166` のまま、再開後は約1.2秒で `165` へ進んだ。公開mainの配備commitとURLの一致、戦闘画面・停止・再開のクラウドブラウザ確認を記録したもので、iPhone Safari実機の証拠ではない。
+- 未確認：ローカルPlaywright実行ファイルを用いたChromium／WebKit本体（この環境では実行ファイル不在）、iPhone Safari・VoiceOver・片手操作・発熱・長時間操作、独立Sol・Highレビュー、実験場のRPC署名・登録値・認証・権限・受付側再計算、本番ランキング有効化。これらを自動試行やクラウドブラウザの成功へ繰り上げない。
 
 ### V7の変更境界
 
@@ -28,7 +29,7 @@
 |内容|基本50武器・補助20・1,000組・相乗効果を維持し、V7で到達・撃破・上限を観測|50武器の縮小、12／25武器で完成扱い、補助・相乗効果の検査省略|
 |公開前|manifest・release metadata・生成文書・CI jobをV7へ同期|mainへの直接push、マージ、自動マージ、保護設定変更、実験場の有効化|
 
-Draft PR #25はこの差分の検査・文書更新後に作成済みで、提出commitとActions URLを本節へ記録した。ユーザーのマージ後にのみ公開版・実機・本番受付を再確認する。
+PR #25はこの差分の検査・文書更新後に作成され、ユーザーのマージまで完了した。提出head、マージcommit、main配備run、クラウドブラウザの公開確認を本節へ記録した。実機・本番受付・ランキング有効化は別許可と実環境確認が必要である。
 
 ## V6の保存・結果・ランキング連携（履歴）
 
