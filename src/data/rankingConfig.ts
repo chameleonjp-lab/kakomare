@@ -1,4 +1,5 @@
 import manifest from '../../ranking-manifest.json';
+import { COMPETITIVE_RULES } from './competitiveRules';
 import type { RankingManifest } from '../validation/rankingManifest';
 
 export const RANKING_MANIFEST = manifest as RankingManifest;
@@ -11,7 +12,7 @@ export const RANKING_MANIFEST = manifest as RankingManifest;
 export const RANKING_CONFIG = Object.freeze({
   gameId: RANKING_MANIFEST.game_id,
   canonicalUrl: RANKING_MANIFEST.canonical_url,
-  releaseId: 'kakomare-20260911-v6',
+  releaseId: 'kakomare-20260911-v7',
   clientVersion: RANKING_MANIFEST.client_version,
   submissionMode: RANKING_MANIFEST.submission_mode,
   representativeSlug: RANKING_MANIFEST.lab.representative_slug,
@@ -19,9 +20,8 @@ export const RANKING_CONFIG = Object.freeze({
   startRpc: RANKING_MANIFEST.play_count.rpc,
   finishRpc: 'finish_game_play_v1',
   scoreRpc: RANKING_MANIFEST.submission.rpc,
-  ruleVersion: 'expansion-v5-runtime',
+  ruleVersion: COMPETITIVE_RULES.version,
   timeoutMs: RANKING_MANIFEST.submission.timeout_ms,
 });
 
 export type RankingConfig = typeof RANKING_CONFIG;
-

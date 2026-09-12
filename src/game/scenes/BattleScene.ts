@@ -1878,7 +1878,14 @@ export class BattleScene extends Phaser.Scene {
     for (const support of this.supports) this.recorder.recordSupportUsage(support.id);
     const baseParts = Math.max(20, Math.floor(20 + this.elapsed / 6 + this.recorder.bossesDefeated * 25));
     const parts = retired ? 0 : Math.floor(baseParts * this.combatResearchEffects.partMultiplier) + this.pendingPartsBonus;
-    const result = this.recorder.result(outcome, this.core.health, parts, retired, outcome === 'victory' && !stage.isEndless ? nextStageId(this.options.stageId) : null);
+    const result = this.recorder.result(
+      outcome,
+      this.core.health,
+      parts,
+      retired,
+      outcome === 'victory' && !stage.isEndless ? nextStageId(this.options.stageId) : null,
+      { includeSurvivalAndCore: !this.competitive },
+    );
     result.build = {
       unlockedLayer: this.buildGraph.unlockedLayer,
       graph: this.buildGraph.snapshot(),
@@ -2139,7 +2146,7 @@ export class BattleScene extends Phaser.Scene {
       nextExperience: this.progression.nextExperience,
       pendingUpgrades: this.progression.pendingChoices,
       pendingUpgradeSelectionId: this.pendingUpgradeDeferred ? this.upgradeSequence : null,
-      score: Math.round(this.recorder.score + this.elapsed * 5 + this.core.health * 20),
+      score: this.recorder.finalScore(this.core.health, { includeSurvivalAndCore: !this.competitive }),
       kills: this.recorder.kills,
       enemies: snapshotEnemies.map((enemy) => enemy.snapshot({ x: 0, y: 0 }, this.elapsed)),
       projectiles: visibleProjectiles.map((projectile) => projectile.snapshot()),
@@ -2244,7 +2251,8 @@ export class BattleScene extends Phaser.Scene {
     this.manualAim = snapshot.manualAim;
     if (!this.recorder.inputRecorder.restore(checkpoint.inputLog)) return;
     this.recorder.kills = snapshot.kills;
-    this.recorder.score = Math.max(0, snapshot.score - snapshot.elapsed * 5 - snapshot.core * 20);
+    const resultFieldScore = this.competitive ? 0 : snapshot.elapsed * 5 + snapshot.core * 20;
+    this.recorder.score = Math.max(0, snapshot.score - resultFieldScore);
     this.recorder.survivalTime = snapshot.elapsed;
     this.bossDefeated = snapshot.bossDefeated;
     this.recorder.bossDefeated = snapshot.bossDefeated;

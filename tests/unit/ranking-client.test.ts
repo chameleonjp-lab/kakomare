@@ -96,21 +96,21 @@ describe('RankingClient', () => {
         calls.push({ url: String(input), body });
         const rpc = String(input).split('/').pop();
         const payload = rpc === 'start_game_play_v1'
-          ? { accepted: true, play_id: 'server-play-1', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v6' }
+          ? { accepted: true, play_id: 'server-play-1', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v7' }
           : rpc === 'finish_game_play_v1'
             ? { accepted: true, play_id: 'server-play-1' }
-            : { accepted: true, submission_id: 'submission-1', play_id: 'server-play-1', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v6', score: 120 };
+            : { accepted: true, submission_id: 'submission-1', play_id: 'server-play-1', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v7', score: 120 };
         return { ok: true, status: 200, json: async () => payload } as Response;
       },
     });
-    const startRequest: RankingStartRequest = { startId: 'start-1', displayName: '競技者', gameSlug: 'kakomare_endless', clientVersion: 'kakomare-web-v6', ruleVersion: 'expansion-v5-runtime' };
+    const startRequest: RankingStartRequest = { startId: 'start-1', displayName: '競技者', gameSlug: 'kakomare_endless', clientVersion: 'kakomare-web-v7', ruleVersion: 'expansion-v7-runtime' };
     await gateway.startPlay(startRequest);
-    await gateway.finishPlay({ playId: 'server-play-1', gameSlug: 'kakomare_endless', clientVersion: 'kakomare-web-v6', ruleVersion: 'expansion-v5-runtime', resultType: 'game_over', score: 120, scoreBreakdown: { kills: 3 } });
-    await gateway.submitScore({ submissionId: 'submission-1', playId: 'server-play-1', displayName: '競技者', gameSlug: 'kakomare_endless', clientVersion: 'kakomare-web-v6', ruleVersion: 'expansion-v5-runtime', resultType: 'game_over', score: 120, scoreBreakdown: { kills: 3 } });
+    await gateway.finishPlay({ playId: 'server-play-1', gameSlug: 'kakomare_endless', clientVersion: 'kakomare-web-v7', ruleVersion: 'expansion-v7-runtime', resultType: 'game_over', score: 120, scoreBreakdown: { kills: 3 } });
+    await gateway.submitScore({ submissionId: 'submission-1', playId: 'server-play-1', displayName: '競技者', gameSlug: 'kakomare_endless', clientVersion: 'kakomare-web-v7', ruleVersion: 'expansion-v7-runtime', resultType: 'game_over', score: 120, scoreBreakdown: { kills: 3 } });
     expect(calls.map((call) => call.body)).toEqual([
-      { start_id: 'start-1', display_name: '競技者', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v6', rule_version: 'expansion-v5-runtime' },
-      { play_id: 'server-play-1', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v6', rule_version: 'expansion-v5-runtime', result_type: 'game_over', score: 120, score_breakdown: { kills: 3 } },
-      { submission_id: 'submission-1', play_id: 'server-play-1', display_name: '競技者', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v6', rule_version: 'expansion-v5-runtime', result_type: 'game_over', score: 120, score_breakdown: { kills: 3 } },
+      { start_id: 'start-1', display_name: '競技者', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v7', rule_version: 'expansion-v7-runtime' },
+      { play_id: 'server-play-1', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v7', rule_version: 'expansion-v7-runtime', result_type: 'game_over', score: 120, score_breakdown: { kills: 3 } },
+      { submission_id: 'submission-1', play_id: 'server-play-1', display_name: '競技者', game_slug: 'kakomare_endless', client_version: 'kakomare-web-v7', rule_version: 'expansion-v7-runtime', result_type: 'game_over', score: 120, score_breakdown: { kills: 3 } },
     ]);
 
     const invalid = new HttpRankingGateway({

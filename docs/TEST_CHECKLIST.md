@@ -2,6 +2,28 @@
 
 > 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
 
+## V7実装：最終本戦・性能・公開前ゲート（2026-09-11）
+
+対象branchは `codex/v7-final-verification-20260911`。基準mainは、ユーザーがマージしたPR #24のマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`（head `69abd6024471b47d044d378d9f044dd03bb51001`）。Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25) の提出commitは `2669a784df52621ce9e5195eb4c2a5780b532a06`。V7では、競技ルール版を `expansion-v7-runtime` へ分離し、競技得点へ生存時間・残HPを混ぜない修正、通常720試行、競技無限60試行、30／60／120回描画比較を実際の `BattleScene` 更新経路で検査する。基本武器50・補助20・全1,000組はV5から維持し、12・25種類を完成扱いにしない。
+
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm test -- --run --testTimeout=30000`（29ファイル、206件）
+- [x] `npm run test:v7 -- --testTimeout=900000`（1ファイル・3テスト。720通常、60無限、30／60／120Hz比較。合計484.660秒。通常153.882秒、無限213.158秒、描画頻度117.085秒）
+- [x] V7試行の共通上限（敵180、味方弾280、敵弾80）を各固定更新で検査
+- [x] 競技スコア回帰（競技はイベント点のみ、通常モードの旧式得点は維持）
+- [x] `npm run generate:expansion-docs`
+- [x] `npm run verify:expansion-docs`（V7生成文書5ファイル）
+- [x] `npm run verify:ranking-manifest`（V7 manifest）
+- [x] `npm run build`、`npm run verify:dist`、`npm run verify:originality`、`git diff --check`（Viteの500 kB超チャンク警告あり）
+- [x] V7提出commitのGitHub Actions [Quality #74](https://github.com/chameleonjp-lab/kakomare/actions/runs/34644134706)（`quality`、`pages-runner-quality`、`v7-final-gates` の全job・全step成功）
+- [ ] ローカル `npm run test:e2e:chromium`／`npm run test:e2e:webkit`（実行ファイル不在のため本体未実施。提出CIと分離）
+- [x] V6マージ後mainの公開Pages配備 [run 34633650787](https://github.com/chameleonjp-lab/kakomare/actions/runs/34633650787) とクラウドブラウザの名前入力→stage-1戦闘→一時停止（V7 branchの配備ではない）
+- [ ] iPhone Safari実機、VoiceOver、片手操作、発熱、V7 branchの公開配備後の再確認
+- [ ] 実験場の本番受付・DB・認証・権限・受付側再計算・ランキング有効化（ユーザー許可待ち。変更していない）
+
+V7専用検査は `src/game/systems/FinalGateProtocol.ts` の重複なし試行台帳と `tests/v7-final-gates.test.ts` の本番BattleSceneバンドルを使う。各通常試行は6ステージ×開始値20×選択方針3×研究状態2＝720、各無限試行は開始値10×選択方針3×自動／危険対象照準2＝60で、敗北・観測上限を結果として保持する。Node検査は描画なしだが、内部の別戦闘計算を作らず、固定時計・候補確定・終了判定を本番経路で実行する。画面操作、ブラウザ本体、実機、本番受付側検証を自動検査成功へ繰り上げない。
+
 ## V6実装：保存・結果・ランキング連携（2026-09-11）
 
 対象branchは `codex/v6-save-result-ranking-20260911`。基準mainは、ユーザーがマージしたPR #23のマージコミット `65801a7c9619aa988f787890716252d1342d923b`。V6では、進行保存v3、途中状態の安全境界復元、結果の一回精算、ゲーム側ランキングアダプターとmanifestを実装する。基本50武器・補助20・全1,000組はV5から維持し、V6で本番登録や内容縮小を行わない。

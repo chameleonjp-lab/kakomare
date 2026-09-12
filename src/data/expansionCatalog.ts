@@ -6,7 +6,7 @@ import type {
   SupportApplicability,
 } from '../types/expansion';
 
-export const EXPANSION_RULE_VERSION = 'expansion-v5-runtime';
+export const EXPANSION_RULE_VERSION = 'expansion-v7-runtime';
 
 export const EXPANSION_SUPPORT_ORDER = [
   'output', 'rhythm', 'branch', 'focus', 'observe', 'brake',

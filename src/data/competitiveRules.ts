@@ -1,12 +1,12 @@
 import type { CompetitiveRulesDesign } from '../types/expansion';
 
 /**
- * V5 carries the complete content registry into the runtime contract. It does
- * not enable ranking submission; the actual experiment-site integration stays
- * in V6 behind a separate permission gate.
+ * V7 carries the final-gate runtime contract for the complete content
+ * registry. It does not enable ranking submission; the actual experiment-site
+ * integration remains behind a separate permission gate.
  */
 export const COMPETITIVE_RULES: CompetitiveRulesDesign = {
-  version: 'expansion-v5-runtime',
+  version: 'expansion-v7-runtime',
   initial: {
     coreHp: 100,
     baseDamage: 8,
@@ -38,6 +38,6 @@ export const COMPETITIVE_RULES: CompetitiveRulesDesign = {
     'ランキング対象は研究・解放状況に依存しない共通初期条件で始める',
     '候補・除外・引き直しは有効性を再検証してから確定する',
     '終了種別と得点内訳を一度だけ確定し、同じ結果を再送しても増やさない',
-    'V6ではゲーム側の送信契約を準備するが、本番DB・受付・認証・権限は未確認のまま別許可へ分ける',
+    'V7ではゲーム側の送信契約と最終検査を準備するが、本番DB・受付・認証・権限は未確認のまま別許可へ分ける',
   ],
 };

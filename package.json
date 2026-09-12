@@ -14,6 +14,7 @@
     "test:e2e:chromium": "playwright test --project=chromium",
     "test:e2e:webkit": "playwright test --project=webkit",
     "test:e2e": "npm run test:e2e:chromium && npm run test:e2e:webkit",
+    "test:v7": "vitest run --config vitest.v7.config.ts",
     "generate:og": "node scripts/generate-og-image.mjs",
     "generate:expansion-docs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/generate-expansion-docs.mjs",
     "verify:expansion-docs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/generate-expansion-docs.mjs --check",

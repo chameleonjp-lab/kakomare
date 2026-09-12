@@ -63,3 +63,27 @@ jobs:
         run: npm run test:e2e:webkit
       - name: Build and verify release files
         run: npm run build && npm run verify:dist && npm run verify:originality
+
+  # The V7 matrix uses the production BattleScene update path for 720 normal
+  # and 60 endless observations. Keep it separate so the ordinary quality
+  # jobs do not run the long final-gate suite twice.
+  v7-final-gates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --user 1001
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run V7 final battle gates
+        run: npm run test:v7 -- --testTimeout=900000
