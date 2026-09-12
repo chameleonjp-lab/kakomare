@@ -146,7 +146,7 @@ export const WEAPONS = ({
     '発射間隔を18%短くし、制御できない時間を減らします。',
     '重圧深化', '展開深化',
   ), evolution('gravity-linked', '連結重力点', '主重力点から角度をずらした位置へ、持続時間72%・半径70%・威力45%の補助重力点を一つ加えます。')),
-  grid: define('grid', '迎撃格子', '迎撃', '指定方向の敵弾を優先して消し、空いた時間に短い射撃を行います。', '敵弾迎撃・方向防衛', 0xf0a6ff, [
+  grid: define('grid', '迎撃格子', '迎撃', '指定方向の敵弾を消し、同時に威力を抑えた弾を1発放ちます。迎撃線の外側は守れません。', '敵弾迎撃・方向防衛', 0xf0a6ff, [
     { damage: 7, cooldown: 1.8, range: 520, width: 30, count: 1, projectileSpeed: 420 }, { damage: 9, cooldown: 1.7, range: 540, width: 34, count: 1, projectileSpeed: 440 },
     { damage: 11, cooldown: 1.6, range: 560, width: 40, count: 2, projectileSpeed: 460 }, { damage: 14, cooldown: 1.5, range: 580, width: 46, count: 2, projectileSpeed: 480 },
     { damage: 17, cooldown: 1.4, range: 600, width: 52, count: 2, projectileSpeed: 500 }, { damage: 20, cooldown: 1.3, range: 615, width: 58, count: 3, projectileSpeed: 520 },
@@ -168,7 +168,7 @@ export const WEAPONS = ({
     '爆発範囲の威力を22%高め、殻を一度に削ります。',
     '設置間隔を18%短くし、空いた進路へ置き直します。',
   ), evolution('mine-cross', '交差機雷', '照準方向と左右へ角度をずらした機雷を計3個置き、保持できる数も1個増やします。古い機雷から置き換わります。')),
-  lance: define('lance', '蓄圧槍', '蓄圧', '時間をためて重い貫通槍を放ち、殻や盾へ一撃を通します。', '蓄積・重貫通', 0xffd166, [
+  lance: define('lance', '蓄圧槍', '蓄圧', 'ため時間ごとに重い槍を放ち、一直線に並ぶ敵を貫きます。敵の盾や外殻の防御は無視できません。', '蓄積・重貫通', 0xffd166, [
     { damage: 48, cooldown: 2.8, range: 640, pierce: 3, projectileSpeed: 620, width: 10, chargeTime: 0.8 }, { damage: 59, cooldown: 2.7, range: 650, pierce: 3, projectileSpeed: 640, width: 11, chargeTime: 0.8 },
     { damage: 72, cooldown: 2.6, range: 660, pierce: 4, projectileSpeed: 660, width: 12, chargeTime: 0.8 }, { damage: 86, cooldown: 2.5, range: 670, pierce: 4, projectileSpeed: 680, width: 13, chargeTime: 0.85 },
     { damage: 102, cooldown: 2.4, range: 680, pierce: 5, projectileSpeed: 700, width: 14, chargeTime: 0.85 }, { damage: 120, cooldown: 2.3, range: 690, pierce: 5, projectileSpeed: 720, width: 15, chargeTime: 0.9 },
@@ -179,7 +179,7 @@ export const WEAPONS = ({
     '重撃の威力を22%高め、硬い防護を削ります。',
     '再装填を18%短くし、ため直しの隙を減らします。',
   ), evolution('lance-double', '二段槍', '同じ照準へ威力48%・速度92%の二本目を一度だけ放ちます。二本目からは増えません。')),
-  drone: define('drone', '追尾子機', '子機', '最大2機の小型機が敵を追尾し、別経路から短い弾を撃ちます。', '追尾・優先対象', 0x6ee7b7, [
+  drone: define('drone', '追尾子機', '子機', '設置した武器の周りを最大2機の小型機が回り、それぞれが敵を狙って弾を撃ちます。機体が敵の位置まで追いかける動きではありません。', '周回子機・別位置から射撃', 0x6ee7b7, [
     { damage: 10, cooldown: 3.4, range: 560, count: 1, projectileSpeed: 300, orbitRadius: 74, orbitSpeed: 1.2, hitCooldown: 0.55, duration: 12 }, { damage: 13, cooldown: 3.3, range: 575, count: 1, projectileSpeed: 320, orbitRadius: 78, orbitSpeed: 1.3, hitCooldown: 0.52, duration: 13 },
     { damage: 16, cooldown: 3.2, range: 590, count: 2, projectileSpeed: 340, orbitRadius: 82, orbitSpeed: 1.4, hitCooldown: 0.49, duration: 14 }, { damage: 20, cooldown: 3.1, range: 605, count: 2, projectileSpeed: 360, orbitRadius: 86, orbitSpeed: 1.5, hitCooldown: 0.46, duration: 15 },
     { damage: 25, cooldown: 3.0, range: 620, count: 2, projectileSpeed: 380, orbitRadius: 90, orbitSpeed: 1.6, hitCooldown: 0.43, duration: 16 }, { damage: 30, cooldown: 2.9, range: 635, count: 2, projectileSpeed: 400, orbitRadius: 94, orbitSpeed: 1.7, hitCooldown: 0.4, duration: 17 },

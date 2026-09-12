@@ -31,6 +31,12 @@ function supportSnapshot(id: (typeof SUPPORT_ORDER)[number], slot: number, level
 }
 
 describe('equipment help copy and snapshot connections', () => {
+  it('does not promise enemy-following drones or shield-ignoring lances in the candidate summary', () => {
+    expect(WEAPONS.drone.description).toContain('設置した武器の周り');
+    expect(getWeaponHelp('drone').current).toContain('設置した武器の周り');
+    expect(WEAPONS.lance.description).toContain('防御は無視できません');
+    expect(WEAPONS.grid.description).toContain('同時に');
+  });
   it('provides non-empty user-facing copy for all 50 weapons and all 20 supports', () => {
     expect(WEAPON_ORDER).toHaveLength(50);
     expect(SUPPORT_ORDER).toHaveLength(20);
