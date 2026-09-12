@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SUPPORTS, SUPPORT_ORDER } from '../../src/data/supports';
 import { WEAPONS, WEAPON_ORDER } from '../../src/data/weapons';
 import { SupportModule, SUPPORT_EFFECT_CAPS, supportEffectsFor, supportWeaponSlots } from '../../src/game/entities/SupportModule';
+import { Weapon } from '../../src/game/entities/Weapon';
+import { effectiveWeaponStats } from '../../src/game/systems/CombatStats';
 import { audioCueForStatus } from '../../src/services/AudioService';
 
 describe('V5 の実効値と表現', () => {
@@ -106,5 +108,35 @@ describe('V5 の実効値と表現', () => {
     expect(relay.affectsWeaponSlot(0)).toBe(true);
     expect(relay.affectsWeaponSlot(5)).toBe(false);
     expect(supportEffectsFor([relay], 'relay', 0)).toEqual({ primary: 0.12, secondary: 0.12 });
+  });
+
+  it('指向環は接続武器へ手動照準中だけレベル別の威力を加える', () => {
+    const weapon = new Weapon('needle', 0, 'vector-weapon');
+    const vector = new SupportModule('vector', 0, 'vector-support');
+    const expected = [0.08, 0.14, 0.22];
+    for (const [index, bonus] of expected.entries()) {
+      vector.level = index + 1;
+      const automatic = effectiveWeaponStats(weapon, [vector]);
+      const manual = effectiveWeaponStats(weapon, [vector], 1, 1, 0, true);
+      expect(automatic.vectorBonus).toBe(0);
+      expect(automatic.damage).toBeCloseTo(weapon.stats.damage);
+      expect(manual.vectorBonus).toBeCloseTo(bonus);
+      expect(manual.damage).toBeCloseTo(weapon.stats.damage * (1 + bonus));
+    }
+    const unconnected = new Weapon('needle', 2, 'vector-unconnected');
+    expect(effectiveWeaponStats(unconnected, [vector], 1, 1, 0, true).vectorBonus).toBe(0);
+  });
+
+  it('薄幕環の接続武器代償は出力補助がなくても負の実効値になる', () => {
+    const weapon = new Weapon('needle', 0, 'veil-weapon');
+    const veil = new SupportModule('veil', 0, 'veil-support');
+    const unboosted = effectiveWeaponStats(weapon, [veil]);
+    expect(unboosted.outputBonus).toBeCloseTo(-0.04);
+    expect(unboosted.damage).toBeCloseTo(weapon.stats.damage * 0.96);
+
+    const output = new SupportModule('output', 0, 'veil-output');
+    const offset = effectiveWeaponStats(weapon, [veil, output]);
+    expect(offset.outputBonus).toBeCloseTo(0.06);
+    expect(offset.damage).toBeCloseTo(weapon.stats.damage * 1.06);
   });
 });

@@ -41,7 +41,7 @@ describe('V5 expansion runtime contract', () => {
   });
 
   it('fixes a common competitive rule version and bounded starting contract', () => {
-    expect(EXPANSION_RULE_VERSION).toBe('expansion-v7-runtime');
+    expect(EXPANSION_RULE_VERSION).toBe('expansion-v8-endless');
     expect(COMPETITIVE_RULES.version).toBe(EXPANSION_RULE_VERSION);
     expect(COMPETITIVE_RULES.initial.coreHp).toBeGreaterThan(0);
     expect(COMPETITIVE_RULES.initial.capacity).toBeGreaterThan(0);

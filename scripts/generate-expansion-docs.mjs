@@ -1,5 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { COMPETITIVE_RULES } from '../src/data/competitiveRules.ts';
+import { WEAPONS, WEAPON_ORDER } from '../src/data/weapons.ts';
+import { SUPPORTS, SUPPORT_ORDER } from '../src/data/supports.ts';
 import {
   EXPANSION_APPLICABILITY_MATRIX,
   EXPANSION_RULE_VERSION,
@@ -18,7 +20,7 @@ const paths = {
 };
 
 const escapeCell = (value) => String(value).replaceAll('|', '\\|').replaceAll('\n', '<br>');
-const statusLabel = (status) => status === 'implemented' ? '現行実装' : '設計済み・未実装';
+const statusLabel = (status) => status === 'implemented' ? '戦闘登録済み（詳細受入は別）' : '設計済み・未実装';
 const implementedWeaponCount = EXPANSION_WEAPONS.filter((weapon) => weapon.status === 'implemented').length;
 const designOnlyWeaponCount = EXPANSION_WEAPONS.length - implementedWeaponCount;
 const implementedSupportCount = EXPANSION_SUPPORTS.filter((support) => support.status === 'implemented').length;
@@ -36,9 +38,19 @@ const supportSummary = (weapon) => {
   ].join('<br>');
 };
 
-const weapons = `# 基本武器カタログ（V7実装正本）
+const weapons = `# 基本武器カタログ（現行表示と設計台帳）
 
-ルール版：\`${EXPANSION_RULE_VERSION}\`。この台帳は、基本武器を分岐・レベル・進化・色違いと混同せず50種類で設計・実装するためのものです。現行で戦闘に登録されているのは「現行実装」の${implementedWeaponCount}件です。「設計済み・未実装」の${designOnlyWeaponCount}件は、本番の抽選・図鑑・公開レジストリへ出しません。各武器は抽選から到達できる登録と、個体別の攻撃経路・上限を持つことを検査します。
+## 2026-09-13の確認・現行画面の正本
+
+下段の50武器設計台帳は計画上の名称・仕様を含みます。「戦闘登録済み」は50件の定義が存在する意味で、各武器の固有効果・描写・2方向の相乗効果が設計どおり完成した証拠ではありません。旧版ではこの区別と表示名の相違を明示できていませんでした。今回の画面説明は実際の定義と攻撃処理を確認して更新しました。計画の未達を説明の修正だけで完了にしません。
+
+| # | ID | 現在のゲーム内名称 | 現在の説明 |
+|---:|---|---|---|
+${WEAPON_ORDER.map((id, index) => `| ${index + 1} | ${id} | ${escapeCell(WEAPONS[id].name)} | ${escapeCell(WEAPONS[id].description)} |`).join('\n')}
+
+## 設計台帳（実装との差分は進行記録を参照）
+
+ルール版：\`${EXPANSION_RULE_VERSION}\`。この台帳は基本武器50種類の設計目標です。戦闘登録は${implementedWeaponCount}件、登録前の設計は${designOnlyWeaponCount}件です。登録数・抽選到達と、下記の固有動作・相乗効果が実際に一致することは別の受入条件です。[今回の監査](ENDLESS_USABILITY_REVIEW.md)にある未達を残したまま全体完成とはしません。
 
 各行には、近い武器との差を2つ、通常成長、弱点、上限、補助の20組、相乗効果を2方向記載しています。相乗効果は数値倍率を2つ並べたものではなく、発動条件・代替経路・弱点を持つ構造として設計します。
 
@@ -57,10 +69,20 @@ ${EXPANSION_WEAPONS.flatMap((weapon) => weapon.synergies.map((synergy, index) =>
 - 設計数・実装登録数は50（既存8＋追加4＋V4追加13＋V5追加25）です。
 - 分岐、通常レベル、特別発展は基本武器の中へ重複して数えません。
 - 50件すべてに、攻撃経路・対象選択・発動条件・位置の意味・制約の組み合わせで、近い武器と異なる2つ以上の差分を記録しています。
-- 実装状態、検査状態、公開受入状態は別に管理します。V7時点では実装済み${implementedWeaponCount}、公開受入済み0です。
+- 実装状態、検査状態、公開受入状態は別に管理します。登録${implementedWeaponCount}、全仕様の公開受入済み0です。
 `;
 
-const supports = `# 補助カタログ（V7実装正本）
+const supports = `# 補助カタログ（現行表示と設計台帳）
+
+## 2026-09-13の現行画面の説明
+
+設計上の適用表と、現在の攻撃処理で働く効果を区別します。候補・一時停止に示す接続先と作用は現在の実装から説明します。
+
+| # | ID | ゲーム内名称 | 現在の説明 |
+|---:|---|---|---|
+${SUPPORT_ORDER.map((id, index) => `| ${index + 1} | ${id} | ${escapeCell(SUPPORTS[id].name)} | ${escapeCell(SUPPORTS[id].description)} |`).join('\n')}
+
+## 設計台帳
 
 補助総数Sは **20** と決定します。既存6件だけでは、50武器へ攻撃変更・条件発動・接続・防衛・代償を分担させる台帳が不足するため14件を追加しました。V7時点で戦闘に登録されているのは${implementedSupportCount}件です。各補助は実効値の上限、非対応理由、接続条件を持ち、候補から到達できることを検査します。
 
@@ -103,6 +125,14 @@ V5では全50武器・全20補助を戦闘登録へ移し、個体・上限・�
 `;
 
 const rules = `# 競技型無限モードのルール契約（V7ゲーム側準備済み／本番未接続）
+
+## 2026-09-13 ユーザー指示による改訂（過去の通常ステージ案に優先）
+
+公開画面のモードは無限だけとし、「プレイする」で全員共通の初期状態から始めます。通常ステージの選択・解放要求、研究・記録の入口、設定の保存データ管理操作は表示しません。既存の名前・設定・旧記録を削除する変更ではありません。1プレイの得点で競う方針であり、参加者ごとの挑戦回数制限や本番受付はこの変更では有効化しません。
+
+空き面がなくなっても、レベルアップ時に別の武器・補助への交換候補を抽選します。交換後のレベルは min(元のレベル, 3) とし、元の分岐・発展は引き継ぎません。一時停止の位置交換は別操作で、装備とレベルを保ちます。候補・配置・経験値・容量は確定時に再検証します。
+
+ゲーム内表示と過去の設計台帳の差は「基本武器カタログ」の現行説明および進行記録へ記載します。登録50件をそのまま全武器の固有効果完成として数えません。ルール変更前の途中状態を新版で黙って再開しません。
 
 この文書は、後続工程が同じ条件を参照するための設計契約です。\`${COMPETITIVE_RULES.version}\` は本番ランキングを有効化する識別子ではありません。V6でゲーム側の保存・結果・送信アダプターとmanifestを準備し、V7で最終ゲートの戦闘検査を追加しました。実験場の実際の登録、RPC署名・返り値・認証・権限は未確認です。既定値は未設定ゲートウェイで、本番データベースや実験場設定へ接続・変更しません。
 

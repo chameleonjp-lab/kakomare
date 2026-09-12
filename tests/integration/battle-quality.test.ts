@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
-import type { BattleResult, UpgradeCandidate, UpgradePayload } from '../../src/types/game';
+import type { BattleResult, BattleSnapshot, UpgradeCandidate, UpgradePayload } from '../../src/types/game';
 import { SUPPORT_ORDER } from '../../src/data/supports';
 import { WEAPON_ORDER } from '../../src/data/weapons';
+import { collideProjectiles } from '../../src/game/systems/CollisionSystem';
 
 type BattleModule = {
   BattleScene: new (options: Record<string, unknown>) => unknown;
@@ -104,6 +105,67 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
       const visibleProjectiles = privateValue<() => unknown[]>(scene, 'visibleProjectiles').bind(scene)();
       expect(visibleProjectiles).toHaveLength(80);
     }
+  });
+
+  it('低演出でも上限280発の味方攻撃を可視集合とスナップショットへ残す', () => {
+    const snapshots: BattleSnapshot[] = [];
+    const scene = new moduleUnderTest.BattleScene(options({ effectsLevel: 'minimum', callbacks: {
+      onStatus() {}, onUpgrade() {}, onFinish() {}, onPauseRequest() {},
+      onSnapshot: (snapshot: BattleSnapshot) => snapshots.push(snapshot),
+    } }));
+    const addProjectile = privateValue<(config: Record<string, unknown>) => unknown>(scene, 'addProjectile').bind(scene);
+    for (let id = 1; id <= 280; id += 1) addProjectile({
+      kind: 'needle', x: id, y: 0, vx: 1, vy: 0, radius: 6, damage: 1, life: 2, piercing: 0,
+    });
+    const visibleProjectiles = privateValue<() => Array<{ enemyProjectile: boolean }>>(scene, 'visibleProjectiles').bind(scene)();
+    expect(visibleProjectiles.filter((projectile) => !projectile.enemyProjectile)).toHaveLength(280);
+    privateValue<(force: boolean) => void>(scene, 'emitSnapshot').bind(scene)(true);
+    expect(snapshots.at(-1)?.projectiles.filter((projectile) => !projectile.enemyProjectile)).toHaveLength(280);
+  });
+
+  it('最低演出でも範囲攻撃の中心と半径を短い輪で示し、予告を装飾で上書きしない', () => {
+    const scene = new moduleUnderTest.BattleScene(options({ effectsLevel: 'minimum' }));
+    const weapon = privateValue<Array<{ id: string }>>(scene, 'weapons')[0];
+    if (!weapon) throw new Error('initial weapon was not created');
+    const hitArea = privateValue<(weapon: unknown, x: number, y: number, radius: number, damage: number, angle: number | null) => void>(scene, 'hitArea').bind(scene);
+    const flashes = privateValue<Array<{ x: number; y: number; radius: number; life: number; maxLife: number; kind: string }>>(scene, 'flashes');
+    hitArea(weapon, 37, -19, 46, 8, null);
+    expect(flashes).toContainEqual(expect.objectContaining({ x: 37, y: -19, radius: 46, life: 0.2, maxLife: 0.2, kind: 'impact' }));
+
+    const warningScene = new moduleUnderTest.BattleScene(options({ effectsLevel: 'minimum' }));
+    const addFlash = privateValue<(effect: { x: number; y: number; color: number; life: number; maxLife: number; radius: number; kind: 'impact' | 'telegraph' | 'decoration' }) => void>(warningScene, 'addFlash').bind(warningScene);
+    const warnings = privateValue<Array<{ kind: string }>>(warningScene, 'flashes');
+    for (let index = 0; index < 64; index += 1) addFlash({ x: index, y: 0, color: 0xffffff, life: 1, maxLife: 1, radius: 10, kind: 'telegraph' });
+    addFlash({ x: 0, y: 0, color: 0xffffff, life: 1, maxLife: 1, radius: 10, kind: 'decoration' });
+    addFlash({ x: 1, y: 0, color: 0xffffff, life: 1, maxLife: 1, radius: 10, kind: 'decoration' });
+    addFlash({ x: 2, y: 0, color: 0xffffff, life: 1, maxLife: 1, radius: 10, kind: 'decoration' });
+    expect(warnings.filter((flash) => flash.kind === 'telegraph')).toHaveLength(64);
+    expect(warnings.filter((flash) => flash.kind === 'decoration')).toHaveLength(2);
+
+    const lineScene = new moduleUnderTest.BattleScene(options({ effectsLevel: 'minimum' }));
+    const addLine = privateValue<(effect: { angle: number; color: number; life: number; maxLife: number; width: number }) => void>(lineScene, 'addLine').bind(lineScene);
+    const lines = privateValue<Array<{ width: number }>>(lineScene, 'lines');
+    for (let index = 0; index < 60; index += 1) addLine({ angle: 0, color: 0xffffff, life: 1, maxLife: 1, width: index + 1 });
+    expect(lines).toHaveLength(48);
+    expect(lines.some((line) => line.width === 60)).toBe(true);
+  });
+
+  it('低演出のライブスナップショットでも全敵と敵弾を保持する', () => {
+    const snapshots: BattleSnapshot[] = [];
+    const scene = new moduleUnderTest.BattleScene(options({ effectsLevel: 'minimum', callbacks: {
+      onStatus() {}, onUpgrade() {}, onFinish() {}, onPauseRequest() {},
+      onSnapshot: (snapshot: BattleSnapshot) => snapshots.push(snapshot),
+    } }));
+    const enemies = privateValue<unknown[]>(scene, 'enemies');
+    for (let id = 1; id <= 180; id += 1) enemies.push(new moduleUnderTest.Enemy(id, id === 1 ? 'lattice' : 'shard', 0, 300));
+    const addProjectile = privateValue<(config: Record<string, unknown>) => unknown>(scene, 'addProjectile').bind(scene);
+    for (let id = 1; id <= 80; id += 1) addProjectile({ id, kind: 'enemy', x: 300, y: 0, vx: -1, vy: 0, radius: 9, damage: 1, life: 2, piercing: 0, enemyProjectile: true });
+    privateValue<(force: boolean) => void>(scene, 'emitSnapshot').bind(scene)(true);
+    const snapshot = snapshots.at(-1);
+    expect(snapshot?.effectsLevel).toBe('minimum');
+    expect(snapshot?.enemies).toHaveLength(180);
+    expect(snapshot?.enemies.find((enemy) => enemy.type === 'lattice')?.shieldHits).toBe(8);
+    expect(snapshot?.projectiles.filter((projectile) => projectile.enemyProjectile)).toHaveLength(80);
   });
 
   it('連鎖終端破裂と回転冠の盾が軸上・境界で一貫する', () => {
@@ -662,6 +724,101 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     expect(new Set(projectiles.filter((projectile) => projectile.active).map((projectile) => projectile.sourceWeaponId))).toEqual(new Set(v5Ids));
   });
 
+  it('追加武器のLv3分岐は共通射撃でも本数・角度または貫通を変える', () => {
+    const scene = new moduleUnderTest.BattleScene(options());
+    const fireAdditional = privateValue<(weapon: unknown, target: unknown, angle: number, damage: number) => void>(scene, 'fireAdditionalWeapon').bind(scene);
+    const projectiles = privateValue<Array<{ kind: string; vx: number; vy: number; piercing: number; bounces: number }>>(scene, 'projectiles');
+    const spreadWeapon = new moduleUnderTest.Weapon('swell', 0) as unknown as { level: number; branch: string | null };
+    spreadWeapon.branch = 'spread';
+    fireAdditional(spreadWeapon, null, 0, 100);
+    expect(projectiles).toHaveLength(2);
+    expect(projectiles[0]?.vy).not.toBe(projectiles[1]?.vy);
+
+    projectiles.length = 0;
+    const piercingWeapon = new moduleUnderTest.Weapon('swell', 0) as unknown as { level: number; branch: string | null };
+    piercingWeapon.branch = 'piercing';
+    fireAdditional(piercingWeapon, null, 0, 100);
+    expect(projectiles).toHaveLength(1);
+    expect(projectiles[0]?.piercing).toBe(2);
+
+    projectiles.length = 0;
+    const bouncingWeapon = new moduleUnderTest.Weapon('mirror', 0) as unknown as { level: number; branch: string | null };
+    bouncingWeapon.branch = 'piercing';
+    fireAdditional(bouncingWeapon, null, 0, 100);
+    expect(projectiles[0]?.kind).toBe('disc');
+    expect(projectiles[0]?.piercing).toBe(0);
+    expect(projectiles[0]?.bounces).toBe(4);
+  });
+
+  it('追加武器の弾寿命は有効射程と弾速に一致する', () => {
+    const scene = new moduleUnderTest.BattleScene(options());
+    const weapon = new moduleUnderTest.Weapon('mortar', 0) as unknown as { branch: string | null };
+    const fireAdditional = privateValue<(weapon: unknown, target: unknown, angle: number, damage: number) => void>(scene, 'fireAdditionalWeapon').bind(scene);
+    fireAdditional(weapon, null, 0, 100);
+    const projectile = privateValue<Array<{ life: number }>>(scene, 'projectiles')[0];
+    expect(projectile?.life).toBeCloseTo(500 / 300);
+  });
+
+  it('長槍型は射程・幅・初期表示を実際に広げる', () => {
+    const fireScenario = (branch: string | null): { radius: number; life: number; lineWidth: number; lineLength: number } => {
+      const scene = new moduleUnderTest.BattleScene(options());
+      const weapon = new moduleUnderTest.Weapon('lance', 0) as unknown as { branch: string | null; instanceId: string };
+      weapon.branch = branch;
+      privateValue<Map<string, number>>(scene, 'lanceCharge').set(weapon.instanceId, 1);
+      privateValue<(weapon: unknown, angle: number, damage: number) => void>(scene, 'fireLance').bind(scene)(weapon, 0, 100);
+      const projectile = privateValue<Array<{ radius: number; life: number }>>(scene, 'projectiles')[0];
+      const line = privateValue<Array<{ width: number; length?: number }>>(scene, 'lines').at(-1);
+      if (!projectile || !line) throw new Error('lance attack was not created');
+      return { radius: projectile.radius, life: projectile.life, lineWidth: line.width, lineLength: line.length ?? 0 };
+    };
+    const regular = fireScenario(null);
+    const long = fireScenario('long');
+    expect(long.radius).toBe(regular.radius + 4);
+    expect(long.lineWidth).toBe(regular.lineWidth + 4);
+    expect(long.lineLength).toBe(140);
+    expect(long.life).toBeCloseTo(regular.life * 1.18);
+  });
+
+  it('連針砲の分散は重なった敵を一弾一体だけ、貫通型は追加対象まで処理する', () => {
+    const fireNeedleScenario = (branch: 'spread' | 'piercing'): {
+      projectiles: Array<{ active: boolean; x: number; y: number; piercing: number }>;
+      enemies: Array<{ active: boolean; hp: number; x: number; y: number; hitRadius: number; id: number }>;
+    } => {
+      const scene = new moduleUnderTest.BattleScene(options());
+      const weapon = privateValue<Array<{ id: string; level: number; branch: string | null }>>(scene, 'weapons')[0];
+      if (!weapon) throw new Error('initial needle was not created');
+      weapon.level = 3;
+      weapon.branch = branch;
+      privateValue<(weapon: unknown, angle: number, damage: number) => void>(scene, 'fireNeedle').bind(scene)(weapon, 0, 10);
+      const projectiles = privateValue<Array<{ active: boolean; x: number; y: number; piercing: number }>>(scene, 'projectiles');
+      const firstProjectile = projectiles[0];
+      if (!firstProjectile) throw new Error('needle projectile was not created');
+      const enemies = [1, 2, 3, 4].map((id) => {
+        const enemy = new moduleUnderTest.Enemy(id, 'shard', 0, 100) as unknown as { active: boolean; hp: number; x: number; y: number; hitRadius: number; id: number };
+        enemy.x = firstProjectile.x;
+        enemy.y = firstProjectile.y;
+        return enemy;
+      });
+      return { projectiles, enemies };
+    };
+
+    const spread = fireNeedleScenario('spread');
+    expect(spread.projectiles).toHaveLength(3);
+    expect(spread.projectiles.every((projectile) => projectile.piercing === 0)).toBe(true);
+    const spreadEvents = collideProjectiles([spread.projectiles[0]! as never], spread.enemies as never, 0);
+    expect(spreadEvents).toHaveLength(1);
+    expect(spread.enemies[0]?.hp).toBe(14);
+    expect(spread.enemies[1]?.hp).toBe(24);
+
+    const piercing = fireNeedleScenario('piercing');
+    expect(piercing.projectiles).toHaveLength(1);
+    expect(piercing.projectiles[0]?.piercing).toBe(3);
+    const piercingEvents = collideProjectiles([piercing.projectiles[0]! as never], piercing.enemies as never, 0);
+    expect(piercingEvents).toHaveLength(4);
+    expect(piercing.enemies.every((enemy) => enemy.hp < 24)).toBe(true);
+    expect(piercing.projectiles[0]?.active).toBe(false);
+  });
+
   it('誘爆環は印または燃焼が付いた敵の撃破時だけ一度発動する', () => {
     const scene = new moduleUnderTest.BattleScene(options());
     const supports = privateValue<Array<{ id: string; level: number }>>(scene, 'supports');
@@ -731,5 +888,125 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     expect(snapshots.length).toBeGreaterThanOrEqual(2);
     (scene as Record<string, unknown>).state = 'playing';
     expect((scene as unknown as { moveDevice(id: string, slot: number): boolean }).moveDevice(first.instanceId, 0)).toBe(false);
+  });
+
+  it('満枠テスト構成の交換候補を安全に確定し、旧弾の帰属を保存復帰でも保つ', () => {
+    const payloads: UpgradePayload[] = [];
+    const checkpoints: unknown[] = [];
+    const scene = new moduleUnderTest.BattleScene(options({
+      competitive: true,
+      testMode: true,
+      testFullLoadout: true,
+      callbacks: {
+        onStatus() {}, onFinish() {}, onSnapshot() {}, onPauseRequest() {},
+        onUpgrade: (payload: UpgradePayload) => payloads.push(payload),
+        onCheckpoint: (checkpoint: unknown) => checkpoints.push(checkpoint),
+      },
+    }));
+    const weapons = privateValue<Array<{ id: string; instanceId: string; slot: number; level: number }>>(scene, 'weapons');
+    const supports = privateValue<Array<{ id: string; instanceId: string; slot: number; level: number }>>(scene, 'supports');
+    const graph = privateValue<{ unlockedLayer: number }>(scene, 'buildGraph');
+    const capacity = privateValue<{ used: number }>(scene, 'buildCapacity');
+    expect(weapons).toHaveLength(9);
+    expect(supports).toHaveLength(9);
+    expect(weapons.every((weapon) => weapon.level >= 3)).toBe(true);
+    expect(supports.every((support) => support.level >= 3)).toBe(true);
+    expect(graph.unlockedLayer).toBe(3);
+    expect(capacity.used).toBe(18);
+
+    privateValue<{ addExperience(amount: number): void; experience: number; pendingChoices: number }>(scene, 'progression').addExperience(25);
+    privateValue<() => void>(scene, 'openUpgrade').bind(scene)();
+    let payload = payloads.at(-1);
+    if (!payload || payload.phase !== 'selection') throw new Error('replacement payload was not emitted');
+    let replacement = payload.candidates.find((candidate) => candidate.kind === 'weapon' && candidate.replacementTargets?.length);
+    // The normal draw exposes one replacement addition at a time. Advance the
+    // candidate stream in this integration fixture until the weapon side is
+    // shown, then use that still token-bound payload for the selection test.
+    if (!replacement) {
+      const createCandidates = privateValue<() => UpgradeCandidate[]>(scene, 'createCandidates').bind(scene);
+      for (let attempt = 0; attempt < 256 && !replacement; attempt += 1) {
+        const candidates = createCandidates();
+        replacement = candidates.find((candidate) => candidate.kind === 'weapon' && candidate.replacementTargets?.length);
+        if (replacement) {
+          payload = { ...payload, candidates };
+          (scene as Record<string, unknown>).upgradePayload = payload;
+        }
+      }
+    }
+    if (!replacement || !replacement.replacementTargets?.[0]) throw new Error('replacement candidate was not emitted');
+    const target = replacement.replacementTargets[0];
+    expect(replacement.replacementSlots).toContain(target.slot);
+    expect(replacement.replacementBranchOptions?.length).toBeGreaterThan(0);
+    const outgoing = weapons.find((weapon) => weapon.instanceId === target.instanceId);
+    if (!outgoing) throw new Error('replacement target is not live');
+    const addProjectile = privateValue<(config: Record<string, unknown>) => unknown>(scene, 'addProjectile').bind(scene);
+    addProjectile({
+      kind: 'needle', x: 80, y: 0, vx: 100, vy: 0, radius: 6, damage: 2, life: 2, piercing: 0,
+      sourceWeaponId: outgoing.id, sourceWeaponInstanceId: outgoing.instanceId,
+    });
+    const beforeExperience = privateValue<{ experience: number }>(scene, 'progression').experience;
+    const branch = replacement.replacementBranchOptions?.[0]?.id;
+    const choose = privateValue<(candidate: UpgradeCandidate, selectionId: number) => void>(scene, 'chooseUpgrade').bind(scene);
+    choose({ ...replacement, placementSlot: target.slot, replacementTargetInstanceId: 'stale-target', replacementBranch: branch }, payload.selectionId);
+    expect(privateValue<{ experience: number }>(scene, 'progression').experience).toBe(beforeExperience);
+    expect(weapons.some((weapon) => weapon.instanceId === target.instanceId)).toBe(true);
+
+    choose({ ...replacement, placementSlot: target.slot, replacementTargetInstanceId: target.instanceId, replacementBranch: branch }, payload.selectionId);
+    expect(privateValue<string>(scene, 'state')).toBe('playing');
+    expect(weapons.some((weapon) => weapon.instanceId === target.instanceId)).toBe(false);
+    expect(weapons.some((weapon) => weapon.id === replacement.targetId && weapon.slot === target.slot)).toBe(true);
+    const upgradeInput = privateValue<{ inputRecorder: { snapshot(): Array<Record<string, unknown>> } }>(scene, 'recorder')
+      .inputRecorder.snapshot().find((event) => event.kind === 'upgrade');
+    expect(upgradeInput).toMatchObject({
+      replacementTargetInstanceId: target.instanceId,
+      replacementBranch: branch,
+    });
+    const retiredWeapons = privateValue<Map<string, unknown>>(scene, 'retiredWeapons');
+    expect(retiredWeapons.has(target.instanceId)).toBe(true);
+    const projectile = privateValue<Array<{ active: boolean; sourceWeaponInstanceId: string | null }>>(scene, 'projectiles')
+      .find((item) => item.sourceWeaponInstanceId === target.instanceId);
+    if (!projectile) throw new Error('old-source projectile was not retained');
+    expect(privateValue<(projectile: unknown) => unknown>(scene, 'weaponForProjectile').bind(scene)(projectile)).toBe(outgoing);
+
+    // The final choice is live-playing, but it must still publish a stable
+    // pause-on-reload checkpoint immediately; otherwise a tab close in this
+    // narrow interval loses the replacement and its outgoing source table.
+    const choiceCheckpoint = checkpoints.at(-1) as Record<string, unknown> | undefined;
+    if (!choiceCheckpoint) throw new Error('replacement choice checkpoint was not emitted');
+    expect(choiceCheckpoint.phase).toBe('paused');
+    expect((choiceCheckpoint.snapshot as Record<string, unknown>).retiredWeaponSources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ instanceId: target.instanceId }),
+    ]));
+    const choiceResumed = new moduleUnderTest.BattleScene(options({ competitive: true, resumeCheckpoint: choiceCheckpoint }));
+    const choiceRestoredProjectile = privateValue<Array<{ sourceWeaponInstanceId: string | null }>>(choiceResumed, 'projectiles')
+      .find((item) => item.sourceWeaponInstanceId === target.instanceId);
+    expect(choiceRestoredProjectile).toBeDefined();
+    expect(privateValue<string>(choiceResumed, 'state')).toBe('paused');
+    choiceResumed.resume();
+    expect(privateValue<string>(choiceResumed, 'state')).toBe('playing');
+
+    privateValue<() => void>(scene, 'pause').bind(scene)();
+    const checkpoint = checkpoints.at(-1) as Record<string, unknown> | undefined;
+    if (!checkpoint) throw new Error('replacement checkpoint was not emitted');
+    const checkpointSnapshot = checkpoint.snapshot as Record<string, unknown>;
+    expect((checkpointSnapshot.retiredWeaponSources as unknown[] | undefined)?.some((item) => (item as Record<string, unknown>).instanceId === target.instanceId)).toBe(true);
+    const resumed = new moduleUnderTest.BattleScene(options({ competitive: true, resumeCheckpoint: checkpoint }));
+    const restoredProjectile = privateValue<Array<{ active: boolean; sourceWeaponInstanceId: string | null }>>(resumed, 'projectiles')
+      .find((item) => item.sourceWeaponInstanceId === target.instanceId);
+    if (!restoredProjectile) throw new Error('old-source projectile did not restore');
+    const restoredSource = privateValue<(projectile: unknown) => unknown>(resumed, 'weaponForProjectile').bind(resumed)(restoredProjectile) as { instanceId: string } | undefined;
+    expect(restoredSource?.instanceId).toBe(target.instanceId);
+    resumed.resume();
+    expect(privateValue<string>(resumed, 'state')).toBe('playing');
+  });
+
+  it('競技モードは強い照準補助設定でも標準の照準保持時間を使う', () => {
+    const scene = new moduleUnderTest.BattleScene(options({ competitive: true, aimAssist: 'strong' }));
+    (scene as Record<string, unknown>).scale = { displayScale: { x: 1 } };
+    (scene as Record<string, unknown>).aimPointerId = 1;
+    (scene as Record<string, unknown>).aimStart = { x: 0, y: 0 };
+    (scene as Record<string, unknown>).elapsed = 5;
+    privateValue<(pointer: unknown) => void>(scene, 'handlePointerMove').bind(scene)({ id: 1, x: 100, y: 0 });
+    expect(privateValue<number>(scene, 'aimReleaseAt')).toBeCloseTo(5.8);
   });
 });

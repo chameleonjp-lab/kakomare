@@ -2,6 +2,17 @@
 
 > 拡張の現行計画は[v2.0](EXPANSION_IMPLEMENTATION_PLAN.md)、進行・検査結果・未達の正本は[EXPANSION_PROGRESS.md](EXPANSION_PROGRESS.md)です。本書の過去工程の状態は当時の履歴です。
 
+## 無限専用版の公開前境界（2026-09-13 JST）
+
+今回の変更は作業ブランチのDraft PRまで。ルール版`expansion-v8-endless`、クライアント版`kakomare-web-v8`、release metadata`kakomare-20260913-endless`を照合する。
+
+- 提出SHAの全自動検査と独立レビューを確認する。画面の自動検査とスクリーンショットはCI artifactへ保存する。
+- マージ後にユーザーが公開版で「プレイする」→無限、番号付き配置、Lv3交換、盾、相乗効果の説明、簡略結果を確認する。旧版の公開確認を今回へ繰り越さない。
+- iPhone Safari・VoiceOver・文字拡大・片手操作・長時間発熱は未確認。ブラウザ自動検査で置き換えない。
+- 旧途中保存を新ルールへ読み替えず、旧進行データも削除しない。研究量や旧照準補助で開始能力が変わらない。
+- 武器50の登録だけで固有動作50種の完成受入としない。[未達一覧](ENDLESS_USABILITY_REVIEW.md)を残す。
+- 本番ランキング受付は未接続。参加者の1挑戦限定の要否、初回とベスト、登録、認証、RPC・権限は別途確認・許可が必要。本番DB変更・有効化をしない。
+
 ## V7 main公開確認（2026-09-12）
 
 対象branchは `codex/v7-final-verification-20260911`（提出時）。基準mainはPR #24のマージコミット `5cc40b1f9abf8101a85bd1ff39cf0be72ab365b8`。Draft [PR #25](https://github.com/chameleonjp-lab/kakomare/pull/25) の最終提出commitは `a4df4613abc1013d4e6136c7afc021804d34c586`、ユーザーによるマージcommitは `7f6456cb50157e6fa87a50d0c6daeb662897209d`。V7は最終本戦・性能・公開前のゲーム側検査を提出する工程であり、こちらからmainへ直接push・自動マージは行っていない。本番DB／Supabase RPC／実験場登録の変更・有効化も行っていない。競技ルール版は `expansion-v7-runtime`、manifestクライアント版は `kakomare-web-v7` とする。

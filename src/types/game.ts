@@ -125,6 +125,12 @@ export interface BattleSnapshot {
   enemies: EnemySnapshot[];
   projectiles: ProjectileSnapshot[];
   weapons: WeaponSnapshot[];
+  /**
+   * Weapon copies that were replaced while their shots/fields are still
+   * alive. They are never build occupants, but checkpoints retain them so a
+   * restored effect keeps its original source and damage attribution.
+   */
+  retiredWeaponSources?: WeaponSnapshot[];
   supports: SupportSnapshot[];
   aimAngle: number;
   manualAim: boolean;
@@ -139,7 +145,7 @@ export interface BattleSnapshot {
 export interface UpgradeCandidate {
   id: string;
   kind: 'weapon' | 'support' | 'repair' | 'continuous' | 'expansion';
-  targetId: WeaponId | SupportId | 'core' | 'polish' | 'armor' | 'parts' | 'layer-2' | 'layer-3';
+  targetId: WeaponId | SupportId | 'core' | 'polish' | 'armor' | 'parts' | 'stabilizer' | 'layer-2' | 'layer-3';
   title: string;
   description: string;
   before: string;
@@ -156,6 +162,36 @@ export interface UpgradeCandidate {
   expansionLayer?: BuildLayer;
   /** Optional installed-copy target used once duplicate weapon/support types exist. */
   targetInstanceId?: string;
+  /**
+   * Occupied faces that may be replaced by this new device. This is kept
+   * separate from placementSlots because a replacement intentionally targets
+   * an occupied face rather than an empty one.
+   */
+  replacementSlots?: number[];
+  /** Exact installed-copy metadata for each replacement face. The scene
+   * revalidates this against its live instance before applying the choice. */
+  replacementTargets?: UpgradeReplacementTarget[];
+  /** Optional face-selection echo from a UI. It must match the target for
+   * placementSlot and is never trusted without that cross-check. */
+  replacementTargetInstanceId?: string;
+  /** Optional explicit Lv3 branch selection for a weapon replacement. */
+  replacementBranch?: WeaponBranch;
+  /** Branch choices offered by the replacement card when the inherited level
+   * reaches Lv3. The scene requires an explicit choice before confirming. */
+  replacementBranchOptions?: UpgradeReplacementBranchOption[];
+}
+
+export interface UpgradeReplacementTarget {
+  instanceId: string;
+  id: WeaponId | SupportId;
+  slot: number;
+  level: number;
+}
+
+export interface UpgradeReplacementBranchOption {
+  id: WeaponBranch;
+  name: string;
+  description: string;
 }
 
 export interface UpgradePayload {

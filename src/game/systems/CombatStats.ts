@@ -8,6 +8,8 @@ export interface EffectiveWeaponStats {
   range: number;
   projectileSpeed: number | null;
   outputBonus: number;
+  /** Additional damage from a connected vector while manual aiming. */
+  vectorBonus: number;
   rangeBonus: number;
   speedBonus: number;
   intervalBonus: number;
@@ -20,22 +22,28 @@ export function effectiveWeaponStats(
   baseDamageMultiplier = 1,
   projectileSpeedMultiplier = 1,
   polishStacks = 0,
+  manualAim = false,
 ): EffectiveWeaponStats {
   const veilPenalty = supportEffectsFor(supports, 'veil', weapon.slot).secondary;
-  const outputBonus = Math.max(0, Math.min(0.4,
+  // Veil's weapon penalty is intentionally allowed to remain negative when
+  // no output/relay support offsets it. Clamping after subtraction silently
+  // removed the documented trade-off from otherwise unboosted weapons.
+  const outputBonus = Math.min(0.4,
     supportEffectsFor(supports, 'output', weapon.slot).primary
     + supportEffectsFor(supports, 'relay', weapon.slot).primary,
-  ) - veilPenalty);
+  ) - veilPenalty;
+  const vectorBonus = manualAim ? supportEffectsFor(supports, 'vector', weapon.slot).primary : 0;
   const intervalBonus = supportEffectsFor(supports, 'rhythm', weapon.slot).primary;
   const rangeBonus = supportEffectsFor(supports, 'focus', weapon.slot).primary;
   const speedBonus = supportEffectsFor(supports, 'focus', weapon.slot).secondary;
   const levelStats = weapon.stats;
   return {
-    damage: levelStats.damage * (1 + Math.max(0, polishStacks) * 0.02) * weapon.damageMultiplier * (1 + outputBonus) * baseDamageMultiplier,
+    damage: levelStats.damage * (1 + Math.max(0, polishStacks) * 0.02) * weapon.damageMultiplier * (1 + outputBonus + vectorBonus) * baseDamageMultiplier,
     cooldown: levelStats.cooldown * weapon.cooldownMultiplier * Math.max(0.7, 1 - intervalBonus),
     range: levelStats.range * (1 + rangeBonus),
     projectileSpeed: levelStats.projectileSpeed === undefined ? null : levelStats.projectileSpeed * projectileSpeedMultiplier * (1 + speedBonus),
     outputBonus,
+    vectorBonus,
     rangeBonus,
     speedBonus,
     intervalBonus,

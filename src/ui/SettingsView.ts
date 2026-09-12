@@ -4,22 +4,23 @@ import { button, card, element, heading, isValidPlayerName, pageShell } from './
 export interface SettingsActions {
   change: (patch: Partial<SaveData['settings']>) => void;
   changeName: (name: string) => void;
-  exportSave: () => void;
+  /** Legacy save-data actions remain accepted by older hosts, but are hidden. */
+  exportSave?: () => void;
   copyDamaged?: () => void;
   hasDamagedSave?: boolean;
-  importSave: (raw: string) => void;
-  reset: () => void;
+  importSave?: (raw: string) => void;
+  reset?: () => void;
   back: () => void;
 }
 
 export function createSettingsView(save: SaveData, actions: SettingsActions): HTMLElement {
-  const shell = pageShell('設定', '音と演出を端末に保存します。');
+  const shell = pageShell('設定', '表示名、音量、演出を調整できます。');
   const settingsCard = card('settings-card');
   settingsCard.append(heading('ゲーム設定', 2));
   const nameRow = element('label', 'setting-row', '名前');
   const nameInput = element('input') as HTMLInputElement;
   nameInput.id = 'settings-name';
-  nameInput.type = 'text'; nameInput.maxLength = 12; nameInput.value = save.profile.name; nameInput.setAttribute('autocomplete', 'nickname'); nameInput.setAttribute('aria-label', 'プレイヤー名');
+  nameInput.type = 'text'; nameInput.maxLength = 20; nameInput.value = save.profile.name; nameInput.setAttribute('autocomplete', 'nickname'); nameInput.setAttribute('aria-label', 'プレイヤー名');
   nameInput.addEventListener('change', () => { const name = nameInput.value.trim(); if (isValidPlayerName(name)) actions.changeName(name); else nameInput.value = save.profile.name; });
   nameRow.append(nameInput); settingsCard.append(nameRow);
 
@@ -61,36 +62,10 @@ export function createSettingsView(save: SaveData, actions: SettingsActions): HT
   shakeInput.type = 'checkbox'; shakeInput.checked = save.settings.screenShake;
   shakeInput.addEventListener('change', () => actions.change({ screenShake: shakeInput.checked }));
   shake.append(shakeInput, element('span', '', '画面揺れ'));
-  const aim = element('label', 'setting-row', '自動照準補助');
-  const aimInput = element('select') as HTMLSelectElement;
-  aimInput.id = 'settings-aim-assist'; aimInput.setAttribute('aria-label', '自動照準補助');
-  for (const [value, label] of [['standard', '標準'], ['strong', '強い']] as const) {
-    const option = element('option', '', label) as HTMLOptionElement;
-    option.value = value; option.selected = save.settings.aimAssist === value; aimInput.append(option);
-  }
-  aimInput.addEventListener('change', () => actions.change({ aimAssist: aimInput.value as SaveData['settings']['aimAssist'] }));
-  aim.append(aimInput);
-  settingsCard.append(sound, music, effects, motion, shake, aim);
+  // Endless competitive play fixes the aim-assist window for every player;
+  // do not expose the persisted legacy toggle as if it changed this run.
+  settingsCard.append(sound, music, effects, motion, shake);
   shell.append(settingsCard);
-
-  const saveCard = card('settings-card');
-  saveCard.append(heading('保存データ', 2));
-  const exportButton = button('保存データを書き出す'); exportButton.addEventListener('click', actions.exportSave);
-  const importLabel = element('label', 'import-label', '保存データを読み込む');
-  const importInput = element('textarea', 'import-textarea') as HTMLTextAreaElement;
-  importInput.id = 'settings-import'; importLabel.htmlFor = importInput.id;
-  importInput.placeholder = '書き出したJSONを貼り付け'; importInput.rows = 5;
-  const importButton = button('内容を確認して読み込む'); importButton.addEventListener('click', () => actions.importSave(importInput.value));
-  const resetButton = button('進行を初期化', 'button button-danger'); resetButton.addEventListener('click', actions.reset);
-  saveCard.append(exportButton, importLabel, importInput, importButton);
-  if (actions.hasDamagedSave && actions.copyDamaged) {
-    const damagedButton = button('退避した破損データをコピー');
-    damagedButton.dataset.testid = 'copy-damaged-save';
-    damagedButton.addEventListener('click', actions.copyDamaged);
-    saveCard.append(damagedButton);
-  }
-  saveCard.append(resetButton);
-  shell.append(saveCard);
   const back = button('戻る'); back.addEventListener('click', actions.back); shell.append(back);
   return shell;
 }

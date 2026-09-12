@@ -2,10 +2,33 @@ import { describe, expect, it } from 'vitest';
 import { Core } from '../../src/game/entities/Core';
 import { Enemy } from '../../src/game/entities/Enemy';
 import { Projectile } from '../../src/game/entities/Projectile';
+import { Weapon } from '../../src/game/entities/Weapon';
 import { applyContactDamage, applyDamage } from '../../src/game/systems/DamageSystem';
 import { collideEnemyProjectiles, collideProjectiles } from '../../src/game/systems/CollisionSystem';
 
 describe('damage rules', () => {
+  it('keeps early needle levels single-target and reserves pierce for the explicit branch', () => {
+    const levelOne = new Weapon('needle', 0);
+    expect(levelOne.basePiercing).toBe(0);
+    expect(levelOne.needlePiercing).toBe(0);
+
+    const levelTwo = new Weapon('needle', 0);
+    levelTwo.level = 2;
+    expect(levelTwo.basePiercing).toBe(0);
+    expect(levelTwo.needlePiercing).toBe(0);
+
+    const spread = new Weapon('needle', 0);
+    spread.level = 3;
+    spread.branch = 'spread';
+    expect(spread.basePiercing).toBe(1);
+    expect(spread.needlePiercing).toBe(0);
+
+    const piercing = new Weapon('needle', 0);
+    piercing.level = 3;
+    piercing.branch = 'piercing';
+    expect(piercing.needlePiercing).toBe(3);
+  });
+
   it('counts each lattice shield hit before body damage', () => {
     const enemy = new Enemy(1, 'lattice', 0, 100);
     for (let index = 0; index < 8; index += 1) expect(applyDamage(enemy, 100, 0).blocked).toBe(true);
@@ -117,6 +140,20 @@ describe('damage rules', () => {
     first.active = true;
     second.active = true;
     expect(collideProjectiles([projectile], [first, second], 0.1)).toHaveLength(0);
+  });
+
+  it('treats piercing as additional hits, so zero is a single-target shot', () => {
+    const first = new Enemy(1, 'shard', 0, 100);
+    const second = new Enemy(2, 'shard', 0, 100);
+    first.x = 0; first.y = 0;
+    second.x = 0; second.y = 0;
+    const singleTarget = new Projectile({ id: 8, kind: 'needle', x: 0, y: 0, vx: 1, vy: 0, radius: 6, damage: 10, life: 1, piercing: 0 });
+    expect(collideProjectiles([singleTarget], [first, second], 0)).toHaveLength(1);
+    expect(singleTarget.active).toBe(false);
+
+    const extraHit = new Projectile({ id: 9, kind: 'needle', x: 0, y: 0, vx: 1, vy: 0, radius: 6, damage: 10, life: 1, piercing: 1 });
+    expect(collideProjectiles([extraHit], [first, second], 0)).toHaveLength(2);
+    expect(extraHit.active).toBe(false);
   });
 
   it('never applies normal contact damage to a boss', () => {

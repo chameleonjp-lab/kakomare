@@ -6,7 +6,7 @@ import type { CompetitiveRulesDesign } from '../types/expansion';
  * integration remains behind a separate permission gate.
  */
 export const COMPETITIVE_RULES: CompetitiveRulesDesign = {
-  version: 'expansion-v7-runtime',
+  version: 'expansion-v8-endless',
   initial: {
     coreHp: 100,
     baseDamage: 8,

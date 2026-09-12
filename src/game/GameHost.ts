@@ -38,6 +38,8 @@ export class GameHost {
     testOutcome?: 'victory' | 'defeat';
     testUpgrade?: boolean;
     testUpgradeExperience?: number;
+    /** Local-only full-loadout fixture; AppController gates this flag. */
+    testFullLoadout?: boolean;
     competitive?: boolean;
     runId: number;
     seed?: number;

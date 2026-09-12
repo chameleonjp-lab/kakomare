@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SupportModule, supportEffectsFor } from '../../src/game/entities/SupportModule';
 import { Weapon } from '../../src/game/entities/Weapon';
-import { applyUpgradeCandidate, createUpgradeCandidateList, shouldRetryUpgradeDraw, wouldStrandNewItems } from '../../src/game/systems/UpgradeSystem';
+import { SUPPORT_ORDER } from '../../src/data/supports';
+import { WEAPON_ORDER } from '../../src/data/weapons';
+import { applyUpgradeCandidate, createUpgradeCandidateList, isReplacementCandidate, replacementTargetFor, shouldRetryUpgradeDraw, wouldStrandNewItems } from '../../src/game/systems/UpgradeSystem';
 import { DeterministicRng } from '../../src/game/systems/SpawnDirector';
 
 describe('UpgradeSystem', () => {
@@ -31,6 +33,137 @@ describe('UpgradeSystem', () => {
     const candidates = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(9), new Set());
     expect(candidates).toHaveLength(3);
     expect(candidates.every((candidate) => !candidate.id.endsWith(':new'))).toBe(true);
+  });
+
+  it('offers weapon and support replacement candidates when every unlocked face is occupied', () => {
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
+    const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('branch', 2)];
+    for (const weapon of weapons) weapon.level = 3;
+    for (const support of supports) support.level = 3;
+    const kinds = new Set<string>();
+    let sample: ReturnType<typeof createUpgradeCandidateList>[number] | undefined;
+    for (let seed = 1; seed <= 128 && kinds.size < 2; seed += 1) {
+      const candidates = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(seed), new Set(), 100, {}, {
+        weaponSlots: [], supportSlots: [], maxWeapons: 3, maxSupports: 3, enableReplacements: true, competitive: true,
+      });
+      const replacement = candidates.find((candidate) => isReplacementCandidate(candidate));
+      if (replacement) {
+        kinds.add(replacement.kind);
+        sample ??= replacement;
+      }
+    }
+    expect(kinds).toEqual(new Set(['weapon', 'support']));
+    expect(sample).toBeDefined();
+    expect(sample?.replacementSlots).toEqual([0, 1, 2]);
+    expect(sample?.replacementTargets?.map((target) => target.slot)).toEqual([0, 1, 2]);
+    expect(replacementTargetFor({ ...sample!, placementSlot: 1 }, 1)?.instanceId).toBe(
+      sample?.replacementTargets?.find((target) => target.slot === 1)?.instanceId,
+    );
+  });
+
+  it('replaces a weapon at Lv3 without carrying precision, branches, evolution, or instance identity', () => {
+    const outgoing = new Weapon('needle', 0);
+    outgoing.level = 8;
+    outgoing.precisionBonus = 2;
+    outgoing.branch = 'spread';
+    outgoing.finalBranch = 'tempo';
+    outgoing.evolutionId = 'needle-volley';
+    outgoing.cooldown = 0.42;
+    const weapons = [outgoing, new Weapon('ray', 1), new Weapon('cluster', 2)];
+    for (const weapon of weapons.slice(1)) weapon.level = 3;
+    let candidate: ReturnType<typeof createUpgradeCandidateList>[number] | undefined;
+    for (let seed = 1; seed <= 128 && !candidate; seed += 1) {
+      candidate = createUpgradeCandidateList(weapons, [], 100, new DeterministicRng(seed), new Set(), 100, {}, {
+        weaponSlots: [], supportSlots: [], maxWeapons: 3, maxSupports: 0, enableReplacements: true, competitive: true,
+      }).find((item) => isReplacementCandidate(item) && item.kind === 'weapon' && item.targetId === 'chain');
+    }
+    expect(candidate).toBeDefined();
+    const selected = { ...candidate!, placementSlot: 0, replacementTargetInstanceId: outgoing.instanceId, replacementBranch: candidate!.replacementBranchOptions?.[0]?.id };
+    expect(applyUpgradeCandidate(selected, weapons, [], () => undefined)).toBe(true);
+    const replacement = weapons.find((weapon) => weapon.id === 'chain');
+    expect(replacement).toBeDefined();
+    expect(replacement?.slot).toBe(0);
+    expect(replacement?.level).toBe(3);
+    expect(replacement?.branch).toBe(candidate!.replacementBranchOptions?.[0]?.id);
+    expect(replacement?.precisionBonus).toBe(0);
+    expect(replacement?.finalBranch).toBeNull();
+    expect(replacement?.evolutionId).toBeNull();
+    expect(replacement?.cooldown).toBeCloseTo(0.42);
+    expect(replacement?.instanceId).not.toBe(outgoing.instanceId);
+    expect(weapons.some((weapon) => weapon.id === 'needle')).toBe(false);
+  });
+
+  it('rejects a replacement with a stale target or missing Lv3 branch without mutation', () => {
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
+    for (const weapon of weapons) weapon.level = 3;
+    let candidate: ReturnType<typeof createUpgradeCandidateList>[number] | undefined;
+    for (let seed = 1; seed <= 128 && !candidate; seed += 1) {
+      candidate = createUpgradeCandidateList(weapons, [], 100, new DeterministicRng(seed), new Set(), 100, {}, {
+        weaponSlots: [], supportSlots: [], maxWeapons: 3, maxSupports: 0, enableReplacements: true, competitive: true,
+      }).find((item) => isReplacementCandidate(item) && item.kind === 'weapon');
+    }
+    expect(candidate).toBeDefined();
+    const before = weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, level: weapon.level }));
+    expect(applyUpgradeCandidate({ ...candidate!, placementSlot: 0, replacementTargetInstanceId: 'stale-target' }, weapons, [], () => undefined)).toBe(false);
+    expect(weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, level: weapon.level }))).toEqual(before);
+    expect(applyUpgradeCandidate({ ...candidate!, placementSlot: 0, replacementTargetInstanceId: weapons[0]!.instanceId }, weapons, [], () => undefined)).toBe(false);
+    expect(weapons.map((weapon) => ({ id: weapon.id, instanceId: weapon.instanceId, level: weapon.level }))).toEqual(before);
+  });
+
+  it('replaces a support on its selected face and resets its level to at most three', () => {
+    const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('branch', 2)];
+    for (const support of supports) support.level = 3;
+    let candidate: ReturnType<typeof createUpgradeCandidateList>[number] | undefined;
+    for (let seed = 1; seed <= 128 && !candidate; seed += 1) {
+      candidate = createUpgradeCandidateList([], supports, 100, new DeterministicRng(seed), new Set(), 100, {}, {
+        weaponSlots: [], supportSlots: [], maxWeapons: 0, maxSupports: 3, enableReplacements: true, competitive: true,
+      }).find((item) => isReplacementCandidate(item) && item.kind === 'support' && item.targetId === 'focus');
+    }
+    expect(candidate).toBeDefined();
+    const outgoing = supports[0]!;
+    expect(applyUpgradeCandidate({ ...candidate!, placementSlot: 0, replacementTargetInstanceId: outgoing.instanceId }, [], supports, () => undefined)).toBe(true);
+    expect(supports.find((support) => support.id === 'focus')?.slot).toBe(0);
+    expect(supports.find((support) => support.id === 'focus')?.level).toBe(3);
+    expect(supports.find((support) => support.id === 'focus')?.instanceId).not.toBe(outgoing.instanceId);
+    expect(supports.some((support) => support.id === 'output')).toBe(false);
+  });
+
+  it('reproducibly draws every remaining weapon/support replacement from the full catalogs', () => {
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
+    const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('branch', 2)];
+    for (const weapon of weapons) { weapon.level = weapon.definition.maxLevel; weapon.precisionBonus = 2; }
+    for (const support of supports) support.level = support.definition.maxLevel;
+    const weaponIds = new Set<string>();
+    const supportIds = new Set<string>();
+    for (let seed = 1; seed <= 4096; seed += 1) {
+      const candidates = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(seed), new Set(), 100, {}, {
+        weaponSlots: [], supportSlots: [], maxWeapons: 3, maxSupports: 3, enableReplacements: true, competitive: true,
+      });
+      for (const candidate of candidates) {
+        if (!isReplacementCandidate(candidate)) continue;
+        if (candidate.kind === 'weapon') weaponIds.add(String(candidate.targetId));
+        if (candidate.kind === 'support') supportIds.add(String(candidate.targetId));
+      }
+    }
+    expect(weaponIds).toEqual(new Set(WEAPON_ORDER.filter((id) => !weapons.some((weapon) => weapon.id === id))));
+    expect(supportIds).toEqual(new Set(SUPPORT_ORDER.filter((id) => !supports.some((support) => support.id === id))));
+  });
+
+  it('uses a meaningful competitive stabilizer exit and omits profile parts', () => {
+    const weapons = [new Weapon('needle', 0), new Weapon('ray', 1), new Weapon('cluster', 2)];
+    const supports = [new SupportModule('output', 0), new SupportModule('rhythm', 1), new SupportModule('branch', 2)];
+    for (const weapon of weapons) { weapon.level = weapon.definition.maxLevel; weapon.precisionBonus = 2; }
+    for (const support of supports) support.level = support.definition.maxLevel;
+    const banned = new Set<string>([
+      ...WEAPON_ORDER.filter((id) => !weapons.some((weapon) => weapon.id === id)).map((id) => `weapon:${id}:replace`),
+      ...SUPPORT_ORDER.filter((id) => !supports.some((support) => support.id === id)).map((id) => `support:${id}:replace`),
+    ]);
+    const candidates = createUpgradeCandidateList(weapons, supports, 100, new DeterministicRng(7), banned, 100, {}, {
+      weaponSlots: [], supportSlots: [], maxWeapons: 3, maxSupports: 3, enableReplacements: true, competitive: true,
+    });
+    expect(candidates.some((candidate) => candidate.id === 'continuous:stabilizer')).toBe(true);
+    expect(candidates.some((candidate) => candidate.id === 'continuous:parts')).toBe(false);
+    expect(candidates.find((candidate) => candidate.id === 'continuous:stabilizer')?.description).toContain('威力');
   });
 
   it('offers repeatable progress when all equipment is at its normal cap', () => {

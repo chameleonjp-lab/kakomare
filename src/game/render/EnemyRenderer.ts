@@ -1,9 +1,9 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { BOSSES } from '../../data/bosses';
 import { ENEMIES } from '../../data/enemies';
 import type { BossId, EnemyId } from '../../types/content';
 import type { EnemySnapshot } from '../../types/game';
-import { shouldDrawHealthBar } from './EnemyHealthBarPolicy';
+import { shieldGaugeState, shouldDrawHealthBar } from './EnemyHealthBarPolicy';
 import { drawHex, drawPolygon, polygonPoints } from './ShapeFactory';
 
 export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, centerX: number, centerY: number): void {
@@ -20,10 +20,7 @@ export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySna
     graphics.fillStyle(enemy.isBoss ? bossColor(enemy.type as BossId) : enemyColor(enemy.type as EnemyId), 1);
     graphics.fillRect(x - barWidth / 2, y - enemy.hitRadius - 12, barWidth * ratio, 4);
   }
-  if (enemy.shieldHits > 0) {
-    graphics.lineStyle(2, 0xa78bfa, 0.95);
-    graphics.strokeCircle(x, y, enemy.hitRadius + 4);
-  }
+  drawShieldGauge(graphics, enemy, x, y, alpha);
   // Keep state readable without relying on colour alone. These cues are
   // deliberately small so telegraphs and hostile projectiles remain the most
   // prominent layer on a reduced-effects display.
@@ -49,6 +46,35 @@ export function drawEnemy(graphics: Phaser.GameObjects.Graphics, enemy: EnemySna
     graphics.strokeCircle(x, y, enemy.hitRadius + 13);
     graphics.lineBetween(x - 5, y + enemy.hitRadius + 7, x + 5, y + enemy.hitRadius + 15);
   }
+}
+
+/**
+ * Draw shield hits as discrete segments around the body. The dark track stays
+ * visible after the last hit, making “shield 0” distinct from a missing bar;
+ * the purple segments are intentionally separate from the HP bar and shell's
+ * solid armour ring.
+ */
+function drawShieldGauge(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x: number, y: number, alpha: number): void {
+  const shield = shieldGaugeState(enemy);
+  if (shield.total <= 0) return;
+  const radius = enemy.hitRadius + 6;
+  const step = Math.PI * 2 / shield.total;
+  const gap = Math.min(0.09, step * 0.22);
+  const drawSegments = (color: number, lineAlpha: number, first: number, last: number): void => {
+    if (first >= last) return;
+    graphics.lineStyle(3, color, lineAlpha);
+    for (let index = first; index < last; index += 1) {
+      const start = -Math.PI / 2 + index * step + gap / 2;
+      const end = -Math.PI / 2 + (index + 1) * step - gap / 2;
+      graphics.beginPath();
+      graphics.arc(x, y, radius, start, end, false);
+      graphics.strokePath();
+    }
+  };
+  // A muted slate track remains visible on the dark arena even when all
+  // segments are spent; it is intentionally not the HP-bar background.
+  drawSegments(0x40516b, alpha * 0.95, 0, shield.total);
+  drawSegments(0xa78bfa, alpha, 0, shield.remaining);
 }
 
 function drawBoss(graphics: Phaser.GameObjects.Graphics, enemy: EnemySnapshot, x: number, y: number, alpha: number): void {

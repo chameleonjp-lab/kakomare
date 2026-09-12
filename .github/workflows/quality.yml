@@ -30,11 +30,20 @@ jobs:
       - name: Run static and unit checks
         run: npm run lint && npm run typecheck && npm run test && npm run verify:expansion-docs && npm run verify:ranking-manifest && git diff --check
       - name: Run Chromium checks
-        run: npm run test:e2e:chromium
+        run: npm run test:e2e:chromium -- --output=test-results/chromium
       - name: Run WebKit checks
-        run: npm run test:e2e:webkit
+        run: npm run test:e2e:webkit -- --output=test-results/webkit
       - name: Build and verify release files
         run: npm run build && npm run verify:dist && npm run verify:originality
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-evidence-container
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
 
   # Pages builds on the native runner, whose fonts/rendering can differ from
   # the Playwright container. Exercise that environment before merging too.
@@ -58,11 +67,20 @@ jobs:
       - name: Run static and unit checks
         run: npm run lint && npm run typecheck && npm run test && npm run verify:expansion-docs && npm run verify:ranking-manifest && git diff --check
       - name: Run Chromium checks
-        run: npm run test:e2e:chromium
+        run: npm run test:e2e:chromium -- --output=test-results/chromium
       - name: Run WebKit checks
-        run: npm run test:e2e:webkit
+        run: npm run test:e2e:webkit -- --output=test-results/webkit
       - name: Build and verify release files
         run: npm run build && npm run verify:dist && npm run verify:originality
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-evidence-native
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
 
   # The V7 matrix uses the production BattleScene update path for 720 normal
   # and 60 endless observations. Keep it separate so the ordinary quality
