@@ -825,7 +825,8 @@ export class AppController {
     const resumeButton = button('再開', 'button button-primary');
     resumeButton.addEventListener('click', resume);
     actions.append(backButton, resumeButton);
-    container.append(actions);
+    // Keep navigation above the long equipment list and pinned while it scrolls.
+    container.prepend(actions);
   }
 
   private shortResume(runId: number): void {

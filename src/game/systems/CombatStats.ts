@@ -37,9 +37,18 @@ export function effectiveWeaponStats(
   const rangeBonus = supportEffectsFor(supports, 'focus', weapon.slot).primary;
   const speedBonus = supportEffectsFor(supports, 'focus', weapon.slot).secondary;
   const levelStats = weapon.stats;
+  const cooldownAfterRhythm = levelStats.cooldown * weapon.cooldownMultiplier * Math.max(0.7, 1 - intervalBonus);
+  // Reserve shortens the lance's actual reload cadence as well as the charge
+  // threshold in BattleScene. Resolve it after rhythm/tempo so the displayed
+  // effective interval and the update loop use the same bounded value.
+  const reserveReduction = weapon.id === 'lance'
+    ? Math.min(0.24, supportEffectsFor(supports, 'reserve', weapon.slot).primary * 0.08)
+    : 0;
   return {
     damage: levelStats.damage * (1 + Math.max(0, polishStacks) * 0.02) * weapon.damageMultiplier * (1 + outputBonus + vectorBonus) * baseDamageMultiplier,
-    cooldown: levelStats.cooldown * weapon.cooldownMultiplier * Math.max(0.7, 1 - intervalBonus),
+    cooldown: weapon.id === 'lance'
+      ? Math.max(0.8, cooldownAfterRhythm - reserveReduction)
+      : cooldownAfterRhythm,
     range: levelStats.range * (1 + rangeBonus),
     projectileSpeed: levelStats.projectileSpeed === undefined ? null : levelStats.projectileSpeed * projectileSpeedMultiplier * (1 + speedBonus),
     outputBonus,

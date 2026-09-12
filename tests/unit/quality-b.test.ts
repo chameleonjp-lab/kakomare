@@ -139,4 +139,20 @@ describe('V5 の実効値と表現', () => {
     expect(offset.outputBonus).toBeCloseTo(0.06);
     expect(offset.damage).toBeCloseTo(weapon.stats.damage * 1.06);
   });
+
+  it('蓄勢環は蓄圧槍の再発射間隔だけを短くし、連針砲の間隔を変えない', () => {
+    const reserve = new SupportModule('reserve', 0);
+    reserve.level = 3;
+
+    const lanceLv1 = new Weapon('lance', 0);
+    expect(effectiveWeaponStats(lanceLv1, []).cooldown).toBeCloseTo(2.8);
+    expect(effectiveWeaponStats(lanceLv1, [reserve]).cooldown).toBeCloseTo(2.56);
+
+    const lanceLv3 = new Weapon('lance', 0);
+    lanceLv3.level = 3;
+    expect(effectiveWeaponStats(lanceLv3, [reserve]).cooldown).toBeCloseTo(2.36);
+
+    const needle = new Weapon('needle', 0);
+    expect(effectiveWeaponStats(needle, [reserve]).cooldown).toBeCloseTo(0.16);
+  });
 });

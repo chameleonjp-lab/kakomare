@@ -91,8 +91,8 @@ const RUNTIME_WEAPON_NOTES: Record<WeaponId, RuntimeWeaponNote> = {
   },
   lance: {
     current: 'ため時間がたまったとき、重い貫通槍を一度放ちます。',
-    condition: '破槍型は威力と貫通数を増やし、蓄勢環があれば必要なため時間を少し短くします。',
-    limits: ['ため時間には0.8秒の下限があります。長槍型は射程を18%、幅を4広げ、破槍型は貫通数を増やします。'],
+    condition: '破槍型は威力と貫通数を増やし、蓄勢環があれば再発射間隔と必要なため時間を短くします。',
+    limits: ['再発射間隔・ため時間にはそれぞれ0.8秒の下限があります。長槍型は射程を18%、幅を4広げ、破槍型は貫通数を増やします。'],
   },
   drone: {
     current: '最大2機の子機が設置した武器の周りを回り、それぞれが標的へ短い弾を撃ちます。',
@@ -352,7 +352,7 @@ function supportValueText(id: SupportId, module: SupportModule, total: { primary
     case 'veil': return `コア被害 -${percent(total.secondary)} / 接続武器の威力 -${percent(total.secondary)}`;
     case 'vector': return `手動照準中の接続武器の威力 +${percent(total.primary)}（自動照準中は0%）`;
     case 'pulse': return `${number(module.secondaryValue)}秒ごとに威力${percent(Math.min(0.5, module.value * 0.55))}・半径34の補助波`;
-    case 'reserve': return `蓄圧槍のため時間を最大${number(Math.min(0.24, total.primary * 0.08))}秒短縮`;
+    case 'reserve': return `蓄圧槍の再発射間隔・ため時間を最大${number(Math.min(0.24, total.primary * 0.08))}秒短縮`;
     case 'lattice': return `迎撃格子の同時迎撃 +${Math.min(3, Math.max(0, Math.floor(total.primary)))}（最大4）`;
     case 'orbit': return `周回半径 +${percent(total.primary)} / 回転速度 +約${Math.round(Math.min(0.25, total.primary * 0.7) * 100)}%`;
     case 'catalyst': return `減速中の標識体・位相体・ボスへ威力 +${percent(total.primary)}`;
@@ -373,7 +373,7 @@ function supportApplicability(weaponId: WeaponId, supportId: SupportId, weapon: 
     case 'anchor': return ['gravity', 'mine', 'drone'].includes(weaponId) ? '持続する重力点・機雷・子機の時間に働きます。' : null;
     case 'lattice': return weaponId === 'grid' ? '迎撃格子の一度の迎撃数に働きます。' : null;
     case 'orbit': return weaponId === 'orbit' ? '周回刃の半径と回転に働きます。' : null;
-    case 'reserve': return weaponId === 'lance' ? '蓄圧槍のため時間に働きます。' : null;
+    case 'reserve': return weaponId === 'lance' ? '蓄圧槍の再発射間隔とため時間に働きます。' : null;
     case 'ignite': return '配置場所に関係なく、印または燃焼中の敵を倒すと働きます。';
     case 'brink': return '配置場所に関係なく、コア耐久30%以下で働きます。';
     case 'veil': return '接続中は武器の威力が下がり、配置中はコアの被害も軽減します。';
@@ -482,7 +482,7 @@ function supportHelp(input: SupportId | SupportSnapshot, weapons: readonly Weapo
     case 'shatter': conditions.push('格子体・護衛体の盾へ命中したとき。'); limits.push('追加で削る盾は命中ごとに1枚。外殻には働きません。'); break;
     case 'conductive': conditions.push('減速中の敵へ命中したとき。'); limits.push(`近くへ伝わるのは最大${Math.min(2, Math.max(1, Math.floor(total.secondary)))}体。印や燃焼は伝えません。`); break;
     case 'pulse': conditions.push('接続先のうち、構成で先に並ぶ武器を一つ選び、指定周期で標的の周囲を攻撃。'); limits.push('補助波から別の補助波は生まれません。'); break;
-    case 'reserve': conditions.push('蓄圧槍のため時間を判定するとき。'); limits.push('ため時間は0.8秒未満になりません。'); break;
+    case 'reserve': conditions.push('蓄圧槍の再発射間隔とため時間を判定するとき。'); limits.push('再発射間隔・ため時間は0.8秒未満になりません。'); break;
     case 'lattice': conditions.push('迎撃格子へ接続したとき。'); limits.push('一度に消せる敵弾は最大4発です。'); break;
     case 'orbit': conditions.push('周回刃へ接続したとき。'); limits.push('往復弾やほかの移動経路には働きません。'); break;
     case 'anchor': conditions.push('重力点・軌道機雷・追尾子機を生成したとき。'); limits.push('生成位置や同時数は変えません。'); break;

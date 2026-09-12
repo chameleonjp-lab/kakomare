@@ -70,8 +70,8 @@ export const SUPPORTS: Record<SupportId, SupportDefinition> = {
     levels: [{ value: 0.2, secondaryValue: 2.8, label: '2.8秒ごとに補助波（威力11% / 半径34）' }, { value: 0.3, secondaryValue: 2.4, label: '2.4秒ごとに補助波（威力17% / 半径34）' }, { value: 0.42, secondaryValue: 2, label: '2秒ごとに補助波（威力23% / 半径34）' }],
   },
   reserve: {
-    id: 'reserve', name: '蓄勢環', description: '蓄圧槍の再発射に必要なため時間を少し短くします。ほかの武器の蓄積や放出は変えません。', role: '蓄圧槍のため時間短縮', color: 0xeab308, maxLevel: 3,
-    levels: [{ value: 1, secondaryValue: 0.08, label: '蓄圧槍のため時間を最大0.08秒短縮' }, { value: 2, secondaryValue: 0.14, label: '蓄圧槍のため時間を最大0.16秒短縮' }, { value: 3, secondaryValue: 0.22, label: '蓄圧槍のため時間を最大0.24秒短縮' }],
+    id: 'reserve', name: '蓄勢環', description: '蓄圧槍の再発射間隔とため時間を短縮します。どちらも0.8秒未満にはなりません。ほかの武器の蓄積や放出は変えません。', role: '蓄圧槍の再発射・ため時間短縮', color: 0xeab308, maxLevel: 3,
+    levels: [{ value: 1, secondaryValue: 0.08, label: '蓄圧槍の再発射間隔 / ため時間を最大0.08秒短縮' }, { value: 2, secondaryValue: 0.14, label: '蓄圧槍の再発射間隔 / ため時間を最大0.16秒短縮' }, { value: 3, secondaryValue: 0.22, label: '蓄圧槍の再発射間隔 / ため時間を最大0.24秒短縮' }],
   },
   lattice: {
     id: 'lattice', name: '格子環', description: '迎撃格子が一度の発射で消せる敵弾の数を増やします。最大4発までです。', role: '迎撃格子の同時迎撃数', color: 0x818cf8, maxLevel: 3,

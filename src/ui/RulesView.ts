@@ -28,6 +28,7 @@ export function createRulesView(onBack: () => void): HTMLElement {
   const enemies = card('rules-card');
   enemies.append(heading('敵の予告を読む', 2));
   enemies.append(element('p', '', '敵ごとに速度、盾、分裂、修復、遠隔攻撃などの役割が異なります。色だけでなく輪郭と予告表示も確認してください。'));
+  enemies.append(element('p', '', '盾のある敵の周りには、区切りのある輪を表示します。明るく残っている区切りが盾の残り枚数です。格子盾は8枚、護衛盾は4枚から減り、すべて暗くなると盾がなくなります。上の細い棒は本体の耐久力です。'));
   enemies.append(element('p', '', '時間が進むと危険度が上がり、方向集中波やボスが予告付きで出現します。予告線が出たら、その方向へ手動照準を合わせるか、迎撃・減速できる装置で備えます。'));
   shell.append(enemies);
 

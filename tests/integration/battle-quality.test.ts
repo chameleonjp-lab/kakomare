@@ -779,6 +779,56 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     expect(long.life).toBeCloseTo(regular.life * 1.18);
   });
 
+  it('蓄勢環は接続した蓄圧槍の再発射時刻を実時間で短くする', () => {
+    type RuntimeWeapon = { id: string; slot: number; level: number; branch: string | null; instanceId: string; cooldown: number };
+    type RuntimeSupport = { id: string; slot: number; level: number; instanceId: string };
+    type RuntimeProjectile = { id: number; active: boolean; sourceWeaponId: string | null };
+
+    const firstShotTime = (level: number, reserveSlot: number | null): number => {
+      const scene = new moduleUnderTest.BattleScene(options());
+      const lance = new moduleUnderTest.Weapon('lance', 0) as unknown as RuntimeWeapon;
+      lance.level = level;
+      lance.cooldown = 0;
+      const weapons = privateValue<RuntimeWeapon[]>(scene, 'weapons');
+      weapons.splice(0, weapons.length, lance);
+      const supports = privateValue<RuntimeSupport[]>(scene, 'supports');
+      if (reserveSlot !== null) {
+        const reserve = new moduleUnderTest.SupportModule('reserve', reserveSlot) as unknown as RuntimeSupport;
+        reserve.level = 3;
+        supports.push(reserve);
+      }
+
+      const shotTimes: number[] = [];
+      const originalFireLance = privateValue<(weapon: unknown, angle: number, damage: number) => void>(scene, 'fireLance').bind(scene);
+      (scene as unknown as Record<string, unknown>).fireLance = (weapon: unknown, angle: number, damage: number): void => {
+        const before = new Set(privateValue<RuntimeProjectile[]>(scene, 'projectiles')
+          .filter((projectile) => projectile.active && projectile.sourceWeaponId === 'lance')
+          .map((projectile) => projectile.id));
+        originalFireLance(weapon, angle, damage);
+        const created = privateValue<RuntimeProjectile[]>(scene, 'projectiles')
+          .some((projectile) => projectile.active && projectile.sourceWeaponId === 'lance' && !before.has(projectile.id));
+        if (created) shotTimes.push(privateValue<number>(scene, 'elapsed'));
+      };
+
+      const step = privateValue<(seconds: number) => void>(scene, 'step').bind(scene);
+      for (let frame = 0; frame < 60 * 4 && shotTimes.length === 0; frame += 1) step(1 / 60);
+      const first = shotTimes[0];
+      if (first === undefined) throw new Error(`lance did not fire at level ${level} with reserve slot ${reserveSlot}`);
+      return first;
+    };
+
+    const expected = (level: 1 | 3): number => level === 1 ? 2.8 : 2.6;
+    for (const level of [1, 3] as const) {
+      const absent = firstShotTime(level, null);
+      const connected = firstShotTime(level, 0);
+      const nonConnected = firstShotTime(level, 3);
+      expect(absent).toBeCloseTo(expected(level), 1);
+      expect(nonConnected).toBeCloseTo(absent, 1);
+      expect(connected).toBeCloseTo(expected(level) - 0.24, 1);
+      expect(connected).toBeLessThan(absent - 0.2);
+    }
+  });
+
   it('連針砲の分散は重なった敵を一弾一体だけ、貫通型は追加対象まで処理する', () => {
     const fireNeedleScenario = (branch: 'spread' | 'piercing'): {
       projectiles: Array<{ active: boolean; x: number; y: number; piercing: number }>;

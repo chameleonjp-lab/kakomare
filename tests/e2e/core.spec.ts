@@ -260,7 +260,8 @@ test('リタイアでは未確定記録を保存せず共有も表示しない',
   expect(after.statistics).toEqual(before.statistics);
 });
 
-test('敗北結果へ進み、結果画面の共有導線と実験場リンクを表示する', async ({ page }) => {
+test('敗北結果へ進み、結果画面の共有導線と実験場リンクを表示する', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await enterBattle(page, '?test=1&outcome=defeat&seed=1');
   await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 4000 });
   await expect(page.getByRole('heading', { name: '防衛失敗' })).toBeVisible();
@@ -276,6 +277,7 @@ test('敗北結果へ進み、結果画面の共有導線と実験場リンク�
   await expect(page.getByTestId('result-screen')).not.toContainText('強化順');
   await expect(page.getByTestId('result-screen')).not.toContainText('反響核');
   await expect(page.getByRole('link', { name: 'カメレオンJPの実験場' })).toHaveAttribute('href', 'https://chameleonjp-lab.github.io/chameleonjp_lab/');
+  await page.screenshot({ path: testInfo.outputPath('defeat-result.png'), fullPage: true });
 });
 
 test('勝利結果へ進み、もう一度でカウントダウンを開始できる', async ({ page }) => {
@@ -783,6 +785,7 @@ test('満枠でも武器を選び、番号見本と交換後Lv3・分岐を確�
   await expect(card).toHaveClass(/upgrade-kind-weapon/);
   await expect(card.locator('.placement-node')).toHaveCount(18);
   await expect(card.getByTestId('upgrade-placement')).toHaveCount(9);
+  expect(await card.getByTestId('upgrade-placement').first().evaluate((button) => button.getBoundingClientRect().width)).toBeGreaterThan(200);
   const oldXp = await page.getByTestId('hud-xp').textContent();
   const outputHelp = card.locator('details[data-slot="0"]');
   await outputHelp.locator('summary').click();
@@ -806,6 +809,11 @@ test('満枠でも武器を選び、番号見本と交換後Lv3・分岐を確�
   await page.getByTestId('pause-button').click();
   await page.getByRole('button', { name: '装置を確認', exact: true }).click();
   await expect(page.getByTestId('pause-loadout').getByTestId('placement-preview').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '一時停止へ戻る', exact: true })).toBeInViewport();
+  await page.locator('.pause-dialog').evaluate((dialog) => { dialog.scrollTop = dialog.scrollHeight; });
+  await expect(page.getByRole('button', { name: '一時停止へ戻る', exact: true })).toBeInViewport();
+  await expect(page.getByRole('button', { name: '再開', exact: true })).toBeInViewport();
+  await page.locator('.pause-dialog').evaluate((dialog) => { dialog.scrollTop = 0; });
   await page.screenshot({ path: testInfo.outputPath('numbered-placement.png'), fullPage: true });
 });
 
