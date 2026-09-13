@@ -143,7 +143,7 @@ export class SpawnDirector {
     spawnLimit: number,
     emit: (request: SpawnRequest) => void,
     onSpecialWaveWarning?: (warning: SpawnWaveWarning) => void,
-    playerLevel: number,
+    playerLevel: number = 1,
   ): number {
     const stage = STAGES[this.stageId];
     const endlessScale = stage.isEndless ? Math.pow(1.12, Math.floor(elapsed / 300)) : 1;
