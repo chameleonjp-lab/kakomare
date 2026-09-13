@@ -46,7 +46,7 @@ export function effectiveWeaponStats(
   const baseCooldown = levelStats.cooldown * weapon.cooldownMultiplier * Math.max(0.7, 1 - intervalBonus);
   return {
     damage: levelStats.damage * (1 + Math.max(0, polishStacks) * 0.02) * weapon.damageMultiplier * (1 + outputBonus + vectorBonus) * baseDamageMultiplier,
-    cooldown: Math.max(0.25, baseCooldown - reserveReduction),
+    cooldown: baseCooldown - reserveReduction,
     range: levelStats.range * (1 + rangeBonus),
     projectileSpeed: levelStats.projectileSpeed === undefined ? null : levelStats.projectileSpeed * projectileSpeedMultiplier * (1 + speedBonus),
     outputBonus,
