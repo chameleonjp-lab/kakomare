@@ -235,7 +235,10 @@
   .upgrade-card { padding: 12px; }
   .upgrade-choice { min-height: 52px; font-size: .95rem; }
   .upgrade-description, .upgrade-change, .upgrade-role, .upgrade-details { font-size: .875rem; line-height: 1.45; }
-  .upgrade-placement-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Keep each placement's action, connection summary, and detail disclosure
+     in one readable column. The list is a flat sequence of elements, so
+     multiple columns split one placement across the screen. */
+  .upgrade-placement-list { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 760px) and (max-height: 600px) {

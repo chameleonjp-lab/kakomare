@@ -787,6 +787,13 @@ test('満枠でも武器を選び、番号見本と交換後Lv3・分岐を確�
   const outputHelp = card.locator('details[data-slot="0"]');
   await outputHelp.locator('summary').click();
   await expect(outputHelp.locator('.equipment-help')).toContainText('出力環: 接続中の武器の基礎威力に加算されます。');
+  const cardBox = await card.boundingBox();
+  const outputHelpBox = await outputHelp.locator('.equipment-help').boundingBox();
+  expect(cardBox).not.toBeNull();
+  expect(outputHelpBox).not.toBeNull();
+  expect(outputHelpBox?.width ?? 0).toBeGreaterThan((cardBox?.width ?? 0) * 0.7);
+  const placementBox = await card.getByTestId('upgrade-placement').first().boundingBox();
+  expect(placementBox?.height ?? 0).toBeLessThan(220);
   await outputHelp.locator('summary').click();
   const brakeHelp = card.locator('details[data-slot="3"]');
   await brakeHelp.locator('summary').click();
