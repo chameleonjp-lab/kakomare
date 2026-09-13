@@ -36,10 +36,17 @@ export function effectiveWeaponStats(
   const intervalBonus = supportEffectsFor(supports, 'rhythm', weapon.slot).primary;
   const rangeBonus = supportEffectsFor(supports, 'focus', weapon.slot).primary;
   const speedBonus = supportEffectsFor(supports, 'focus', weapon.slot).secondary;
+  // 蓄勢環の一次値は段階数なので、ゲーム内表示の秒数へ変換する。
+  // 蓄圧槍の通常のため時間判定だけでなく、定常発射の待機間隔にも
+  // 同じ短縮を通す。ほかの武器の発射間隔や蓄積には影響させない。
+  const reserveReduction = weapon.id === 'lance'
+    ? Math.min(0.24, supportEffectsFor(supports, 'reserve', weapon.slot).primary * 0.08)
+    : 0;
   const levelStats = weapon.stats;
+  const baseCooldown = levelStats.cooldown * weapon.cooldownMultiplier * Math.max(0.7, 1 - intervalBonus);
   return {
     damage: levelStats.damage * (1 + Math.max(0, polishStacks) * 0.02) * weapon.damageMultiplier * (1 + outputBonus + vectorBonus) * baseDamageMultiplier,
-    cooldown: levelStats.cooldown * weapon.cooldownMultiplier * Math.max(0.7, 1 - intervalBonus),
+    cooldown: Math.max(0.25, baseCooldown - reserveReduction),
     range: levelStats.range * (1 + rangeBonus),
     projectileSpeed: levelStats.projectileSpeed === undefined ? null : levelStats.projectileSpeed * projectileSpeedMultiplier * (1 + speedBonus),
     outputBonus,

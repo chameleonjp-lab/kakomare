@@ -707,6 +707,42 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     expect(drones.get(weapons.find((weapon) => weapon.id === 'drone')?.instanceId ?? '')).toHaveLength(2);
   });
 
+  it('蓄勢環の短縮はBattleSceneの定常発射時刻へ届く', () => {
+    const lanceShotTimes = (withReserve: boolean): number[] => {
+      const scene = new moduleUnderTest.BattleScene(options());
+      const weapons = privateValue<unknown[]>(scene, 'weapons');
+      const lance = new moduleUnderTest.Weapon('lance', 1) as unknown as { instanceId: string };
+      weapons.splice(0, weapons.length, lance);
+
+      if (withReserve) {
+        const supports = privateValue<unknown[]>(scene, 'supports');
+        const reserve = new moduleUnderTest.SupportModule('reserve', 0) as unknown as { level: number };
+        reserve.level = 3;
+        supports.push(reserve);
+      }
+
+      const step = privateValue<(seconds: number) => void>(scene, 'step').bind(scene);
+      const recorder = privateValue<{ weaponEvents: Partial<Record<string, { shots: number }>> }>(scene, 'recorder');
+      const shotTimes: number[] = [];
+      let previousShots = 0;
+      for (let frame = 0; frame < 420 && shotTimes.length < 2; frame += 1) {
+        step(1 / 60);
+        const shots = recorder.weaponEvents.lance?.shots ?? 0;
+        if (shots > previousShots) shotTimes.push(privateValue<number>(scene, 'elapsed'));
+        previousShots = shots;
+      }
+      return shotTimes;
+    };
+
+    const withoutReserve = lanceShotTimes(false);
+    const withReserve = lanceShotTimes(true);
+    expect(withoutReserve).toHaveLength(2);
+    expect(withReserve).toHaveLength(2);
+    expect(withReserve[0]).toBeLessThan(withoutReserve[0]!);
+    expect(withReserve[1]).toBeLessThan(withoutReserve[1]!);
+    expect(withoutReserve[1]! - withReserve[1]!).toBeGreaterThan(0.2);
+  });
+
   it('V5の追加25武器は個体ごとの発射元を保ったまま実戦へ入る', () => {
     const scene = new moduleUnderTest.BattleScene(options());
     const weapons = privateValue<Array<{ id: string; level: number; slot: number; instanceId: string }>>(scene, 'weapons');
