@@ -1359,6 +1359,9 @@ export class BattleScene extends Phaser.Scene {
   private fireLance(weapon: Weapon, angle: number, damage: number): void {
     const charge = this.lanceCharge.get(weapon.instanceId) ?? 0;
     const reserve = this.supportEffect('reserve', weapon.slot);
+    // The 0.8-second gate is the minimum charge requirement. The
+    // reserve-adjusted steady-state interval is resolved by
+    // effectiveWeaponStats before Weapon.advance reaches this method.
     const minimum = Math.max(0.8, (weapon.stats.chargeTime ?? 0.8) - Math.min(0.24, reserve * 0.08));
     if (charge < minimum) return;
     this.lanceCharge.set(weapon.instanceId, 0);

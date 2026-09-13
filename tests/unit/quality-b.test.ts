@@ -127,6 +127,20 @@ describe('V5 の実効値と表現', () => {
     expect(effectiveWeaponStats(unconnected, [vector], 1, 1, 0, true).vectorBonus).toBe(0);
   });
 
+  it('蓄勢環は蓄圧槍の定常発射間隔だけを短くする', () => {
+    const reserve = new SupportModule('reserve', 0);
+    reserve.level = 3;
+    const lance = new Weapon('lance', 1, 'reserve-lance');
+    const baseLance = effectiveWeaponStats(lance, []);
+    const reservedLance = effectiveWeaponStats(lance, [reserve]);
+
+    expect(reservedLance.cooldown).toBeCloseTo(baseLance.cooldown - 0.24);
+
+    const needle = new Weapon('needle', 1, 'reserve-needle');
+    expect(effectiveWeaponStats(needle, [reserve]).cooldown)
+      .toBeCloseTo(effectiveWeaponStats(needle, []).cooldown);
+  });
+
   it('薄幕環の接続武器代償は出力補助がなくても負の実効値になる', () => {
     const weapon = new Weapon('needle', 0, 'veil-weapon');
     const veil = new SupportModule('veil', 0, 'veil-support');
