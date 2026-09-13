@@ -582,6 +582,9 @@ export class BattleScene extends Phaser.Scene {
     this.upgradeSequence += 1;
     this.upgradePayload = { ...payload, phase: 'selection', selectionId: this.upgradeSequence, candidates, rerollsLeft: this.rerollsLeft, bansLeft: this.bansLeft, pendingCount: this.progression.pendingChoices };
     this.options.callbacks.onUpgrade(this.upgradePayload);
+    // Persist the exact candidate set immediately. If the tab is closed before
+    // the next periodic checkpoint, resume must still wait for this choice.
+    this.emitSnapshot(true);
   }
 
   public banUpgrade(candidateId: string, selectionId?: number): void {
@@ -607,6 +610,8 @@ export class BattleScene extends Phaser.Scene {
     this.upgradeSequence += 1;
     this.upgradePayload = { ...payload, phase: 'selection', selectionId: this.upgradeSequence, candidates, rerollsLeft: this.rerollsLeft, bansLeft: this.bansLeft, pendingCount: this.progression.pendingChoices };
     this.options.callbacks.onUpgrade(this.upgradePayload);
+    // Banning changes the token-bound candidate set and must survive a tab leave.
+    this.emitSnapshot(true);
   }
 
   public continueUpgrade(selectionId?: number): void {
@@ -752,6 +757,7 @@ export class BattleScene extends Phaser.Scene {
       (request) => { this.spawnEnemy(request.type, request.angle); },
       reservedArenaSlots,
       (warning) => this.showSpecialWaveWarning(warning),
+      this.progression.level,
     );
 
     for (const enemy of this.enemies) {
@@ -1922,6 +1928,9 @@ export class BattleScene extends Phaser.Scene {
     this.state = 'upgrade';
     this.options.callbacks.onUpgrade(this.upgradePayload);
     this.options.callbacks.onStatus('強化候補を選んでください');
+    // The selection itself is a safe boundary. Save before the user can leave
+    // the browser so reopening cannot skip an unconfirmed weapon choice.
+    this.emitSnapshot(true);
     return true;
   }
 

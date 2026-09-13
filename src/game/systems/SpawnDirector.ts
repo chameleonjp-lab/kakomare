@@ -37,6 +37,9 @@ export const SPECIAL_WAVE_INTERVAL_SECONDS = 45;
 export const SPECIAL_WAVE_LEAD_SECONDS = 1.2;
 const SPECIAL_WAVE_SIZE = 3;
 const COMMON_ENEMY_TYPES: ReadonlySet<EnemyId> = new Set(['shard', 'runner']);
+const LATE_PRESSURE_START_LEVEL = 10;
+const LATE_PRESSURE_PER_LEVEL = 0.08;
+const MAX_LATE_PRESSURE = 0.4;
 
 export interface SpawnWaveWarning {
   angle: number;
@@ -120,6 +123,7 @@ export class SpawnDirector {
     emit: (request: SpawnRequest) => void,
     reservedSlots = 0,
     onSpecialWaveWarning?: (warning: SpawnWaveWarning) => void,
+    playerLevel = 1,
   ): void {
     this.updateAccumulator += Math.max(0, seconds);
     let count = activeEnemyCount;
@@ -128,7 +132,7 @@ export class SpawnDirector {
       this.updateAccumulator -= SpawnDirector.UPDATE_STEP;
       if (this.updateAccumulator < 0 && this.updateAccumulator > -SpawnDirector.STEP_EPSILON) this.updateAccumulator = 0;
       this.simulatedElapsed += SpawnDirector.UPDATE_STEP;
-      count = this.updateSpawnStep(SpawnDirector.UPDATE_STEP, this.simulatedElapsed, count, spawnLimit, emit, onSpecialWaveWarning);
+      count = this.updateSpawnStep(SpawnDirector.UPDATE_STEP, this.simulatedElapsed, count, spawnLimit, emit, onSpecialWaveWarning, playerLevel);
     }
   }
 
@@ -139,12 +143,14 @@ export class SpawnDirector {
     spawnLimit: number,
     emit: (request: SpawnRequest) => void,
     onSpecialWaveWarning?: (warning: SpawnWaveWarning) => void,
+    playerLevel: number = 1,
   ): number {
     const stage = STAGES[this.stageId];
     const endlessScale = stage.isEndless ? Math.pow(1.12, Math.floor(elapsed / 300)) : 1;
     const base = this.testMode ? 3.8 : stage.budgetBase * endlessScale;
     const rise = this.testMode ? 0.09 : stage.budgetRise * endlessScale;
-    this.budget += (base + elapsed * rise) * seconds;
+    const progressionScale = this.progressionPressureScale(playerLevel);
+    this.budget += (base + elapsed * rise) * progressionScale * seconds;
     let count = activeEnemyCount;
 
     const hadPendingSpecialWave = this.pendingSpecialWave !== null;
@@ -292,6 +298,12 @@ export class SpawnDirector {
     this.endlessBossIndex = endlessBossIndex;
     this.rng.setState(rngState);
     return true;
+  }
+
+  private progressionPressureScale(playerLevel: number): number {
+    const safeLevel = Number.isFinite(playerLevel) ? Math.max(1, Math.floor(playerLevel)) : 1;
+    const lateLevels = Math.max(0, safeLevel - LATE_PRESSURE_START_LEVEL + 1);
+    return 1 + Math.min(MAX_LATE_PRESSURE, lateLevels * LATE_PRESSURE_PER_LEVEL);
   }
 
   private availableEnemies(elapsed: number): EnemyId[] {
