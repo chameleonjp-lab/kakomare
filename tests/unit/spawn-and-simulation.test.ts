@@ -35,6 +35,19 @@ function runSpawnSimulation(stageId: StageId, run: number): { emitted: number; m
   return { emitted, maxActive, types };
 }
 
+function emittedAtPlayerLevel(stageId: StageId, playerLevel: number, duration: number): number {
+  const director = new SpawnDirector(stageId, 7_319);
+  let emitted = 0;
+  let elapsed = 0;
+  const frame = 1 / 60;
+  while (elapsed + 1e-9 < duration) {
+    const seconds = Math.min(frame, duration - elapsed);
+    elapsed += seconds;
+    director.update(seconds, elapsed, 0, () => { emitted += 1; }, 0, undefined, playerLevel);
+  }
+  return emitted;
+}
+
 function spawnSequence(stageId: StageId, frameSeconds: number, duration: number): EnemyId[] {
   const director = new SpawnDirector(stageId, 7_319);
   const sequence: EnemyId[] = [];
@@ -89,6 +102,14 @@ describe('spawn director and long simulations', () => {
     expect(late.length).toBeGreaterThan(100);
     expect(specialCount / late.length).toBeGreaterThan(0.75);
     for (const id of specialIds) expect(late).toContain(id);
+  });
+
+  it('raises enemy supply from Lv10 as the player build becomes stronger', () => {
+    const level9 = emittedAtPlayerLevel('endless', 9, 120);
+    const level10 = emittedAtPlayerLevel('endless', 10, 120);
+    const level14 = emittedAtPlayerLevel('endless', 14, 120);
+    expect(level10).toBeGreaterThan(level9);
+    expect(level14).toBeGreaterThan(level10);
   });
 
   it('keeps expensive enemies pending and emits every stage enemy at production timing', () => {

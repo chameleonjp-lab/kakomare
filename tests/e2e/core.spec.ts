@@ -727,6 +727,25 @@ test('P16-05/X10: 強化中の非表示と回転は同じ候補を保ち画面�
   await expect(page.locator('.pause-layer, .upgrade-layer')).toHaveCount(0);
 });
 
+test('強化候補を開いた直後の再読込でも選択前の画面から再開する', async ({ page }) => {
+  await enterBattle(page, '?test=1&upgrade=1&testXp=25&seed=123');
+  await expect(page.getByTestId('upgrade-card')).toHaveCount(3);
+  const candidates = await page.getByTestId('upgrade-card').evaluateAll((cards) => cards.map((card) => card.getAttribute('data-candidate-id')));
+  const xp = await page.getByTestId('hud-xp').textContent();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('resume-saved-run')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('resume-saved-run').click();
+  await expect(page.getByTestId('battle-screen')).toBeVisible({ timeout: 8_000 });
+  await expect(page.locator('.pause-layer')).toBeVisible({ timeout: 4_000 });
+  await page.getByTestId('resume-button').click();
+  await expect(page.getByTestId('upgrade-card')).toHaveCount(3);
+  expect(await page.getByTestId('upgrade-card').evaluateAll((cards) => cards.map((card) => card.getAttribute('data-candidate-id')))).toEqual(candidates);
+  await expect(page.getByTestId('hud-xp')).toHaveText(xp ?? '');
+  await chooseV0Upgrade(page);
+  await expect(page.locator('.upgrade-layer')).toHaveCount(0);
+});
+
 test('P16-07: 保留から構成・停止・再開・強化・終了を画面操作できる', async ({ page }) => {
   await enterBattle(page, '?test=1&upgrade=1&testXp=154&seed=123');
   await deferV0Upgrades(page);
@@ -780,6 +799,21 @@ test('満枠でも武器を選び、番号見本と交換後Lv3・分岐を確�
   await enterBattle(page, '?test=1&upgrade=1&testXp=25&fullLoadout=1&seed=1');
   const card = page.locator('[data-candidate-id="weapon:mortar:replace"]');
   await expect(card).toBeVisible();
+  const scrollState = await page.locator('.upgrade-layer').evaluate((layer) => {
+    const dialog = layer.querySelector<HTMLElement>('.modal-dialog');
+    if (!dialog) throw new Error('強化ダイアログが見つかりません。');
+    layer.scrollTop = layer.scrollHeight;
+    return {
+      layerClientHeight: layer.clientHeight,
+      layerScrollHeight: layer.scrollHeight,
+      layerScrollTop: layer.scrollTop,
+      dialogClientHeight: dialog.clientHeight,
+      dialogScrollHeight: dialog.scrollHeight,
+    };
+  });
+  expect(scrollState.layerScrollHeight).toBeGreaterThan(scrollState.layerClientHeight);
+  expect(scrollState.layerScrollTop + scrollState.layerClientHeight).toBeGreaterThanOrEqual(scrollState.layerScrollHeight - 1);
+  expect(scrollState.dialogScrollHeight - scrollState.dialogClientHeight).toBeLessThanOrEqual(1);
   await expect(card).toHaveClass(/upgrade-kind-weapon/);
   await expect(card.locator('.placement-node')).toHaveCount(18);
   await expect(card.getByTestId('upgrade-placement')).toHaveCount(9);
