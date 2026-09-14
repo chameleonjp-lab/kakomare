@@ -28,7 +28,6 @@ import type { RankingSnapshot } from '../types/ranking';
 import type { RunSaveEnvelope } from '../types/runSave';
 import { isLocalTestHost } from './testMode';
 import { RunLifecycleGuard } from './RunLifecycleGuard';
-import { MAX_DEVICE_SLOT_COUNT, DEVICE_SLOT_COUNT, itemAtExpandedSlot } from '../game/deviceLayout';
 import { COMPETITIVE_RULES } from '../data/competitiveRules';
 import { renderSynergyTags } from '../ui/SynergyTags';
 
@@ -293,6 +292,7 @@ export class AppController {
     const aimState = element('p', 'aim-state', '自動照準'); aimState.dataset.testid = 'aim-state'; aimState.setAttribute('role', 'status');
     arenaColumn.append(aimState);
     const status = element('p', 'battle-status', '戦闘準備中'); status.dataset.testid = 'battle-status'; status.setAttribute('role', 'status');
+    status.hidden = true;
     arenaColumn.append(status);
 
     const panel = element('aside', 'battle-panel');
@@ -302,22 +302,13 @@ export class AppController {
     const time = this.hudItem(STAGES[this.state.selectedStage].isEndless ? '経過時間' : '残り時間', STAGES[this.state.selectedStage].isEndless ? '0秒' : `${Math.ceil(STAGES[this.state.selectedStage].timeLimit)}秒`, 'hud-time');
     const level = this.hudItem('現在Lv', 'Lv1', 'hud-level');
     const xp = this.hudItem('経験値', '0 / 25', 'hud-xp');
-    const pending = button('', 'hud-item pending-upgrade-button');
-    pending.dataset.testid = 'pending-upgrade-button';
-    pending.disabled = true;
-    pending.setAttribute('aria-label', '強化を選ぶ（0回）');
-    pending.append(element('span', 'hud-label', '強化を選ぶ'));
-    const pendingCount = element('strong', 'hud-value', '0回');
-    pendingCount.dataset.testid = 'hud-pending';
-    pending.append(pendingCount);
-    pending.addEventListener('click', () => {
-      if (!pending.isConnected || pending.disabled) return;
-      const selectionId = this.latestBattleSnapshot?.pendingUpgradeSelectionId;
-      if (selectionId !== null && selectionId !== undefined) this.gameHost.requestPendingUpgrade(selectionId, runId);
-    });
     const score = this.hudItem('得点', '0', 'hud-score');
-    hud.append(health, time, level, xp, pending, score);
-    panel.append(hud);
+    hud.append(health, time, level, xp, score);
+    const loadoutButton = button('装置を確認する', 'button battle-loadout-button');
+    loadoutButton.dataset.testid = 'battle-loadout-button';
+    loadoutButton.setAttribute('aria-label', '現在の装備と配置、相乗効果を確認する');
+    loadoutButton.addEventListener('click', () => this.openPause(false, '', runId, 'loadout'));
+    panel.append(hud, loadoutButton);
     const build = element('div', 'build-panel'); build.dataset.testid = 'build-panel';
     build.append(element('h2', '', '六角装置'));
     const buildList = element('p', 'build-list', '連針砲 Lv1'); buildList.dataset.testid = 'build-list'; build.append(buildList);
@@ -355,7 +346,7 @@ export class AppController {
         onSnapshot: (snapshot) => {
           if (runId !== this.battleRunSequence || !shell.isConnected) return;
           this.latestBattleSnapshot = snapshot;
-          this.updateBattleHud(snapshot, health, time, level, xp, pending, score, aimState, buildList);
+          this.updateBattleHud(snapshot, health, time, level, xp, score, aimState, buildList);
         },
         onUpgrade: (payload) => { if (runId === this.battleRunSequence && shell.isConnected) this.showUpgrade(payload, shell, runId); },
         onFinish: (result) => { window.setTimeout(() => { if (runId === this.battleRunSequence && shell.isConnected) this.finishBattle(result); }, 0); },
@@ -385,20 +376,16 @@ export class AppController {
     return item;
   }
 
-  private updateBattleHud(snapshot: BattleSnapshot, health: HTMLElement, time: HTMLElement, level: HTMLElement, xp: HTMLElement, pending: HTMLButtonElement, score: HTMLElement, aimState: HTMLElement, buildList: HTMLElement): void {
+  private updateBattleHud(snapshot: BattleSnapshot, health: HTMLElement, time: HTMLElement, level: HTMLElement, xp: HTMLElement, score: HTMLElement, aimState: HTMLElement, buildList: HTMLElement): void {
     const healthValue = health.querySelector<HTMLElement>('[data-testid="hud-health"]');
     const timeValue = time.querySelector<HTMLElement>('[data-testid="hud-time"]');
     const levelValue = level.querySelector<HTMLElement>('[data-testid="hud-level"]');
     const xpValue = xp.querySelector<HTMLElement>('[data-testid="hud-xp"]');
-    const pendingValue = pending.querySelector<HTMLElement>('[data-testid="hud-pending"]');
     const scoreValue = score.querySelector<HTMLElement>('[data-testid="hud-score"]');
     if (healthValue) healthValue.textContent = `${Math.max(0, Math.round(snapshot.core))} / ${snapshot.maxCore}`;
     if (timeValue) timeValue.textContent = snapshot.isEndless ? `${Math.floor(snapshot.elapsed)}秒` : `${Math.max(0, Math.ceil(snapshot.timeLimit - snapshot.elapsed))}秒`;
     if (levelValue) levelValue.textContent = `Lv${snapshot.level}`;
     if (xpValue) xpValue.textContent = `${Math.floor(snapshot.experience)} / ${snapshot.nextExperience}`;
-    if (pendingValue) pendingValue.textContent = `${snapshot.pendingUpgrades}回`;
-    pending.setAttribute('aria-label', `強化を選ぶ（${snapshot.pendingUpgrades}回）`);
-    pending.disabled = snapshot.pendingUpgrades <= 0 || snapshot.pendingUpgradeSelectionId === null;
     if (scoreValue) scoreValue.textContent = snapshot.score.toLocaleString('ja-JP');
     aimState.textContent = snapshot.manualAim ? '手動照準中' : '自動照準';
     const loadout: string[] = [];
@@ -645,7 +632,7 @@ export class AppController {
     window.setTimeout(() => continueButton.focus(), 0);
   }
 
-  private openPause(fromVisibility: boolean, reason = '', runId = this.battleRunSequence): void {
+  private openPause(fromVisibility: boolean, reason = '', runId = this.battleRunSequence, initialView: 'menu' | 'loadout' = 'menu'): void {
     if (runId !== this.battleRunSequence || !this.runLifecycle.active || this.state.view !== 'battle') return;
     const shell = this.root.querySelector<HTMLElement>('.battle-shell');
     if (!shell) return;
@@ -697,14 +684,19 @@ export class AppController {
       window.setTimeout(() => resume.focus(), 0);
     };
     const rules = button('遊び方'); rules.addEventListener('click', () => this.showPauseRules(pauseMenu, pauseView, showMenu, resumeBattle));
-    const loadout = button('装置を確認'); loadout.addEventListener('click', () => this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle, runId));
+    const loadout = button('装置を確認する'); loadout.addEventListener('click', () => this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle, runId));
     const settings = button('音量と演出'); settings.addEventListener('click', () => this.showPauseSettings(pauseMenu, pauseView, showMenu, resumeBattle));
     const retire = button('リタイア', 'button button-danger'); retire.addEventListener('click', () => { if (window.confirm('このプレイを終了しますか？得点は確定しません。')) this.gameHost.retire(runId); });
     const home = button('ホームへ戻る'); home.addEventListener('click', () => { if (runId === this.battleRunSequence && layer.isConnected && window.confirm('プレイを終了してホームへ戻りますか？')) { this.gameHost.stop(); this.runLifecycle.cancel(); this.render('home'); } });
     pauseMenu.append(resume, rules, loadout, settings, retire, home);
     dialog.append(pauseMenu, pauseView); layer.append(dialog); shell.append(layer);
     this.trapFocus(dialog);
-    window.setTimeout(() => resume.focus(), 0);
+    if (initialView === 'loadout') {
+      this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle, runId);
+      window.setTimeout(() => pauseView.querySelector<HTMLElement>('.placement-preview-summary')?.focus(), 0);
+    } else {
+      window.setTimeout(() => resume.focus(), 0);
+    }
   }
 
   private showPauseRules(menu: HTMLElement, view: HTMLElement, back: () => void, resume: () => void): void {
@@ -724,24 +716,16 @@ export class AppController {
     copy.dataset.testid = 'pause-loadout';
     copy.append(element('h3', '', '現在の装備と配置'));
     const snapshot = this.latestBattleSnapshot;
-    copy.append(createPlacementPreview(snapshot));
-    const loadout = snapshot
-      ? Array.from({ length: Math.min(MAX_DEVICE_SLOT_COUNT, (snapshot.build?.unlockedLayer ?? 1) * DEVICE_SLOT_COUNT) * 2 }, (_, index) => {
-        const slot = Math.floor(index / 2);
-        if (index % 2 === 0) {
-          const weapon = itemAtExpandedSlot(snapshot.weapons, slot);
-          return `武器面${slot + 1}: ${weapon ? `${this.weaponName(weapon.id)} Lv${weapon.level}` : '空き'}`;
-        }
-        const support = itemAtExpandedSlot(snapshot.supports, slot);
-        return `補助面${slot + 1}: ${support ? `${this.supportName(support.id)} Lv${support.level}` : '空き'}`;
-      })
-      : ['装置情報を読み込んでいます'];
-    const list = element('ul', 'loadout-list');
-    for (const item of loadout) list.append(element('li', '', item));
-    copy.append(list);
+    if (!snapshot) copy.append(createPlacementPreview(snapshot));
     if (snapshot) {
       const equipmentDetails = element('details', 'loadout-help');
-      equipmentDetails.append(element('summary', '', '装備の効果・接続・相乗効果を確認'));
+      const previewSummary = element('summary', 'placement-preview-summary');
+      previewSummary.dataset.testid = 'placement-preview-toggle';
+      previewSummary.append(
+        createPlacementPreview(snapshot),
+        element('p', 'placement-detail-hint', '配置図を押すと、装備の効果・接続・相乗効果を確認できます。'),
+      );
+      equipmentDetails.append(previewSummary);
       for (const weapon of snapshot.weapons) {
         const details = element('details', 'equipment-help-details');
         details.append(element('summary', '', `${placementLabel('weapon', weapon.slot)}：${this.weaponName(weapon.id)} Lv${weapon.level}`), renderEquipmentHelp(getWeaponHelp(weapon, snapshot.supports, snapshot.weapons)));
@@ -753,6 +737,19 @@ export class AppController {
         equipmentDetails.append(details);
       }
       copy.append(equipmentDetails);
+      if (snapshot.pendingUpgrades > 0 && snapshot.pendingUpgradeSelectionId !== null) {
+        const pendingUpgrade = button(`保留中の強化を選ぶ（${snapshot.pendingUpgrades}回）`, 'button pending-upgrade-from-loadout');
+        pendingUpgrade.dataset.testid = 'pending-upgrade-from-loadout';
+        pendingUpgrade.addEventListener('click', () => {
+          if (!pendingUpgrade.isConnected || runId !== this.battleRunSequence) return;
+          resume();
+          window.setTimeout(() => {
+            const selectionId = this.latestBattleSnapshot?.pendingUpgradeSelectionId;
+            if (selectionId !== null && selectionId !== undefined) this.gameHost.requestPendingUpgrade(selectionId, runId);
+          }, 0);
+        });
+        copy.append(pendingUpgrade);
+      }
       const graph = snapshot.build?.graph;
       const installed = [
         ...snapshot.weapons.map((item) => ({ ...item, kind: 'weapon' as const })),
