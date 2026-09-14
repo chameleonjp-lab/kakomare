@@ -690,6 +690,7 @@ async function deferV0Upgrades(page: Page): Promise<void> {
   await page.getByTestId('battle-loadout-button').click();
   await expect(page.getByTestId('pending-upgrade-from-loadout')).toBeVisible();
   await page.getByRole('button', { name: '一時停止へ戻る', exact: true }).click();
+  await page.getByTestId('resume-button').click();
   await expect(page.getByTestId('battle-loadout-button')).toBeVisible();
 }
 
@@ -773,17 +774,20 @@ test('V3/A09: 停止中の装置確認から同種の空き面へ移設できる
   await page.getByRole('button', { name: '装置を確認する', exact: true }).click();
   const loadout = page.getByTestId('pause-loadout');
   await expect(loadout).toBeVisible();
-  await expect(loadout).toContainText('武器面1: 連針砲 Lv1');
+  await expect(loadout).toContainText('武器面1（内側・上）：連針砲 Lv1');
 
   await expect(loadout.getByTestId('placement-preview').first()).toBeVisible();
+  await expect(loadout.locator('.loadout-help')).not.toHaveAttribute('open', '');
+  await loadout.getByTestId('placement-preview-toggle').click();
+  await expect(loadout.locator('.loadout-help')).toHaveAttribute('open', '');
   const move = loadout.getByTestId('placement-source').first();
   await expect(move).toBeEnabled();
   await move.click();
   await loadout.locator('[data-testid="placement-destination"][data-slot="1"]').click();
   await expect(loadout).toContainText('レベルは変わりません');
   await loadout.getByTestId('placement-confirm').click();
-  await expect(loadout).toContainText('武器面2: 連針砲 Lv1');
-  await expect(loadout).not.toContainText('武器面1: 連針砲 Lv1');
+  await expect(loadout).toContainText('武器面2（内側・右下）：連針砲 Lv1');
+  await expect(loadout).not.toContainText('武器面1（内側・上）：連針砲 Lv1');
 
   await page.getByRole('button', { name: '一時停止へ戻る', exact: true }).click();
   await page.getByTestId('resume-button').click();
