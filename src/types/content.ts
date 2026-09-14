@@ -17,6 +17,11 @@ export type SupportId =
   | 'pulse' | 'reserve' | 'lattice' | 'orbit' | 'catalyst';
 export type EnemyId = 'shard' | 'runner' | 'shell' | 'lattice' | 'spore' | 'marker' | 'dropper' | 'phase' | 'charger' | 'guard' | 'repair' | 'factory';
 export type BossId = 'crown' | 'designer' | 'echo' | 'gate' | 'weaver' | 'reactor';
+export type EnemyDefeatAudioCue = `defeat:${EnemyId | BossId}`;
+
+export function enemyDefeatCue(type: EnemyId | BossId): EnemyDefeatAudioCue {
+  return `defeat:${type}`;
+}
 
 export type ContentId = WeaponId | SupportId | EnemyId | BossId;
 

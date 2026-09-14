@@ -34,6 +34,7 @@ import { MANUAL_AIM_HALF_ANGLE, selectTarget } from '../systems/TargetingSystem'
 import { impactAngleFromSource, impactAngleFromVelocity } from '../systems/ImpactDirection';
 import { advanceOrbitAngle } from '../systems/OrbitSystem';
 import { ProgressionSystem } from '../systems/ProgressionSystem';
+import { enemyDefeatCue } from '../../types/content';
 import type { BossId, EnemyId, StageId, SupportId, WeaponId } from '../../types/content';
 import type { BattleCallbacks, BattleResult, BattleSnapshot, Point, UpgradeCandidate, UpgradePayload } from '../../types/game';
 import type { RunSaveEnvelope } from '../../types/runSave';
@@ -1856,7 +1857,7 @@ export class BattleScene extends Phaser.Scene {
   private handleEnemyDestroyed(enemy: Enemy): void {
     if (this.state === 'finished') return;
     if (enemy.isBoss) {
-      this.options.callbacks.onAudioCue?.('defeat');
+      this.options.callbacks.onAudioCue?.(enemyDefeatCue(enemy.type as BossId));
       this.designerWave = null;
       this.echoWave = null;
       this.crownPressure = null;
@@ -1870,7 +1871,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     const enemyId = enemy.type as EnemyId;
-    this.options.callbacks.onAudioCue?.('defeat');
+    this.options.callbacks.onAudioCue?.(enemyDefeatCue(enemyId));
     this.triggerIgniteSynergy(enemy);
     if (enemy.summoned) return;
     this.recorder.kills += 1;

@@ -89,7 +89,7 @@ describe('V5 の実効値と表現', () => {
     expect(audioCueForStatus('回転冠が出現しました')).toBe('boss');
     expect(audioCueForStatus('回転冠がコア向け攻撃を予告しています')).toBe('warning');
     expect(audioCueForStatus('投下体が遠隔弾を発射しました')).toBe('shot');
-    expect(audioCueForStatus('回転冠を撃破しました。戦闘を続けます')).toBe('defeat');
+    expect(audioCueForStatus('回転冠を撃破しました。戦闘を続けます')).toBe('defeat:crown');
     expect(audioCueForStatus('強化候補を選んでください')).toBe('upgrade');
   });
 

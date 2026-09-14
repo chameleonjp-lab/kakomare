@@ -1,3 +1,7 @@
+import { BOSSES } from '../data/bosses';
+import { ENEMIES } from '../data/enemies';
+import { enemyDefeatCue, type EnemyDefeatAudioCue } from '../types/content';
+
 export type AudioCue =
   | 'button'
   | 'countdown'
@@ -11,15 +15,17 @@ export type AudioCue =
   | 'victory'
   | 'start'
   | 'pause'
-  | 'resume';
+  | 'resume'
+  | EnemyDefeatAudioCue;
 
 interface CueProfile {
   frequency: number;
   duration: number;
   wave: OscillatorType;
+  endFrequency?: number;
 }
 
-const CUE_PROFILES: Record<AudioCue, CueProfile> = {
+const CUE_PROFILES: Record<Exclude<AudioCue, EnemyDefeatAudioCue>, CueProfile> = {
   button: { frequency: 520, duration: 0.045, wave: 'sine' },
   countdown: { frequency: 330, duration: 0.09, wave: 'triangle' },
   shot: { frequency: 620, duration: 0.035, wave: 'square' },
@@ -35,11 +41,46 @@ const CUE_PROFILES: Record<AudioCue, CueProfile> = {
   resume: { frequency: 500, duration: 0.08, wave: 'triangle' },
 };
 
+/** Each enemy family has a short signature made from its own pitch, movement,
+ * and material impression. The sounds are generated locally so no asset load
+ * can delay a battle or fail on a slow mobile connection. */
+const DEFEAT_CUE_PROFILES: Record<EnemyDefeatAudioCue, CueProfile> = {
+  'defeat:shard': { frequency: 210, endFrequency: 120, duration: 0.11, wave: 'square' },
+  'defeat:runner': { frequency: 460, endFrequency: 280, duration: 0.08, wave: 'triangle' },
+  'defeat:shell': { frequency: 95, endFrequency: 48, duration: 0.22, wave: 'sawtooth' },
+  'defeat:lattice': { frequency: 330, endFrequency: 170, duration: 0.16, wave: 'square' },
+  'defeat:spore': { frequency: 250, endFrequency: 90, duration: 0.18, wave: 'sine' },
+  'defeat:marker': { frequency: 700, endFrequency: 420, duration: 0.14, wave: 'triangle' },
+  'defeat:dropper': { frequency: 380, endFrequency: 140, duration: 0.17, wave: 'sawtooth' },
+  'defeat:phase': { frequency: 820, endFrequency: 250, duration: 0.2, wave: 'sine' },
+  'defeat:charger': { frequency: 170, endFrequency: 65, duration: 0.18, wave: 'sawtooth' },
+  'defeat:guard': { frequency: 130, endFrequency: 58, duration: 0.24, wave: 'square' },
+  'defeat:repair': { frequency: 520, endFrequency: 920, duration: 0.16, wave: 'sine' },
+  'defeat:factory': { frequency: 190, endFrequency: 75, duration: 0.28, wave: 'square' },
+  'defeat:crown': { frequency: 75, endFrequency: 42, duration: 0.42, wave: 'sawtooth' },
+  'defeat:designer': { frequency: 140, endFrequency: 75, duration: 0.35, wave: 'square' },
+  'defeat:echo': { frequency: 260, endFrequency: 110, duration: 0.38, wave: 'triangle' },
+  'defeat:gate': { frequency: 100, endFrequency: 38, duration: 0.45, wave: 'sawtooth' },
+  'defeat:weaver': { frequency: 360, endFrequency: 150, duration: 0.4, wave: 'triangle' },
+  'defeat:reactor': { frequency: 65, endFrequency: 28, duration: 0.5, wave: 'sawtooth' },
+};
+
+function isEnemyDefeatCue(cue: AudioCue): cue is EnemyDefeatAudioCue {
+  return cue.startsWith('defeat:');
+}
+
+function defeatCueForStatus(message: string): AudioCue | null {
+  for (const definition of [...Object.values(ENEMIES), ...Object.values(BOSSES)]) {
+    if (message.includes(definition.name)) return enemyDefeatCue(definition.id);
+  }
+  return null;
+}
+
 /** Map the short status messages used by the battle scene to distinct cues. */
 export function audioCueForStatus(message: string): AudioCue {
   if (message.includes('ダメージ') || message.includes('被害')) return 'damage';
   if (message.includes('強化') || message.includes('取得しました')) return 'upgrade';
-  if (message.includes('撃破')) return 'defeat';
+  if (message.includes('撃破')) return defeatCueForStatus(message) ?? 'defeat';
   if (message.includes('出現')) return 'boss';
   if (message.includes('予告') || message.includes('集中波') || message.includes('準備')) return 'warning';
   if (message.includes('発射') || message.includes('着弾')) return 'shot';
@@ -106,11 +147,11 @@ export class AudioService {
   }
 
   public cue(cue: AudioCue): void {
-    const profile = CUE_PROFILES[cue];
-    this.playTone(cue, profile.frequency, profile.duration, profile.wave);
+    const profile = isEnemyDefeatCue(cue) ? DEFEAT_CUE_PROFILES[cue] : CUE_PROFILES[cue];
+    this.playTone(cue, profile.frequency, profile.duration, profile.wave, profile.endFrequency);
   }
 
-  private playTone(key: string, frequency: number, duration: number, wave: OscillatorType): void {
+  private playTone(key: string, frequency: number, duration: number, wave: OscillatorType, endFrequency = frequency): void {
     const now = performance.now();
     const previous = this.lastPlayed.get(key) ?? -Infinity;
     if (now - previous < 65 || !this.context || this.volume <= 0) return;
@@ -119,7 +160,10 @@ export class AudioService {
       const oscillator = this.context.createOscillator();
       const gain = this.context.createGain();
       oscillator.type = wave;
-      oscillator.frequency.value = frequency;
+      oscillator.frequency.setValueAtTime(Math.max(1, frequency), this.context.currentTime);
+      if (endFrequency !== frequency) {
+        oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), this.context.currentTime + duration);
+      }
       gain.gain.setValueAtTime(0.0001, this.context.currentTime);
       gain.gain.exponentialRampToValueAtTime(Math.max(0.001, this.volume * 0.08), this.context.currentTime + 0.008);
       gain.gain.exponentialRampToValueAtTime(0.0001, this.context.currentTime + duration);

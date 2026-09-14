@@ -1,4 +1,4 @@
-import type { BossId, EnemyId, StageId, SupportId, WeaponBranch, WeaponFinalBranch, WeaponId } from './content';
+import type { BossId, EnemyDefeatAudioCue, EnemyId, StageId, SupportId, WeaponBranch, WeaponFinalBranch, WeaponId } from './content';
 import type { BuildGraphSnapshot, CapacitySnapshot, BuildLayer } from './build';
 import type { NormalizedRunInput } from '../game/systems/InputRecorder';
 import type { RunSaveEnvelope } from './runSave';
@@ -247,7 +247,7 @@ export interface BattleCallbacks {
   onFinish: (result: BattleResult) => void;
   onStatus: (message: string) => void;
   /** Optional low-volume cues emitted by actual weapon/kill events. */
-  onAudioCue?: (cue: 'shot' | 'heavy' | 'defeat') => void;
+  onAudioCue?: (cue: 'shot' | 'heavy' | 'defeat' | EnemyDefeatAudioCue) => void;
   onPauseRequest: () => void;
   /** A safe-boundary checkpoint for local resume. It is never a ranking upload. */
   onCheckpoint?: (checkpoint: RunSaveEnvelope) => void;
