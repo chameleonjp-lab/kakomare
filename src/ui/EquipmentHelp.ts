@@ -1,10 +1,12 @@
 import { SUPPORTS } from '../data/supports';
 import { WEAPONS } from '../data/weapons';
+import { supportSynergyTags, weaponSynergyTags, type SynergyTagId } from '../data/synergyTags';
 import { adjacentWeaponSlots } from '../game/deviceLayout';
 import { SupportModule, supportEffectsFor, supportWeaponSlots } from '../game/entities/SupportModule';
 import type { SupportId, WeaponId } from '../types/content';
 import type { BattleSnapshot, SupportSnapshot, WeaponSnapshot } from '../types/game';
 import { element } from './viewUtils';
+import { renderSynergyTags } from './SynergyTags';
 
 /** A small, UI-ready explanation of one installed weapon or support. */
 export interface EquipmentHelp {
@@ -12,6 +14,7 @@ export interface EquipmentHelp {
   id: WeaponId | SupportId;
   name: string;
   role: string;
+  tags: SynergyTagId[];
   summary: string;
   current: string;
   effects: string[];
@@ -444,7 +447,7 @@ function weaponHelp(input: WeaponId | WeaponSnapshot, supports: readonly Support
     if (form) effects.push(`Lv8「${form.name}」: ${form.description}`);
   } else effects.push(`Lv8発展: ${definition.evolutions[0]?.name ?? 'なし'}（未選択）`);
   return {
-    kind: 'weapon', id, name: definition.name, role: definition.role,
+    kind: 'weapon', id, name: definition.name, role: definition.role, tags: WEAPONS[id] ? weaponSynergyTags(id).map((tag) => tag.id) : [],
     summary: definition.description, current: notes.current,
     effects, conditions, limits,
     connections: connections.length > 0 ? connections : ['接続中の補助はありません。'],
@@ -505,7 +508,7 @@ function supportHelp(input: SupportId | SupportSnapshot, weapons: readonly Weapo
   if (id === 'ignite' || id === 'brink' || id === 'veil') synergies.push('この補助は配置全体にも働くため、隣接武器がなくても上記の全体効果は発動します。');
   if (id === 'ignite' && weapons[0]) synergies.push(`爆発は構成内で最初の${WEAPONS[weapons[0].id].name}の、その時点の威力を基準にします。`);
   return {
-    kind: 'support', id, name: definition.name, role: definition.role,
+    kind: 'support', id, name: definition.name, role: definition.role, tags: SUPPORTS[id] ? supportSynergyTags(id).map((tag) => tag.id) : [],
     summary: definition.description,
     current: `Lv${level}/${definition.maxLevel}: ${definition.levels[level - 1]?.label ?? ''}`,
     effects, conditions, limits, connections,
@@ -540,6 +543,7 @@ export function renderEquipmentHelp(help: EquipmentHelp): HTMLElement {
   const card = element('article', 'equipment-help');
   card.append(element('h4', 'equipment-help-title', help.name));
   card.append(element('p', 'equipment-help-role', help.role));
+  card.append(renderSynergyTags(help.tags));
   card.append(element('p', 'equipment-help-summary', help.summary));
   card.append(element('p', 'equipment-help-current', help.current));
   appendSection(card, 'いまの動き', help.effects);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SUPPORTS, SUPPORT_ORDER } from '../../src/data/supports';
 import { WEAPONS, WEAPON_ORDER } from '../../src/data/weapons';
+import { SUPPORT_SYNERGY_TAGS, SYNERGY_TAGS, WEAPON_SYNERGY_TAGS } from '../../src/data/synergyTags';
 import { getEquipmentHelp, getSupportHelp, getWeaponHelp } from '../../src/ui/EquipmentHelp';
 import { nodeIdForSlot } from '../../src/game/deviceLayout';
 import type { SupportSnapshot, WeaponSnapshot } from '../../src/types/game';
@@ -143,5 +144,22 @@ describe('equipment help copy and snapshot connections', () => {
       expect(definition.levels).toHaveLength(3);
       expect(definition.levels.every((level) => level.label.trim().length > 0)).toBe(true);
     }
+  });
+
+  it('provides a labelled colour tag set for every weapon and support', () => {
+    expect(Object.keys(WEAPON_SYNERGY_TAGS)).toHaveLength(WEAPON_ORDER.length);
+    expect(Object.keys(SUPPORT_SYNERGY_TAGS)).toHaveLength(SUPPORT_ORDER.length);
+    for (const id of WEAPON_ORDER) {
+      expect(WEAPON_SYNERGY_TAGS[id].length).toBeGreaterThan(0);
+      expect(getWeaponHelp(id).tags).toEqual(WEAPON_SYNERGY_TAGS[id]);
+      for (const tag of WEAPON_SYNERGY_TAGS[id]) expect(SYNERGY_TAGS[tag].label).not.toBe('');
+    }
+    for (const id of SUPPORT_ORDER) {
+      expect(SUPPORT_SYNERGY_TAGS[id].length).toBeGreaterThan(0);
+      expect(getSupportHelp(id).tags).toEqual(SUPPORT_SYNERGY_TAGS[id]);
+      for (const tag of SUPPORT_SYNERGY_TAGS[id]) expect(SYNERGY_TAGS[tag].color).toMatch(/^#/);
+    }
+    expect(getWeaponHelp('lance').tags).toContain('charge');
+    expect(getSupportHelp('reserve').tags).toEqual(['charge']);
   });
 });
