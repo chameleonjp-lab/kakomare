@@ -314,7 +314,24 @@ describe('BattleScene の実戦処理を使う品質回帰', () => {
     const destroy = privateValue<(enemy: unknown) => void>(scene, 'handleEnemyDestroyed').bind(scene);
     enemy.active = false;
     destroy(enemy);
-    expect(cues).toContain('defeat');
+    expect(cues).toContain('defeat:shard');
+  });
+
+  it('敵種ごとに固有の撃破音キューを発行する', () => {
+    const cues: string[] = [];
+    const scene = new moduleUnderTest.BattleScene(options({ stageId: 'endless', callbacks: {
+      onStatus() {}, onUpgrade() {}, onFinish() {}, onSnapshot() {}, onPauseRequest() {},
+      onAudioCue: (cue: string) => cues.push(cue),
+    } }));
+    const destroy = privateValue<(enemy: unknown) => void>(scene, 'handleEnemyDestroyed').bind(scene);
+    const enemyTypes = ['shard', 'runner', 'shell', 'lattice', 'spore', 'marker', 'dropper', 'phase', 'charger', 'guard', 'repair', 'factory'];
+    const bossTypes = ['crown', 'designer', 'echo', 'gate', 'weaver', 'reactor'];
+    [...enemyTypes, ...bossTypes].forEach((type, index) => {
+      const enemy = new moduleUnderTest.Enemy(index + 1, type, 0, 300) as Record<string, number | boolean>;
+      enemy.active = false;
+      destroy(enemy);
+    });
+    expect(new Set(cues)).toEqual(new Set([...enemyTypes, ...bossTypes].map((type) => `defeat:${type}`)));
   });
 
   it('スナップショットに通常・無限の時間種別を持たせる', () => {
