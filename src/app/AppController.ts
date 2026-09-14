@@ -473,7 +473,17 @@ export class AppController {
       } else {
         choose.setAttribute('aria-disabled', 'true');
         choose.title = '装着する面を下から選んでください';
-        card.append(createPlacementPreview(this.latestBattleSnapshot, { kind: candidate.kind === 'support' ? 'support' : 'weapon', slots: candidate.placementSlots }));
+        const placementKind = candidate.kind === 'support' ? 'support' : 'weapon';
+        const placementButtons = new Map<number, HTMLButtonElement>();
+        const placementDetails = new Map<number, HTMLDetailsElement>();
+        card.append(createPlacementPreview(this.latestBattleSnapshot, {
+          kind: placementKind,
+          slots: candidate.placementSlots,
+          onNodeSelect: (_kind, slot) => {
+            const placement = placementButtons.get(slot);
+            if (placement && !placement.disabled) placement.click();
+          },
+        }));
         card.append(element('p', 'upgrade-details upgrade-slot-hint', '見本で場所を確認し、下のボタンで装着します。'));
         const placementList = element('div', 'upgrade-placement-list');
         const replacementConfirm = element('div', 'upgrade-replacement-confirmation');
@@ -489,6 +499,13 @@ export class AppController {
           placement.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(placement); });
           placement.addEventListener('click', () => {
             if (locked) return;
+            const detail = placementDetails.get(slot);
+            if (detail) {
+              detail.open = true;
+              window.setTimeout(() => {
+                if (detail.isConnected) detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 0);
+            }
             if (target) {
               replacementConfirm.replaceChildren(element('p', 'upgrade-details', `${targetName} Lv${target.level}を外し、新しい装備をLv${resultingLevel}で置きます。元の分岐と発展は引き継ぎません。`));
               const options = resultingLevel >= 3 && candidate.kind === 'weapon' ? candidate.replacementBranchOptions ?? [] : [];
@@ -517,6 +534,7 @@ export class AppController {
             locked = true;
             this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot }, selectionId, runId);
           });
+          placementButtons.set(slot, placement);
           selectionButtons.push(placement);
           placementList.append(placement);
           if (candidate.kind === 'support') {
@@ -524,7 +542,9 @@ export class AppController {
             const connection = element('p', 'upgrade-connection', `${placementLabel('support', slot)}の接続：${help.connections.join('／')}`);
             placementList.append(connection);
             const details = element('details', 'upgrade-help-details');
+            details.dataset.slot = String(slot);
             details.append(element('summary', '', 'この場所で働く効果・組み合わせ'), renderEquipmentHelp(help));
+            placementDetails.set(slot, details);
             placementList.append(details);
           } else if (candidate.kind === 'weapon') {
             const help = getWeaponHelp({ id: candidate.targetId as WeaponId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel, damageDealt: 0, branch: null, finalBranch: null, evolutionId: null }, this.latestBattleSnapshot?.supports, this.latestBattleSnapshot?.weapons);
@@ -532,6 +552,7 @@ export class AppController {
             const details = element('details', 'upgrade-help-details');
             details.dataset.slot = String(slot);
             details.append(element('summary', '', 'この場所で働く効果・組み合わせ'), renderEquipmentHelp(help));
+            placementDetails.set(slot, details);
             placementList.append(details);
           }
         }
@@ -693,7 +714,7 @@ export class AppController {
     dialog.append(pauseMenu, pauseView); layer.append(dialog); shell.append(layer);
     this.trapFocus(dialog);
     if (initialView === 'loadout') {
-      this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle, runId);
+      this.showPauseLoadout(pauseMenu, pauseView, showMenu, resumeBattle, runId, false);
       window.setTimeout(() => pauseView.querySelector<HTMLElement>('.placement-preview-summary')?.focus(), 0);
     } else {
       window.setTimeout(() => resume.focus(), 0);
@@ -709,7 +730,7 @@ export class AppController {
     view.append(copy);
   }
 
-  private showPauseLoadout(menu: HTMLElement, view: HTMLElement, back: () => void, resume: () => void, runId: number): void {
+  private showPauseLoadout(menu: HTMLElement, view: HTMLElement, back: () => void, resume: () => void, runId: number, showBack = true): void {
     menu.hidden = true;
     view.hidden = false;
     view.replaceChildren();
@@ -720,21 +741,35 @@ export class AppController {
     if (!snapshot) copy.append(createPlacementPreview(snapshot));
     if (snapshot) {
       const equipmentDetails = element('details', 'loadout-help');
+      const equipmentByPlacement = new Map<string, HTMLDetailsElement>();
+      const openEquipment = (kind: 'weapon' | 'support', slot: number): void => {
+        const details = equipmentByPlacement.get(`${kind}:${slot}`);
+        if (!details) return;
+        equipmentDetails.open = true;
+        details.open = true;
+        window.setTimeout(() => {
+          if (details.isConnected) details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 0);
+      };
       const previewSummary = element('summary', 'placement-preview-summary');
       previewSummary.dataset.testid = 'placement-preview-toggle';
       previewSummary.append(
-        createPlacementPreview(snapshot),
+        createPlacementPreview(snapshot, { onNodeSelect: openEquipment }),
         element('p', 'placement-detail-hint', '配置図を押すと、装備の効果・接続・相乗効果を確認できます。'),
       );
       equipmentDetails.append(previewSummary);
       for (const weapon of snapshot.weapons) {
-        const details = element('details', 'equipment-help-details');
+        const details = element('details', 'equipment-help-details equipment-weapon');
+        details.dataset.placement = `weapon:${weapon.slot}`;
         details.append(element('summary', '', `${placementLabel('weapon', weapon.slot)}：${this.weaponName(weapon.id)} Lv${weapon.level}`), renderEquipmentHelp(getWeaponHelp(weapon, snapshot.supports, snapshot.weapons)));
+        equipmentByPlacement.set(`weapon:${weapon.slot}`, details);
         equipmentDetails.append(details);
       }
       for (const support of snapshot.supports) {
-        const details = element('details', 'equipment-help-details');
+        const details = element('details', 'equipment-help-details equipment-support');
+        details.dataset.placement = `support:${support.slot}`;
         details.append(element('summary', '', `${placementLabel('support', support.slot)}：${this.supportName(support.id)} Lv${support.level}`), renderEquipmentHelp(getSupportHelp(support, snapshot.weapons)));
+        equipmentByPlacement.set(`support:${support.slot}`, details);
         equipmentDetails.append(details);
       }
       copy.append(equipmentDetails);
@@ -759,7 +794,7 @@ export class AppController {
       const controls = element('div', 'loadout-controls');
       controls.append(element('h4', '', '位置を入れ替える（停止中のみ）'));
       controls.append(element('p', 'battle-help', '①動かす装備 → ②移動先 → ③確定の順で選びます。武器は武器の面、補助は補助の面へ動かせます。レベルは変わりません。別の種類への交換は、レベルアップの候補で行います。'));
-      const refresh = (): void => this.showPauseLoadout(menu, view, back, resume, runId);
+      const refresh = (): void => this.showPauseLoadout(menu, view, back, resume, runId, showBack);
       const destination = element('div', 'loadout-destination');
       for (const item of installed) {
         const row = element('div', 'loadout-control-row');
@@ -803,7 +838,7 @@ export class AppController {
       controls.append(destination);
       copy.append(controls);
     }
-    this.appendPauseViewActions(copy, back, resume);
+    this.appendPauseViewActions(copy, showBack ? back : undefined, resume);
     view.append(copy);
   }
 
@@ -825,13 +860,16 @@ export class AppController {
     view.append(box);
   }
 
-  private appendPauseViewActions(container: HTMLElement, back: () => void, resume: () => void): void {
-    const actions = element('div', 'pause-view-actions');
-    const backButton = button('一時停止へ戻る', 'button button-secondary');
-    backButton.addEventListener('click', back);
+  private appendPauseViewActions(container: HTMLElement, back: (() => void) | undefined, resume: () => void): void {
+    const actions = element('div', back ? 'pause-view-actions' : 'pause-view-actions pause-view-actions-single');
+    if (back) {
+      const backButton = button('一時停止へ戻る', 'button button-secondary');
+      backButton.addEventListener('click', back);
+      actions.append(backButton);
+    }
     const resumeButton = button('再開', 'button button-primary');
     resumeButton.addEventListener('click', resume);
-    actions.append(backButton, resumeButton);
+    actions.append(resumeButton);
     container.append(actions);
   }
 

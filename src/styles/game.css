@@ -171,59 +171,79 @@
 .modal-copy { color: #b3cbd5; overflow-wrap: anywhere; }
 .upgrade-pending { margin: 0; color: #fff1a8; font-weight: 750; }
 .upgrade-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
-.upgrade-card { display: flex; min-width: 0; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #376a80; border-radius: 14px; background: #07131f; }
+.upgrade-card { display: flex; min-width: 0; flex-direction: column; gap: 0; padding: 0; overflow: hidden; border: 2px solid #376a80; border-radius: 16px; background: #07131f; }
 .upgrade-choice { width: 100%; min-height: 56px; padding: 10px; border: 1px solid #63d7e6; border-radius: 10px; color: #f2f0e8; background: #123044; font-weight: 800; text-align: left; overflow-wrap: anywhere; }
-.upgrade-choice:not(:disabled), .upgrade-placement:not(:disabled), .upgrade-replacement-confirmation .button:not(:disabled), .placement-confirm-area .button:not(:disabled) {
-  border-bottom-width: 4px;
-  box-shadow: 0 3px 0 rgba(2, 10, 17, .72);
-  transition: transform .12s ease, box-shadow .12s ease, background .18s ease, border-color .18s ease;
-}
-.upgrade-choice:not(:disabled):hover, .upgrade-placement:not(:disabled):hover, .upgrade-replacement-confirmation .button:not(:disabled):hover, .placement-confirm-area .button:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 0 rgba(2, 10, 17, .72);
-}
-.upgrade-choice:not(:disabled):active, .upgrade-placement:not(:disabled):active, .upgrade-replacement-confirmation .button:not(:disabled):active, .placement-confirm-area .button:not(:disabled):active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 rgba(2, 10, 17, .72);
-}
+.upgrade-choice:not(:disabled), .upgrade-placement:not(:disabled), .upgrade-replacement-confirmation .button:not(:disabled), .placement-confirm-area .button:not(:disabled) { border-bottom-width: 4px; box-shadow: 0 3px 0 rgba(2, 10, 17, .72); transition: transform .12s ease, box-shadow .12s ease, background .18s ease, border-color .18s ease; }
+.upgrade-choice:not(:disabled):hover, .upgrade-placement:not(:disabled):hover, .upgrade-replacement-confirmation .button:not(:disabled):hover, .placement-confirm-area .button:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 0 rgba(2, 10, 17, .72); }
+.upgrade-choice:not(:disabled):active, .upgrade-placement:not(:disabled):active, .upgrade-replacement-confirmation .button:not(:disabled):active, .placement-confirm-area .button:not(:disabled):active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(2, 10, 17, .72); }
+.upgrade-choice:focus-visible, .upgrade-placement:focus-visible, .placement-confirm-area .button:focus-visible { outline: 3px solid #fff1a8; outline-offset: 2px; }
 .upgrade-choice[aria-disabled="true"] { border-color: #376a80; color: #b3cbd5; background: #0b2130; cursor: default; }
-.upgrade-description, .upgrade-change, .upgrade-role, .upgrade-details { margin: 0; font-size: .875rem; overflow-wrap: anywhere; }
-.upgrade-description { color: #d8e7e9; }
-.upgrade-change { color: #63d7e6; font-weight: 750; }
-.upgrade-role { margin-top: auto; color: #9db9c7; }
-.upgrade-details { color: #fff1a8; }
+.upgrade-card > .upgrade-category { margin: 0; padding: 10px 12px; color: #8de5f1; background: rgba(21, 69, 87, .72); border-bottom: 1px solid rgba(99, 215, 230, .35); font-size: .875rem; font-weight: 800; }
+.upgrade-card > .synergy-tags { padding: 8px 12px; background: rgba(10, 31, 44, .82); border-bottom: 1px solid rgba(99, 215, 230, .2); }
+.upgrade-card > .upgrade-choice { width: calc(100% - 24px); margin: 12px 12px 0; }
+.upgrade-card > .upgrade-description, .upgrade-card > .upgrade-change, .upgrade-card > .upgrade-role, .upgrade-card > .upgrade-details { margin: 10px 12px 0; }
+.upgrade-description, .upgrade-change, .upgrade-role, .upgrade-details { font-size: .875rem; overflow-wrap: anywhere; }
+.upgrade-description { padding: 9px 10px; border-left: 4px solid #63d7e6; border-radius: 8px; color: #d8e7e9; background: #102b3b; }
+.upgrade-change { padding: 9px 10px; border: 1px solid rgba(99, 215, 230, .55); border-radius: 8px; color: #8de5f1; background: #0d4050; font-weight: 800; }
+.upgrade-role { padding: 8px 10px; border-top: 1px solid rgba(96, 122, 141, .45); color: #c3d7dc; background: rgba(11, 33, 48, .72); }
+.upgrade-details { padding: 8px 10px; border-left: 4px solid #ffdb9a; border-radius: 8px; color: #fff1a8; background: #2b291d; }
+.upgrade-card > .upgrade-slot-hint { margin: 10px 12px 0; }
+.upgrade-card > .placement-preview { width: calc(100% - 24px); margin: 12px 12px 0; }
+.upgrade-card > .upgrade-placement-list { margin: 10px 12px 0; }
+.upgrade-card > .upgrade-replacement-confirmation { margin: 10px 12px 0; }
+.upgrade-card > .upgrade-ban { width: calc(100% - 24px); margin: 10px 12px 12px; }
 .synergy-tags { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0; }
 .synergy-tags-label { flex: 0 0 auto; color: #9db9c7; font-size: .75rem; font-weight: 750; }
 .synergy-tag-list { display: flex; min-width: 0; flex-wrap: wrap; gap: 5px; }
 .synergy-tag { display: inline-flex; min-height: 24px; align-items: center; padding: 2px 7px; border: 1px solid var(--synergy-tag-color, #607a8d); border-radius: 999px; color: var(--synergy-tag-color, #d8e7e9); background: #102433; font-size: .75rem; font-weight: 800; line-height: 1.25; white-space: nowrap; }
 .upgrade-slot-hint { font-weight: 700; }
-.upgrade-placement-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: auto; }
+.upgrade-placement-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .upgrade-kind-weapon, .equipment-weapon { border-color: #63d7e6; background: #0b2939; }
 .upgrade-kind-support, .equipment-support { border-color: #efc56a; background: #312a19; }
 .upgrade-kind-support .upgrade-choice { border-color: #efc56a; background: #42361f; }
 .upgrade-kind-support .upgrade-change, .upgrade-kind-support .upgrade-category { color: #ffe1a0; }
+.upgrade-kind-support .upgrade-description { border-left-color: #efc56a; background: #3a301e; }
+.upgrade-kind-support .equipment-help { border-color: #efc56a; }
 .upgrade-category { margin: 0; color: #8de5f1; font-size: .875rem; font-weight: 750; }
 .upgrade-tools-help { color: #d8e7e9; font-size: .9rem; line-height: 1.6; }
-.upgrade-connection { margin: 0 0 8px; font-size: .875rem; line-height: 1.6; color: #e6d7ab; overflow-wrap: anywhere; }
-.upgrade-help-details summary, .loadout-help summary, .equipment-help-details summary { min-height: 48px; padding: 10px 4px; cursor: pointer; color: #f2f0e8; overflow-wrap: anywhere; }
-.equipment-help { padding: 10px; border: 1px solid #607a8d; border-radius: 10px; line-height: 1.6; overflow-wrap: anywhere; }
-.equipment-help h4, .equipment-help h5 { margin: 10px 0 4px; }
-.equipment-help-list { padding-left: 1.2em; margin: 4px 0 10px; }
-.placement-preview { margin: 10px 0; min-width: 0; padding: 10px; border: 1px solid #607a8d; border-radius: 12px; background: #07131f; }
-.loadout-help summary.placement-preview-summary { min-height: 0; padding: 0; list-style: none; }
+.upgrade-connection { margin: 0 0 8px; padding: 8px 10px; border-left: 3px solid #efc56a; border-radius: 6px; color: #e6d7ab; background: rgba(66, 54, 31, .48); font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+.upgrade-help-details, .equipment-help-details { margin-top: 10px; border: 1px solid #607a8d; border-radius: 12px; background: #081a27; overflow: hidden; scroll-margin-top: 16px; }
+.upgrade-help-details summary, .loadout-help summary, .equipment-help-details summary { min-height: 48px; padding: 10px 12px; cursor: pointer; color: #f2f0e8; background: #122f40; font-weight: 800; overflow-wrap: anywhere; }
+.upgrade-help-details[open] > summary, .equipment-help-details[open] > summary { border-bottom: 1px solid rgba(96, 122, 141, .55); }
+.equipment-help { padding: 0; border: 1px solid #607a8d; border-radius: 10px; line-height: 1.6; background: #0b2130; overflow: hidden; }
+.equipment-help-title { margin: 0 !important; padding: 10px 12px; color: #f2f0e8; background: #164359; border-bottom: 1px solid rgba(99, 215, 230, .45); font-size: 1rem; }
+.equipment-help-role, .equipment-help-summary, .equipment-help-current { margin: 0 !important; padding: 9px 12px; border-bottom: 1px solid rgba(96, 122, 141, .35); }
+.equipment-help-role { color: #b8d4dc; background: #102b3b; }
+.equipment-help-summary { color: #f2f0e8; background: #153c4d; font-weight: 700; }
+.equipment-help-current { color: #d8e7e9; background: #0d2937; }
+.equipment-help > .synergy-tags { padding: 8px 12px; border-bottom: 1px solid rgba(96, 122, 141, .35); background: #102433; }
+.equipment-help-section { margin: 0; padding: 10px 12px 8px; border-top: 1px solid rgba(96, 122, 141, .35); background: #0b2130; }
+.equipment-help-section h5 { margin: 0 0 5px; color: #8de5f1; font-size: .8rem; letter-spacing: .04em; }
+.equipment-help-section[data-section="conditions"] { border-left: 4px solid #ffdb9a; background: #2b291d; }
+.equipment-help-section[data-section="connections"] { border-left: 4px solid #78a8ff; background: #102840; }
+.equipment-help-section[data-section="synergies"] { border-left: 4px solid #ff8bd8; background: #2b1830; }
+.equipment-help-section[data-section="limits"] { border-left: 4px solid #ff8f70; background: #321f22; }
+.equipment-help-list { padding-left: 1.2em; margin: 4px 0 2px; }
+.loadout-help { border: 1px solid #376a80; border-radius: 14px; background: #081a27; overflow: hidden; }
+.loadout-help summary.placement-preview-summary { min-height: 0; padding: 0; list-style: none; background: transparent; }
 .loadout-help summary.placement-preview-summary::-webkit-details-marker { display: none; }
-.placement-preview-summary .placement-preview { margin: 0; }
-.placement-detail-hint { margin: 8px 4px 0; color: #ffdb9a; font-size: .875rem; line-height: 1.5; }
+.placement-preview-summary .placement-preview { margin: 0; border: 0; border-radius: 0; }
+.placement-detail-hint { margin: 8px 12px 12px; padding: 8px 10px; border-left: 3px solid #ffdb9a; border-radius: 6px; color: #ffdb9a; background: #2b291d; font-size: .875rem; line-height: 1.5; }
 .placement-caption { font-size: .9rem; color: #f2f0e8; font-weight: 700; }
+.placement-preview { margin: 10px 0; min-width: 0; padding: 10px; border: 1px solid #607a8d; border-radius: 12px; background: #07131f; }
 .placement-preview svg { display: block; width: min(100%, 340px); height: auto; margin: 0 auto; }
 .placement-spoke { stroke: #456075; stroke-width: 3; }
 .placement-connection { stroke: #d9af56; stroke-width: 3; opacity: 0.65; }
 .upgrade-replacement-confirmation:empty { display: none; }
 .upgrade-replacement-confirmation { display: grid; gap: 0.6rem; padding-top: 0.8rem; }
 .placement-node rect { fill: #18384a; stroke: #63d7e6; stroke-width: 4; }
-.placement-node text { fill: #f2f0e8; font-size: 27px; font-weight: 750; }
+.placement-node text { fill: #f2f0e8; font-size: 27px; font-weight: 750; pointer-events: none; }
 .placement-support rect { fill: #42361f; stroke: #efc56a; }
-.placement-node:not(.placement-available) { opacity: .6; }
+.placement-node:not(.placement-available) { opacity: .34; filter: saturate(.35); }
+.placement-node.placement-empty { opacity: .24; filter: saturate(.2) brightness(.7); }
+.placement-node.placement-interactive.placement-empty { opacity: .58; filter: saturate(.65); cursor: pointer; }
+.placement-node.placement-interactive { cursor: pointer; }
+.placement-interactive:focus rect { stroke: #fff1a8; stroke-width: 7; }
 .placement-selected rect { stroke: white; stroke-width: 9; }
 .placement-core { fill: #f2f0e8; font-size: 30px; }
 .placement-legend { margin: 0; font-size: .875rem; line-height: 1.55; color: #d8e7e9; }
@@ -237,11 +257,13 @@
 .pause-menu > .button { display: block; width: 100%; margin-top: 10px; text-align: center; }
 .pause-view { min-width: 0; }
 .pause-view-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.pause-view-actions-single { grid-template-columns: 1fr; }
 .pause-view-actions .button { width: 100%; }
 .pause-rules { margin-top: 14px; padding: 14px; border: 1px solid #376a80; border-radius: 12px; }
 .pause-rules h3 { margin-bottom: 8px; }
 .pause-rules p { color: #c3d7dc; }
 .pause-loadout .button { display: block; width: 100%; margin-top: 10px; text-align: center; }
+.equipment-help-details { margin-inline: 12px; }
 .loadout-controls { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(55, 106, 128, .45); }
 .loadout-controls h4 { margin: 0 0 6px; }
 .loadout-control-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; padding: 9px 0; border-top: 1px solid rgba(55, 106, 128, .3); }
@@ -270,7 +292,7 @@
   .battle-help { display: none; }
   .aim-state, .battle-status { min-height: 20px; margin-top: 2px; font-size: .875rem; line-height: 1.3; }
   .upgrade-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .upgrade-card { min-height: 0; padding: 8px; gap: 6px; }
+  .upgrade-card { min-height: 0; padding: 0; gap: 0; }
   .upgrade-choice { min-height: 64px; padding: 7px 6px; font-size: .78rem; }
   .upgrade-description, .upgrade-change, .upgrade-role, .upgrade-details { font-size: .75rem; line-height: 1.3; }
   .synergy-tag { min-height: 22px; padding: 2px 5px; font-size: .7rem; }
@@ -282,7 +304,7 @@
    together; the dialog itself remains scrollable when the text is enlarged. */
 @media (max-width: 560px) {
   .upgrade-list { grid-template-columns: 1fr; gap: 10px; }
-  .upgrade-card { padding: 12px; }
+  .upgrade-card { padding: 0; }
   .upgrade-choice { min-height: 52px; font-size: .95rem; }
   .upgrade-description, .upgrade-change, .upgrade-role, .upgrade-details { font-size: .875rem; line-height: 1.45; }
   /* Keep each placement's action, connection summary, and detail disclosure

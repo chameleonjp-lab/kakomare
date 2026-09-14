@@ -546,17 +546,18 @@ export function renderEquipmentHelp(help: EquipmentHelp): HTMLElement {
   card.append(renderSynergyTags(help.tags));
   card.append(element('p', 'equipment-help-summary', help.summary));
   card.append(element('p', 'equipment-help-current', help.current));
-  appendSection(card, 'いまの動き', help.effects);
-  appendSection(card, '発動条件', help.conditions);
-  appendSection(card, '接続', help.connections);
-  appendSection(card, '相乗効果', help.synergies);
-  appendSection(card, '制約', help.limits);
+  appendSection(card, 'effects', 'いまの動き', help.effects);
+  appendSection(card, 'conditions', '発動条件', help.conditions);
+  appendSection(card, 'connections', '接続', help.connections);
+  appendSection(card, 'synergies', '相乗効果', help.synergies);
+  appendSection(card, 'limits', '制約', help.limits);
   return card;
 }
 
-function appendSection(parent: HTMLElement, title: string, lines: readonly string[]): void {
+function appendSection(parent: HTMLElement, key: string, title: string, lines: readonly string[]): void {
   if (lines.length === 0) return;
   const section = element('section', 'equipment-help-section');
+  section.dataset.section = key;
   section.append(element('h5', '', title));
   const list = element('ul', 'equipment-help-list');
   for (const line of lines) list.append(element('li', '', line));
