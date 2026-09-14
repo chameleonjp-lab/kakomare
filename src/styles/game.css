@@ -167,6 +167,10 @@
 .upgrade-change { color: #63d7e6; font-weight: 750; }
 .upgrade-role { margin-top: auto; color: #9db9c7; }
 .upgrade-details { color: #fff1a8; }
+.synergy-tags { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0; }
+.synergy-tags-label { flex: 0 0 auto; color: #9db9c7; font-size: .75rem; font-weight: 750; }
+.synergy-tag-list { display: flex; min-width: 0; flex-wrap: wrap; gap: 5px; }
+.synergy-tag { display: inline-flex; min-height: 24px; align-items: center; padding: 2px 7px; border: 1px solid var(--synergy-tag-color, #607a8d); border-radius: 999px; color: var(--synergy-tag-color, #d8e7e9); background: #102433; font-size: .75rem; font-weight: 800; line-height: 1.25; white-space: nowrap; }
 .upgrade-slot-hint { font-weight: 700; }
 .upgrade-placement-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: auto; }
 .upgrade-kind-weapon, .equipment-weapon { border-color: #63d7e6; background: #0b2939; }
@@ -241,6 +245,7 @@
   .upgrade-card { min-height: 0; padding: 8px; gap: 6px; }
   .upgrade-choice { min-height: 64px; padding: 7px 6px; font-size: .78rem; }
   .upgrade-description, .upgrade-change, .upgrade-role, .upgrade-details { font-size: .75rem; line-height: 1.3; }
+  .synergy-tag { min-height: 22px; padding: 2px 5px; font-size: .7rem; }
   .upgrade-card .button-small { min-height: 48px; padding: 6px 4px; font-size: .75rem; }
 }
 

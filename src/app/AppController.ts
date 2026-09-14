@@ -22,6 +22,7 @@ import { getResearchEffects } from '../data/research';
 import { STAGES } from '../data/stages';
 import { SUPPORTS } from '../data/supports';
 import { WEAPONS } from '../data/weapons';
+import { supportSynergyTags, weaponSynergyTags } from '../data/synergyTags';
 import type { StageId, SupportId, WeaponId } from '../types/content';
 import type { RankingSnapshot } from '../types/ranking';
 import type { RunSaveEnvelope } from '../types/runSave';
@@ -29,6 +30,7 @@ import { isLocalTestHost } from './testMode';
 import { RunLifecycleGuard } from './RunLifecycleGuard';
 import { MAX_DEVICE_SLOT_COUNT, DEVICE_SLOT_COUNT, itemAtExpandedSlot } from '../game/deviceLayout';
 import { COMPETITIVE_RULES } from '../data/competitiveRules';
+import { renderSynergyTags } from '../ui/SynergyTags';
 
 const FIRST_CLEAR_PART_BONUS = 25;
 
@@ -458,7 +460,14 @@ export class AppController {
       description.id = `upgrade-description-${candidateIndex}`;
       const change = element('p', 'upgrade-change', `${candidate.before} → ${candidate.after}`);
       change.id = `upgrade-change-${candidateIndex}`;
-      card.append(element('p', 'upgrade-category', candidate.kind === 'weapon' ? '武器｜敵を攻撃する' : candidate.kind === 'support' ? '補助｜接続した武器を助ける' : 'コア・配置の強化'), choose, description, change, element('p', 'upgrade-role', `得意: ${candidate.role}`));
+      const tagIds = candidate.kind === 'weapon'
+        ? weaponSynergyTags(candidate.targetId as WeaponId).map((tag) => tag.id)
+        : candidate.kind === 'support'
+          ? supportSynergyTags(candidate.targetId as SupportId).map((tag) => tag.id)
+          : [];
+      card.append(element('p', 'upgrade-category', candidate.kind === 'weapon' ? '武器｜敵を攻撃する' : candidate.kind === 'support' ? '補助｜接続した武器を助ける' : 'コア・配置の強化'));
+      if (tagIds.length > 0) card.append(renderSynergyTags(tagIds));
+      card.append(choose, description, change, element('p', 'upgrade-role', `得意: ${candidate.role}`));
       if (candidate.isExisting) {
         const snapshot = this.latestBattleSnapshot;
         const weapon = snapshot?.weapons.find((item) => candidate.targetInstanceId ? item.instanceId === candidate.targetInstanceId : item.id === candidate.targetId);
