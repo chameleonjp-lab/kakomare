@@ -354,9 +354,9 @@ test('縦横とデスクトップの戦闘画面が表示領域に収まり、�
       '.arena-column',
       '.battle-canvas-shell',
       '.aim-state',
-      '.battle-status',
       '.battle-panel',
       '.battle-hud',
+      '.battle-loadout-button',
     ];
     for (const selector of requiredSelectors) {
       await expect(page.locator(selector), `${viewport.width}x${viewport.height}: ${selector} が1件存在する`).toHaveCount(1);
@@ -396,12 +396,11 @@ test('縦横とデスクトップの戦闘画面が表示領域に収まり、�
         arena: rect('.arena-column'),
         canvas: rect('.battle-canvas-shell'),
         aim: rect('.aim-state'),
-        status: rect('.battle-status'),
         panel: rect('.battle-panel'),
+        loadoutButton: rect('.battle-loadout-button'),
         normalFontSizes: [
           fontSize('.battle-header .eyebrow'),
           fontSize('.aim-state'),
-          fontSize('.battle-status'),
           fontSize('.hud-label'),
           fontSize('.build-panel h2'),
           fontSize('.build-list'),
@@ -429,7 +428,8 @@ test('縦横とデスクトップの戦闘画面が表示領域に収まり、�
     expect(metrics.canvas.left).toBeGreaterThanOrEqual(metrics.arena.left - 1);
     expect(Math.abs(metrics.canvas.width - metrics.canvas.height)).toBeLessThanOrEqual(2);
     expect(metrics.aim.bottom).toBeLessThanOrEqual(metrics.arena.bottom + 1);
-    expect(metrics.status.bottom).toBeLessThanOrEqual(metrics.arena.bottom + 1);
+    expect(metrics.loadoutButton.top).toBeGreaterThanOrEqual(metrics.panel.top - 1);
+    expect(metrics.loadoutButton.right).toBeLessThanOrEqual(metrics.panel.right + 1);
     expect(metrics.panel.top).toBeGreaterThanOrEqual(metrics.layout.top - 1);
     expect(metrics.panel.right).toBeLessThanOrEqual(metrics.layout.right + 1);
     expect(metrics.panel.bottom).toBeLessThanOrEqual(metrics.layout.bottom + 1);
@@ -459,7 +459,7 @@ test('320x480でも戦場を優先し、装置一覧は一時停止から確認�
   await enterBattle(page);
   await expect(page.locator('.build-panel')).toBeHidden();
   await page.getByTestId('pause-button').click();
-  await page.getByRole('button', { name: '装置を確認' }).click();
+  await page.getByRole('button', { name: '装置を確認する' }).click();
   await expect(page.getByTestId('pause-loadout')).toContainText('連針砲 Lv1');
   const metrics = await page.evaluate(() => {
     const measure = (selector: string): { top: number; bottom: number; height: number } => {
@@ -513,7 +513,7 @@ test('320x568で文字を200%相当に拡大しても戦闘操作を画面内に
         layout: rect('.battle-layout').toJSON(),
         header: rect('.battle-header').toJSON(),
         pause: rect('.pause-button').toJSON(),
-        pending: rect('.pending-upgrade-button').toJSON(),
+        pending: rect('.battle-loadout-button').toJSON(),
         canvas: rect('.battle-canvas-shell').toJSON(),
         innerCanvas: rect('.game-mount canvas').toJSON(),
         canvasShellClientWidth: canvasShell.clientWidth,
@@ -687,20 +687,24 @@ async function chooseV0Upgrade(page: Page): Promise<void> {
 async function deferV0Upgrades(page: Page): Promise<void> {
   for (let count = 0; count < 3; count += 1) await chooseV0Upgrade(page);
   await page.getByRole('button', { name: '残りを保留して戦闘へ戻る' }).click();
-  await expect(page.getByTestId('pending-upgrade-button')).toBeEnabled();
+  await page.getByTestId('battle-loadout-button').click();
+  await expect(page.getByTestId('pending-upgrade-from-loadout')).toBeVisible();
+  await page.getByRole('button', { name: '一時停止へ戻る', exact: true }).click();
+  await page.getByTestId('resume-button').click();
+  await expect(page.getByTestId('battle-loadout-button')).toBeVisible();
 }
 
 test('P16-01/03: 154経験値の保留を追加撃破なしに画面ボタンで再開し連打しても一度だけ消費する', async ({ page }) => {
   await enterBattle(page, '?test=1&upgrade=1&testXp=154&seed=123');
   await deferV0Upgrades(page);
-  const pending = page.getByTestId('pending-upgrade-button');
-  await expect(pending).toHaveAccessibleName('強化を選ぶ（1回）');
+  await page.getByTestId('battle-loadout-button').click();
+  const pending = page.getByTestId('pending-upgrade-from-loadout');
+  await expect(pending).toHaveAccessibleName('保留中の強化を選ぶ（1回）');
   await expect(page.locator('.upgrade-layer')).toHaveCount(0);
   await pending.evaluate((button) => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   await expect(page.locator('.upgrade-layer')).toHaveCount(1);
   await chooseV0Upgrade(page);
-  await expect(pending).toHaveAccessibleName('強化を選ぶ（0回）');
-  await expect(pending).toBeDisabled();
+  await expect(page.getByTestId('battle-loadout-button')).toBeVisible();
   await expect(page.getByTestId('hud-level')).toContainText('5');
   await expect(page.getByTestId('hud-xp')).toContainText('0 / 61');
   await expect(page.locator('.resume-layer, .pause-layer')).toHaveCount(0);
@@ -750,11 +754,12 @@ test('P16-07: 保留から構成・停止・再開・強化・終了を画面操
   await enterBattle(page, '?test=1&upgrade=1&testXp=154&seed=123');
   await deferV0Upgrades(page);
   await page.getByTestId('pause-button').click();
-  await page.getByRole('button', { name: '装置を確認', exact: true }).click();
+  await page.getByRole('button', { name: '装置を確認する', exact: true }).click();
   await expect(page.getByTestId('pause-loadout')).toBeVisible();
   await page.getByRole('button', { name: '一時停止へ戻る', exact: true }).click();
   await page.getByTestId('resume-button').click();
-  await page.getByTestId('pending-upgrade-button').click();
+  await page.getByTestId('battle-loadout-button').click();
+  await page.getByTestId('pending-upgrade-from-loadout').click();
   await chooseV0Upgrade(page);
   await page.getByTestId('pause-button').click();
   page.once('dialog', (dialog) => void dialog.accept());
@@ -766,20 +771,23 @@ test('P16-07: 保留から構成・停止・再開・強化・終了を画面操
 test('V3/A09: 停止中の装置確認から同種の空き面へ移設できる', async ({ page }) => {
   await enterBattle(page);
   await page.getByTestId('pause-button').click();
-  await page.getByRole('button', { name: '装置を確認', exact: true }).click();
+  await page.getByRole('button', { name: '装置を確認する', exact: true }).click();
   const loadout = page.getByTestId('pause-loadout');
   await expect(loadout).toBeVisible();
-  await expect(loadout).toContainText('武器面1: 連針砲 Lv1');
+  await expect(loadout).toContainText('武器面1（内側・上）：連針砲 Lv1');
 
   await expect(loadout.getByTestId('placement-preview').first()).toBeVisible();
+  await expect(loadout.locator('.loadout-help')).not.toHaveAttribute('open', '');
+  await loadout.getByTestId('placement-preview-toggle').click();
+  await expect(loadout.locator('.loadout-help')).toHaveAttribute('open', '');
   const move = loadout.getByTestId('placement-source').first();
   await expect(move).toBeEnabled();
   await move.click();
   await loadout.locator('[data-testid="placement-destination"][data-slot="1"]').click();
   await expect(loadout).toContainText('レベルは変わりません');
   await loadout.getByTestId('placement-confirm').click();
-  await expect(loadout).toContainText('武器面2: 連針砲 Lv1');
-  await expect(loadout).not.toContainText('武器面1: 連針砲 Lv1');
+  await expect(loadout).toContainText('武器面2（内側・右下）：連針砲 Lv1');
+  await expect(loadout).not.toContainText('武器面1（内側・上）：連針砲 Lv1');
 
   await page.getByRole('button', { name: '一時停止へ戻る', exact: true }).click();
   await page.getByTestId('resume-button').click();
@@ -790,7 +798,7 @@ test('P16-01: test指定なしの画面では経験値注入を有効にしな�
   await enterBattle(page, '?upgrade=1&testXp=154&seed=123&fullLoadout=1');
   await page.waitForTimeout(1000);
   await expect(page.locator('.upgrade-layer')).toHaveCount(0);
-  await expect(page.getByTestId('pending-upgrade-button')).toBeDisabled();
+  await expect(page.getByTestId('battle-loadout-button')).toBeVisible();
   await expect(page.getByTestId('build-list')).not.toContainText('補助面');
 });
 
@@ -845,7 +853,7 @@ test('満枠でも武器を選び、番号見本と交換後Lv3・分岐を確�
   await expect(page.getByTestId('build-list')).not.toContainText('武器面1: 連針砲');
   await expect(page.getByTestId('hud-level')).toContainText('Lv2');
   await page.getByTestId('pause-button').click();
-  await page.getByRole('button', { name: '装置を確認', exact: true }).click();
+  await page.getByRole('button', { name: '装置を確認する', exact: true }).click();
   await expect(page.getByTestId('pause-loadout').getByTestId('placement-preview').first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('numbered-placement.png'), fullPage: true });
 });
@@ -885,10 +893,10 @@ test('P16-03/07: 3回の再戦で前プレイの保留・停止ボタンが現�
       saved.oldV0Pause?.click();
     });
     await expect(page.locator('.upgrade-layer, .pause-layer')).toHaveCount(0);
-    await expect(page.getByTestId('pending-upgrade-button')).toHaveAccessibleName('強化を選ぶ（1回）');
+    await expect(page.getByTestId('battle-loadout-button')).toBeVisible();
     await page.evaluate(() => {
       const saved = window as Window & { oldV0Pending?: HTMLButtonElement; oldV0Pause?: HTMLButtonElement };
-      saved.oldV0Pending = document.querySelector<HTMLButtonElement>('[data-testid="pending-upgrade-button"]') ?? undefined;
+      saved.oldV0Pending = document.querySelector<HTMLButtonElement>('[data-testid="battle-loadout-button"]') ?? undefined;
       saved.oldV0Pause = document.querySelector<HTMLButtonElement>('[data-testid="pause-button"]') ?? undefined;
     });
     await page.getByTestId('pause-button').click();
