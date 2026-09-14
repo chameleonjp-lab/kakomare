@@ -29,6 +29,7 @@ import type { RunSaveEnvelope } from '../types/runSave';
 import { isLocalTestHost } from './testMode';
 import { RunLifecycleGuard } from './RunLifecycleGuard';
 import { COMPETITIVE_RULES } from '../data/competitiveRules';
+import { MAX_DEVICE_SLOT_COUNT, DEVICE_SLOT_COUNT, itemAtExpandedSlot } from '../game/deviceLayout';
 import { renderSynergyTags } from '../ui/SynergyTags';
 
 const FIRST_CLEAR_PART_BONUS = 25;
