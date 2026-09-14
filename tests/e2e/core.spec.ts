@@ -689,7 +689,7 @@ async function deferV0Upgrades(page: Page): Promise<void> {
   await page.getByRole('button', { name: '残りを保留して戦闘へ戻る' }).click();
   await page.getByTestId('battle-loadout-button').click();
   await expect(page.getByTestId('pending-upgrade-from-loadout')).toBeVisible();
-  await page.getByTestId('resume-button').click();
+  await page.getByRole('button', { name: '再開', exact: true }).click();
   await expect(page.getByTestId('battle-loadout-button')).toBeVisible();
 }
 
