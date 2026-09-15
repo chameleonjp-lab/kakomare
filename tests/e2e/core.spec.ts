@@ -99,7 +99,7 @@ test('3秒カウントダウン後に戦闘が始まり、ドラッグ照準と�
   await page.mouse.up();
   await expect(page.getByTestId('aim-state')).toContainText('手動照準');
   await expect(page.getByTestId('upgrade-candidate').first()).toBeVisible({ timeout: 3000 });
-  await expect(page.locator('.upgrade-guide')).toContainText('ボタン：強化を選ぶ');
+  await expect(page.locator('.upgrade-guide')).toContainText('候補名のボタンと装着場所のボタンだけ');
   await expect(page.locator('.upgrade-info-block').first()).toContainText('この強化の内容');
   await expect(page.locator('.upgrade-help-details summary').first()).toContainText('詳しい効果を見る');
   const upgradeControls = await page.locator('.modal-dialog button').evaluateAll((controls) => controls.map((control) => {
@@ -113,6 +113,45 @@ test('3秒カウントダウン後に戦闘が始まり、ドラッグ照準と�
   }
   await page.getByTestId('upgrade-candidate').first().click();
   await expect(page.getByTestId('upgrade-candidate').first()).toBeHidden();
+});
+
+test('強化候補は説明部分を押しても選択されず、選択ボタンだけが受付範囲になる', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await enterBattle(page, '?test=1&upgrade=1&seed=1');
+  const candidate = page.locator('.upgrade-choice:not([aria-disabled="true"]):not(:disabled)').first();
+  const card = candidate.locator('xpath=ancestor::article[contains(@class,"upgrade-card")]');
+  await expect(candidate).toBeEnabled({ timeout: 3000 });
+  const metrics = await candidate.evaluate((button) => {
+    const cardNode = button.closest('.upgrade-card');
+    if (!cardNode) throw new Error('候補カードが見つかりません。');
+    const buttonBox = button.getBoundingClientRect();
+    const cardBox = cardNode.getBoundingClientRect();
+    return { buttonWidth: buttonBox.width, cardWidth: cardBox.width };
+  });
+  expect(metrics.buttonWidth).toBeLessThan(metrics.cardWidth - 8);
+  await card.locator('.upgrade-info-explanation').click({ position: { x: 8, y: 8 } });
+  await expect(page.locator('.upgrade-layer')).toHaveCount(1);
+  await expect(candidate).toBeVisible();
+  await candidate.click();
+  await expect(page.locator('.upgrade-layer')).toHaveCount(0);
+});
+
+test('端末プロファイルを切り替え、広いPCでは固定サイズの戦闘画面を使う', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await enterBattle(page);
+  await expect(page.locator('.app-root')).toHaveAttribute('data-device-profile', 'desktop');
+  const desktopCanvas = await page.locator('.battle-canvas-shell').evaluate((node) => Math.round(node.getBoundingClientRect().width));
+  expect(desktopCanvas).toBe(600);
+
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.waitForTimeout(50);
+  await expect(page.locator('.app-root')).toHaveAttribute('data-device-profile', 'desktop');
+  const wideDesktopCanvas = await page.locator('.battle-canvas-shell').evaluate((node) => Math.round(node.getBoundingClientRect().width));
+  expect(wideDesktopCanvas).toBe(desktopCanvas);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(50);
+  await expect(page.locator('.app-root')).toHaveAttribute('data-device-profile', 'mobile');
 });
 
 test('狭い画面と文字200%でも強化候補を縦に読み、面を1回タップできる', async ({ page }) => {
