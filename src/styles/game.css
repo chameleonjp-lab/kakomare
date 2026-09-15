@@ -9,6 +9,30 @@
   position: relative;
 }
 
+/* The battle rules and Phaser canvas stay identical on every device.  Wide
+   desktop windows use one fixed presentation frame so a 1280px and a 1920px
+   monitor do not produce different arena or panel sizes.  Narrow desktop
+   windows keep the compact rules below and remain usable without horizontal
+   scrolling. */
+@media (min-width: 1000px) {
+  .app-root-desktop .battle-shell {
+    width: 960px;
+  }
+
+  .app-root-desktop .battle-layout {
+    grid-template-columns: 600px 320px;
+    justify-content: center;
+  }
+
+  .app-root-desktop .battle-canvas-shell {
+    width: 600px;
+  }
+
+  .app-root-desktop .battle-panel {
+    width: 320px;
+  }
+}
+
 .battle-shell {
   width: min(100%, 1500px);
   height: 100%;
@@ -432,6 +456,7 @@
 .upgrade-candidate-action {
   display: grid;
   gap: 6px;
+  align-items: start;
   margin: 12px;
 }
 .upgrade-action-label,
@@ -446,10 +471,16 @@
   line-height: 1.35;
 }
 .upgrade-candidate-action .upgrade-choice {
-  width: 100%;
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 48px;
+  align-items: center;
+  justify-content: flex-start;
   margin: 0;
   border-width: 2px;
   border-radius: 10px;
+  text-align: left;
 }
 .upgrade-choice:not(:disabled) {
   position: relative;

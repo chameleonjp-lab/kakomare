@@ -31,6 +31,7 @@ import { RunLifecycleGuard } from './RunLifecycleGuard';
 import { COMPETITIVE_RULES } from '../data/competitiveRules';
 import { MAX_DEVICE_SLOT_COUNT, DEVICE_SLOT_COUNT, itemAtExpandedSlot } from '../game/deviceLayout';
 import { renderSynergyTags } from '../ui/SynergyTags';
+import { applyDeviceProfile, detectDeviceProfile, type DeviceProfile } from './deviceProfile';
 
 const FIRST_CLEAR_PART_BONUS = 25;
 
@@ -65,6 +66,7 @@ export class AppController {
   private latestBattleSnapshot: BattleSnapshot | null = null;
   private pendingResumeCheckpoint: RunSaveEnvelope | null = null;
   private rankingStartPromise: Promise<RankingSnapshot> | null = null;
+  private deviceProfile: DeviceProfile = 'mobile';
 
   public constructor(private readonly root: HTMLElement) {}
 
@@ -100,7 +102,7 @@ export class AppController {
     if (view !== 'battle' && view !== 'countdown') this.gameHost.stop();
     if (view !== 'battle') this.battleUpgradeOpen = false;
     this.state.view = view;
-    this.root.className = view === 'battle' ? 'app-root app-root-battle' : 'app-root';
+    this.applyRootClasses(view);
     this.root.replaceChildren();
     if (view === 'boot') { this.renderBoot(); return; }
     if (view === 'name-entry') {
@@ -133,7 +135,7 @@ export class AppController {
   }
 
   private renderBootError(): void {
-    this.root.className = 'app-root';
+    this.applyRootClasses('boot');
     this.root.replaceChildren();
     const shell = element('section', 'boot-screen');
     shell.dataset.testid = 'boot-error';
@@ -436,7 +438,7 @@ export class AppController {
     const guide = element('div', 'upgrade-guide');
     guide.setAttribute('role', 'note');
     guide.append(
-      element('span', 'upgrade-guide-item upgrade-guide-action', '青いボタン：強化を選ぶ／装着する'),
+      element('span', 'upgrade-guide-item upgrade-guide-action', '選択する場所は、候補名のボタンと装着場所のボタンだけです'),
       element('span', 'upgrade-guide-item upgrade-guide-info', '枠の中：効果の説明'),
       element('span', 'upgrade-guide-item upgrade-guide-detail', '詳しい効果を見る：詳細を開く'),
     );
@@ -462,10 +464,10 @@ export class AppController {
       card.dataset.candidateId = candidate.id;
 
       const categoryText = candidate.kind === 'weapon'
-        ? '武器｜敵を攻撃する'
+        ? `候補${candidateIndex + 1}: 武器｜敵を攻撃する`
         : candidate.kind === 'support'
-          ? '補助｜武器を助ける'
-          : 'コア・配置の強化';
+          ? `候補${candidateIndex + 1}: 補助｜武器を助ける`
+          : `候補${candidateIndex + 1}: コア・配置の強化`;
       card.append(element('p', 'upgrade-category', categoryText));
 
       const tagIds = candidate.kind === 'weapon'
@@ -1041,6 +1043,17 @@ export class AppController {
     const width = viewport?.width ?? window.innerWidth;
     document.documentElement.style.setProperty('--visual-viewport-height', `${height}px`);
     document.documentElement.style.setProperty('--visual-viewport-width', `${width}px`);
+    const nextProfile = detectDeviceProfile(window);
+    if (nextProfile !== this.deviceProfile) {
+      this.deviceProfile = nextProfile;
+      this.applyRootClasses(this.state.view);
+    }
+  }
+
+  private applyRootClasses(view: AppView): void {
+    this.deviceProfile = detectDeviceProfile(window);
+    this.root.className = view === 'battle' ? 'app-root app-root-battle' : 'app-root';
+    applyDeviceProfile(this.root, this.deviceProfile);
   }
 
   private finishBattle(result: BattleResult): void {
