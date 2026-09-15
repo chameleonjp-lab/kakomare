@@ -384,3 +384,363 @@
 .pending-upgrade-button:not(:disabled) { border-color: #63d7e6; background: #123044; cursor: pointer; }
 .pending-upgrade-button:disabled { opacity: 1; cursor: default; }
 .pending-upgrade-button:focus-visible { outline: 3px solid #63d7e6; outline-offset: -3px; }
+
+/* Weapon-upgrade information hierarchy: only controls look like controls.
+   Explanations use labels and flat panels so mobile players can scan them. */
+.upgrade-dialog { width: min(100%, 760px); }
+.upgrade-dialog > h2 { margin-bottom: 8px; }
+.upgrade-guide {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(99, 215, 230, .35);
+  border-radius: 10px;
+  color: #c3d7dc;
+  background: #081a27;
+  font-size: .82rem;
+  line-height: 1.45;
+}
+.upgrade-guide-item { display: block; min-width: 0; overflow-wrap: anywhere; }
+.upgrade-guide-action { color: #a4edf2; font-weight: 800; }
+.upgrade-guide-info { color: #d8e7e9; }
+.upgrade-guide-detail { color: #ffdb9a; }
+.upgrade-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 12px 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(55, 106, 128, .45);
+}
+.upgrade-status p { margin: 0; }
+.upgrade-pending { color: #fff1a8; font-weight: 800; }
+.upgrade-tools-help { margin: 0; color: #c3d7dc; font-size: .86rem; line-height: 1.45; }
+.upgrade-card {
+  gap: 0;
+  border-width: 2px;
+  border-radius: 16px;
+  background: #07131f;
+}
+.upgrade-card > .upgrade-category {
+  padding: 9px 12px;
+  letter-spacing: .02em;
+}
+.upgrade-card > .synergy-tags { padding: 8px 12px; }
+.upgrade-candidate-action {
+  display: grid;
+  gap: 6px;
+  margin: 12px;
+}
+.upgrade-action-label,
+.upgrade-info-label,
+.upgrade-step-title,
+.upgrade-placement-label {
+  margin: 0;
+  color: #9db9c7;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1.35;
+}
+.upgrade-candidate-action .upgrade-choice {
+  width: 100%;
+  margin: 0;
+  border-width: 2px;
+  border-radius: 10px;
+}
+.upgrade-choice:not(:disabled) {
+  position: relative;
+  min-height: 56px;
+  padding: 12px 42px 12px 14px;
+  border-color: #63d7e6;
+  color: #f2f0e8;
+  background: #175064;
+  box-shadow: 0 4px 0 rgba(2, 10, 17, .72);
+}
+.upgrade-choice:not(:disabled)::after {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  content: '›';
+  color: #a4edf2;
+  font-size: 1.7rem;
+  line-height: 1;
+  transform: translateY(-52%);
+}
+.upgrade-choice:not(:disabled):hover { background: #1d6076; }
+.upgrade-choice.upgrade-choice-readonly,
+.upgrade-choice[aria-disabled="true"] {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #456075;
+  color: #b3cbd5;
+  background: #102433;
+  box-shadow: none;
+  cursor: default;
+}
+.upgrade-choice.upgrade-choice-readonly::after,
+.upgrade-choice[aria-disabled="true"]::after { content: none; }
+.upgrade-info-block {
+  min-width: 0;
+  margin: 12px;
+}
+.upgrade-info-block > .upgrade-info-label { margin-bottom: 5px; }
+.upgrade-info-block > p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.upgrade-info-explanation > .upgrade-description {
+  padding: 0 0 0 10px;
+  border: 0;
+  border-left: 3px solid #63d7e6;
+  border-radius: 0;
+  color: #d8e7e9;
+  background: transparent;
+  line-height: 1.55;
+}
+.upgrade-info-change {
+  padding: 9px 10px;
+  border: 1px solid rgba(99, 215, 230, .5);
+  border-radius: 9px;
+  background: rgba(13, 64, 80, .62);
+}
+.upgrade-info-change > .upgrade-info-label { color: #8de5f1; }
+.upgrade-info-change > .upgrade-change {
+  color: #a4edf2;
+  font-weight: 800;
+  line-height: 1.45;
+}
+.upgrade-role {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 12px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(96, 122, 141, .35);
+  color: #c3d7dc;
+  font-size: .86rem;
+  line-height: 1.45;
+}
+.upgrade-role-label { color: #9db9c7; font-weight: 750; }
+.upgrade-role-value { color: #f2f0e8; font-weight: 700; overflow-wrap: anywhere; }
+.upgrade-help-details {
+  margin: 12px;
+  border-color: #456075;
+  border-radius: 10px;
+  background: transparent;
+}
+.upgrade-help-details summary.upgrade-help-summary {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  color: #a4edf2;
+  background: #0d2937;
+  font-size: .88rem;
+  font-weight: 800;
+}
+.upgrade-help-details summary.upgrade-help-summary::after {
+  content: '＋';
+  flex: 0 0 auto;
+  color: #ffdb9a;
+  font-size: 1.15rem;
+}
+.upgrade-help-details[open] > summary.upgrade-help-summary::after { content: '−'; }
+.upgrade-help-details[open] > summary.upgrade-help-summary { color: #f2f0e8; background: #12384a; }
+.upgrade-help-details .equipment-help {
+  border: 0;
+  border-radius: 0;
+  background: #0b2130;
+}
+.upgrade-help-details .equipment-help-title::before {
+  display: block;
+  margin-bottom: 3px;
+  color: #9db9c7;
+  content: '現在の装置';
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.upgrade-help-details .equipment-help-summary,
+.upgrade-help-details .equipment-help-current {
+  background: #0b2130;
+}
+.upgrade-help-details .equipment-help-summary::before,
+.upgrade-help-details .equipment-help-current::before {
+  display: block;
+  margin-bottom: 3px;
+  color: #8de5f1;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.upgrade-help-details .equipment-help-summary::before { content: '基本の説明'; }
+.upgrade-help-details .equipment-help-current::before { content: '現在の動き'; }
+.upgrade-place-section {
+  margin: 14px 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(55, 106, 128, .45);
+}
+.upgrade-place-section > .upgrade-step-title { margin-bottom: 7px; color: #a4edf2; }
+.upgrade-place-section > .placement-preview {
+  margin: 0;
+}
+.upgrade-slot-hint {
+  margin: 8px 0 0;
+  padding-left: 10px;
+  border-left: 3px solid #ffdb9a;
+  color: #e6d7ab;
+  font-size: .84rem;
+  line-height: 1.5;
+}
+.upgrade-placement-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 12px 0;
+}
+.upgrade-placement-list > .upgrade-step-title {
+  margin-bottom: -2px;
+  color: #a4edf2;
+}
+.upgrade-placement-option {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #456075;
+  border-radius: 11px;
+  background: rgba(8, 26, 39, .82);
+}
+.upgrade-placement-option .upgrade-placement {
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border-width: 2px;
+  border-color: #63d7e6;
+  color: #f2f0e8;
+  background: #175064;
+  text-align: left;
+}
+.upgrade-kind-support .upgrade-placement-option .upgrade-placement {
+  border-color: #efc56a;
+  background: #4a3a1b;
+}
+.upgrade-placement:not(:disabled)::after {
+  float: right;
+  margin-left: 8px;
+  content: '›';
+  color: #fff1a8;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.upgrade-placement-connection {
+  margin-top: 9px;
+  padding: 7px 0 0;
+  border-top: 1px solid rgba(96, 122, 141, .3);
+}
+.upgrade-placement-label { margin-bottom: 3px; color: #ffdb9a; }
+.upgrade-connection-text {
+  margin: 0;
+  color: #d8e7e9;
+  font-size: .82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.upgrade-placement-option .upgrade-help-details {
+  margin: 9px 0 0;
+}
+.upgrade-placement-option .upgrade-help-details summary.upgrade-help-summary {
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: .82rem;
+}
+.upgrade-replacement-confirmation {
+  display: grid;
+  gap: 8px;
+  margin: 14px 12px 0;
+  padding: 10px;
+  border: 1px solid #efc56a;
+  border-radius: 10px;
+  background: #2b291d;
+}
+.upgrade-replacement-confirmation:empty { display: none; }
+.upgrade-replacement-summary { margin: 0; }
+.upgrade-replacement-summary .upgrade-info-label { color: #ffe1a0; }
+.upgrade-replacement-copy,
+.upgrade-replacement-option {
+  margin: 0;
+  color: #fff1a8;
+  font-size: .86rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.upgrade-replacement-confirmation .button { width: 100%; }
+.upgrade-info-note {
+  padding: 9px 10px;
+  border-left: 3px solid #ffdb9a;
+  background: rgba(43, 41, 29, .62);
+}
+.upgrade-info-note .upgrade-details {
+  padding: 0;
+  border: 0;
+  color: #e6d7ab;
+  background: transparent;
+  line-height: 1.5;
+}
+.upgrade-ban-area {
+  margin: 14px 12px 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(96, 122, 141, .3);
+}
+.upgrade-ban-help {
+  margin: 0 0 6px;
+  color: #9db9c7;
+  font-size: .76rem;
+  line-height: 1.4;
+}
+.upgrade-ban-area .upgrade-ban {
+  width: 100%;
+  min-height: 48px;
+  border-color: #607a8d;
+  color: #c3d7dc;
+  background: transparent;
+  box-shadow: none;
+}
+.upgrade-ban-area .upgrade-ban:not(:disabled):hover {
+  border-color: #ffb4a9;
+  color: #ffb4a9;
+  background: rgba(82, 43, 55, .55);
+}
+.upgrade-card .upgrade-help-details .equipment-help-section {
+  background: #0b2130;
+}
+.upgrade-card .upgrade-help-details .equipment-help-section[data-section="conditions"] { background: #2b291d; }
+.upgrade-card .upgrade-help-details .equipment-help-section[data-section="connections"] { background: #102840; }
+.upgrade-card .upgrade-help-details .equipment-help-section[data-section="synergies"] { background: #2b1830; }
+.upgrade-card .upgrade-help-details .equipment-help-section[data-section="limits"] { background: #321f22; }
+
+@media (max-width: 560px) {
+  .upgrade-dialog {
+    width: 100%;
+    padding: 16px 12px 22px;
+    border-radius: 16px;
+  }
+  .upgrade-guide { font-size: .86rem; }
+  .upgrade-status { align-items: flex-start; flex-direction: column; }
+  .upgrade-candidate-action,
+  .upgrade-info-block,
+  .upgrade-role,
+  .upgrade-help-details,
+  .upgrade-place-section,
+  .upgrade-placement-list,
+  .upgrade-replacement-confirmation,
+  .upgrade-ban-area { margin-left: 0; margin-right: 0; }
+  .upgrade-card { border-radius: 13px; }
+  .upgrade-placement-option { padding: 8px; }
+  .upgrade-connection-text { font-size: .86rem; }
+}

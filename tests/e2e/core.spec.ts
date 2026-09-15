@@ -99,6 +99,9 @@ test('3秒カウントダウン後に戦闘が始まり、ドラッグ照準と�
   await page.mouse.up();
   await expect(page.getByTestId('aim-state')).toContainText('手動照準');
   await expect(page.getByTestId('upgrade-candidate').first()).toBeVisible({ timeout: 3000 });
+  await expect(page.locator('.upgrade-guide')).toContainText('ボタン：強化を選ぶ');
+  await expect(page.locator('.upgrade-info-block').first()).toContainText('この強化の内容');
+  await expect(page.locator('.upgrade-help-details summary').first()).toContainText('詳しい効果を見る');
   const upgradeControls = await page.locator('.modal-dialog button').evaluateAll((controls) => controls.map((control) => {
     const box = control.getBoundingClientRect();
     return { label: control.textContent ?? '', width: box.width, height: box.height };

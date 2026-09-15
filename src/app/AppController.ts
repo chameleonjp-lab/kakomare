@@ -422,40 +422,93 @@ export class AppController {
     this.battleUpgradeOpen = true;
     this.setBattleContentInert(shell, true);
     const layer = element('div', 'modal-layer upgrade-layer');
-    const dialog = element('div', 'modal-dialog');
-    dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'upgrade-title'); dialog.tabIndex = -1;
-    dialog.append(element('p', 'eyebrow', '装置を更新')); const title = element('h2', '', '強化候補を1つ選ぶ'); title.id = 'upgrade-title'; dialog.append(title);
-    dialog.append(element('p', 'modal-copy', '戦闘を完全に停止しています。変更前と変更後を確認してください。'));
-    dialog.append(element('p', 'upgrade-pending', `未選択の強化 ${payload.pendingCount}回`));
-    dialog.append(element('p', 'upgrade-tools-help', `除外は残り${payload.bansLeft}回。この候補だけを今回のプレイ中に出なくします。武器・補助の種類全体を除く操作ではありません。`));
+    const dialog = element('div', 'modal-dialog upgrade-dialog');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'upgrade-title');
+    dialog.tabIndex = -1;
+
+    const title = element('h2', '', '強化を選ぶ');
+    title.id = 'upgrade-title';
+    dialog.append(element('p', 'eyebrow', '装置を更新'), title);
+    dialog.append(element('p', 'modal-copy', '戦闘は停止中です。3枚の候補から1つだけ選びます。'));
+
+    const guide = element('div', 'upgrade-guide');
+    guide.setAttribute('role', 'note');
+    guide.append(
+      element('span', 'upgrade-guide-item upgrade-guide-action', '青いボタン：強化を選ぶ／装着する'),
+      element('span', 'upgrade-guide-item upgrade-guide-info', '枠の中：効果の説明'),
+      element('span', 'upgrade-guide-item upgrade-guide-detail', '詳しい効果を見る：詳細を開く'),
+    );
+    dialog.append(guide);
+
+    const status = element('div', 'upgrade-status');
+    status.append(
+      element('p', 'upgrade-pending', '未選択の強化：' + payload.pendingCount + '回'),
+      element('p', 'upgrade-tools-help', '候補から外す：残り' + payload.bansLeft + '回（この候補だけ）'),
+    );
+    dialog.append(status);
+
     const list = element('div', 'upgrade-list');
     let locked = true;
     const selectionId = payload.selectionId;
     const candidateButtons: Array<{ button: HTMLButtonElement; candidate: UpgradeCandidate }> = [];
     const selectionButtons: HTMLButtonElement[] = [];
     let selectedIndex = 0;
+
     for (const [candidateIndex, candidate] of payload.candidates.entries()) {
-      const card = element('article', `upgrade-card upgrade-kind-${candidate.kind}`);
+      const card = element('article', 'upgrade-card upgrade-kind-' + candidate.kind);
       card.dataset.testid = 'upgrade-card';
       card.dataset.candidateId = candidate.id;
-      const choose = button(candidate.title, 'upgrade-choice');
-      choose.dataset.testid = 'upgrade-candidate';
-      choose.setAttribute('aria-label', `${candidate.title}。${candidate.description}`);
-      choose.setAttribute('aria-describedby', `upgrade-description-${candidateIndex} upgrade-change-${candidateIndex}`);
-      choose.disabled = true;
-      candidateButtons.push({ button: choose, candidate });
-      const description = element('p', 'upgrade-description', candidate.description);
-      description.id = `upgrade-description-${candidateIndex}`;
-      const change = element('p', 'upgrade-change', `${candidate.before} → ${candidate.after}`);
-      change.id = `upgrade-change-${candidateIndex}`;
+
+      const categoryText = candidate.kind === 'weapon'
+        ? '武器｜敵を攻撃する'
+        : candidate.kind === 'support'
+          ? '補助｜武器を助ける'
+          : 'コア・配置の強化';
+      card.append(element('p', 'upgrade-category', categoryText));
+
       const tagIds = candidate.kind === 'weapon'
         ? weaponSynergyTags(candidate.targetId as WeaponId).map((tag) => tag.id)
         : candidate.kind === 'support'
           ? supportSynergyTags(candidate.targetId as SupportId).map((tag) => tag.id)
           : [];
-      card.append(element('p', 'upgrade-category', candidate.kind === 'weapon' ? '武器｜敵を攻撃する' : candidate.kind === 'support' ? '補助｜接続した武器を助ける' : 'コア・配置の強化'));
       if (tagIds.length > 0) card.append(renderSynergyTags(tagIds));
-      card.append(choose, description, change, element('p', 'upgrade-role', `得意: ${candidate.role}`));
+
+      const choose = button(candidate.title, 'upgrade-choice');
+      choose.dataset.testid = 'upgrade-candidate';
+      choose.setAttribute('aria-label', candidate.title + 'を選ぶ。' + candidate.description);
+      choose.disabled = true;
+      candidateButtons.push({ button: choose, candidate });
+
+      const action = element('div', 'upgrade-candidate-action');
+      action.append(
+        element('p', 'upgrade-action-label', candidate.isExisting ? 'この強化を取得' : '候補名（下で装着場所を選ぶ）'),
+        choose,
+      );
+      if (!candidate.isExisting) choose.classList.add('upgrade-choice-readonly');
+      card.append(action);
+
+      const description = element('p', 'upgrade-description', candidate.description);
+      description.id = 'upgrade-description-' + candidateIndex;
+      const explanation = element('section', 'upgrade-info-block upgrade-info-explanation');
+      explanation.append(element('h4', 'upgrade-info-label', 'この強化の内容'), description);
+      card.append(explanation);
+
+      const change = element('p', 'upgrade-change', candidate.before + ' → ' + candidate.after);
+      change.id = 'upgrade-change-' + candidateIndex;
+      const changeBlock = element('section', 'upgrade-info-block upgrade-info-change');
+      changeBlock.append(element('h4', 'upgrade-info-label', '変わること'), change);
+      card.append(changeBlock);
+
+      const role = element('p', 'upgrade-role');
+      role.append(
+        element('span', 'upgrade-role-label', '向いている攻撃'),
+        element('span', 'upgrade-role-value', candidate.role),
+      );
+      card.append(role);
+      choose.setAttribute('aria-describedby', description.id + ' ' + change.id);
+
       if (candidate.isExisting) {
         const snapshot = this.latestBattleSnapshot;
         const weapon = snapshot?.weapons.find((item) => candidate.targetInstanceId ? item.instanceId === candidate.targetInstanceId : item.id === candidate.targetId);
@@ -464,37 +517,60 @@ export class AppController {
           : candidate.kind === 'support' && support ? getSupportHelp(support, snapshot?.weapons) : null;
         if (help) {
           const details = element('details', 'upgrade-help-details');
-          details.append(element('summary', '', '現在の効果・接続・組み合わせ'), renderEquipmentHelp(help));
+          const summary = element('summary', 'upgrade-help-summary', '詳しい効果を見る');
+          summary.setAttribute('aria-label', candidate.title + 'の現在の効果・接続・相乗効果を開く');
+          details.append(summary, renderEquipmentHelp(help));
           card.append(details);
         }
         selectionButtons.push(choose);
         choose.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(choose); });
-        choose.addEventListener('click', () => { if (locked) return; locked = true; this.gameHost.chooseUpgrade(candidate, selectionId, runId); });
+        choose.addEventListener('click', () => {
+          if (locked) return;
+          locked = true;
+          this.gameHost.chooseUpgrade(candidate, selectionId, runId);
+        });
       } else {
         choose.setAttribute('aria-disabled', 'true');
         choose.title = '装着する面を下から選んでください';
+
+        const placementSection = element('section', 'upgrade-place-section');
+        placementSection.append(
+          element('h4', 'upgrade-step-title', '1. 配置見本を確認'),
+          createPlacementPreview(this.latestBattleSnapshot, {
+            kind: candidate.kind === 'support' ? 'support' : 'weapon',
+            slots: candidate.placementSlots,
+            onNodeSelect: (_kind, slot) => {
+              const placement = placementButtons.get(slot);
+              if (placement && !placement.disabled) placement.click();
+            },
+          }),
+          element('p', 'upgrade-slot-hint', '見本の番号と同じ場所を、下の「この面に装着」から選びます。'),
+        );
+        card.append(placementSection);
+
         const placementKind = candidate.kind === 'support' ? 'support' : 'weapon';
         const placementButtons = new Map<number, HTMLButtonElement>();
         const placementDetails = new Map<number, HTMLDetailsElement>();
-        card.append(createPlacementPreview(this.latestBattleSnapshot, {
-          kind: placementKind,
-          slots: candidate.placementSlots,
-          onNodeSelect: (_kind, slot) => {
-            const placement = placementButtons.get(slot);
-            if (placement && !placement.disabled) placement.click();
-          },
-        }));
-        card.append(element('p', 'upgrade-details upgrade-slot-hint', '見本で場所を確認し、下のボタンで装着します。'));
         const placementList = element('div', 'upgrade-placement-list');
+        const placementHeading = element('h4', 'upgrade-step-title', '2. 装着場所を選ぶ');
+        placementList.append(placementHeading);
         const replacementConfirm = element('div', 'upgrade-replacement-confirmation');
+
         for (const slot of candidate.placementSlots ?? [0, 1, 2]) {
           const target = candidate.replacementTargets?.find((item) => item.slot === slot);
-          const targetName = target ? (candidate.kind === 'support' ? this.supportName(target.id as SupportId) : this.weaponName(target.id as WeaponId)) : '';
+          const targetName = target
+            ? (candidate.kind === 'support' ? this.supportName(target.id as SupportId) : this.weaponName(target.id as WeaponId))
+            : '';
           const resultingLevel = target ? Math.min(target.level, 3) : 1;
-          const placement = button(`${placementLabel(candidate.kind === 'support' ? 'support' : 'weapon', slot)}${target ? `：${targetName} Lv${target.level}を交換 → 新装備Lv${resultingLevel}` : ''}`, 'button button-small upgrade-placement');
+          const label = target
+            ? 'この面と交換：'
+            : 'この面に装着：';
+          const placement = button(label + placementLabel(placementKind, slot) + (target ? '（' + targetName + ' Lv' + target.level + '）' : ''), 'button button-small upgrade-placement');
           placement.dataset.testid = 'upgrade-placement';
           placement.dataset.slot = String(slot);
-          placement.setAttribute('aria-label', target ? `${placement.textContent}。交換内容を確認` : `${candidate.title}を面${slot + 1}へ装着`);
+          placement.setAttribute('aria-label', target
+            ? placement.textContent + '。交換内容を確認'
+            : candidate.title + 'を' + placementLabel(placementKind, slot) + 'へ装着');
           placement.disabled = true;
           placement.addEventListener('focus', () => { selectedIndex = selectionButtons.indexOf(placement); });
           placement.addEventListener('click', () => {
@@ -507,7 +583,12 @@ export class AppController {
               }, 0);
             }
             if (target) {
-              replacementConfirm.replaceChildren(element('p', 'upgrade-details', `${targetName} Lv${target.level}を外し、新しい装備をLv${resultingLevel}で置きます。元の分岐と発展は引き継ぎません。`));
+              const replacementSummary = element('section', 'upgrade-replacement-summary');
+              replacementSummary.append(
+                element('h4', 'upgrade-info-label', '交換内容'),
+                element('p', 'upgrade-replacement-copy', targetName + ' Lv' + target.level + 'を外し、新しい装備をLv' + resultingLevel + 'で置きます。元の分岐と発展は引き継ぎません。'),
+              );
+              replacementConfirm.replaceChildren(replacementSummary);
               const options = resultingLevel >= 3 && candidate.kind === 'weapon' ? candidate.replacementBranchOptions ?? [] : [];
               const commit = (branch?: UpgradeCandidate['replacementBranch']): void => {
                 if (locked) return;
@@ -515,19 +596,20 @@ export class AppController {
                 this.gameHost.chooseUpgrade({ ...candidate, placementSlot: slot, replacementTargetInstanceId: target.instanceId, replacementBranch: branch }, selectionId, runId);
               };
               for (const option of options) {
-                const confirm = button(`${option.name}で交換する`, 'button button-primary');
+                const confirm = button(option.name + 'で交換する', 'button button-primary');
                 confirm.dataset.testid = 'upgrade-replacement-confirm';
                 confirm.addEventListener('click', () => commit(option.id));
-                replacementConfirm.append(element('p', 'upgrade-description', option.description), confirm);
+                replacementConfirm.append(element('p', 'upgrade-replacement-option', option.description), confirm);
                 selectionButtons.push(confirm);
               }
               if (options.length === 0) {
-                const confirm = button(`Lv${resultingLevel}で交換する`, 'button button-primary');
+                const confirm = button('Lv' + resultingLevel + 'で交換する', 'button button-primary');
                 confirm.dataset.testid = 'upgrade-replacement-confirm';
                 confirm.addEventListener('click', () => commit());
                 replacementConfirm.append(confirm);
                 selectionButtons.push(confirm);
               }
+              replacementConfirm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
               replacementConfirm.querySelector('button')?.focus();
               return;
             }
@@ -536,31 +618,50 @@ export class AppController {
           });
           placementButtons.set(slot, placement);
           selectionButtons.push(placement);
-          placementList.append(placement);
-          if (candidate.kind === 'support') {
-            const help = getSupportHelp({ id: candidate.targetId as SupportId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel }, this.latestBattleSnapshot?.weapons);
-            const connection = element('p', 'upgrade-connection', `${placementLabel('support', slot)}の接続：${help.connections.join('／')}`);
-            placementList.append(connection);
-            const details = element('details', 'upgrade-help-details');
-            details.dataset.slot = String(slot);
-            details.append(element('summary', '', 'この場所で働く効果・組み合わせ'), renderEquipmentHelp(help));
-            placementDetails.set(slot, details);
-            placementList.append(details);
-          } else if (candidate.kind === 'weapon') {
-            const help = getWeaponHelp({ id: candidate.targetId as WeaponId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel, damageDealt: 0, branch: null, finalBranch: null, evolutionId: null }, this.latestBattleSnapshot?.supports, this.latestBattleSnapshot?.weapons);
-            placementList.append(element('p', 'upgrade-connection', `${placementLabel('weapon', slot)}につながる補助：${help.connections.join('／')}`));
-            const details = element('details', 'upgrade-help-details');
-            details.dataset.slot = String(slot);
-            details.append(element('summary', '', 'この場所で働く効果・組み合わせ'), renderEquipmentHelp(help));
-            placementDetails.set(slot, details);
-            placementList.append(details);
-          }
+
+          const option = element('article', 'upgrade-placement-option');
+          option.append(placement);
+
+          const connection = element('section', 'upgrade-placement-connection');
+          connection.append(
+            element('h5', 'upgrade-placement-label', 'この場所の接続'),
+            element('p', 'upgrade-connection-text', candidate.kind === 'support'
+              ? this.supportName(candidate.targetId as SupportId) + '：' + getSupportHelp({ id: candidate.targetId as SupportId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel }, this.latestBattleSnapshot?.weapons).connections.join('／')
+              : this.weaponName(candidate.targetId as WeaponId) + '：' + getWeaponHelp({ id: candidate.targetId as WeaponId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel, damageDealt: 0, branch: null, finalBranch: null, evolutionId: null }, this.latestBattleSnapshot?.supports, this.latestBattleSnapshot?.weapons).connections.join('／')),
+          );
+          option.append(connection);
+
+          const details = element('details', 'upgrade-help-details upgrade-placement-details');
+          details.dataset.slot = String(slot);
+          details.append(
+            element('summary', 'upgrade-help-summary', '詳しい効果を見る'),
+            candidate.kind === 'support'
+              ? renderEquipmentHelp(getSupportHelp({ id: candidate.targetId as SupportId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel }, this.latestBattleSnapshot?.weapons))
+              : renderEquipmentHelp(getWeaponHelp({ id: candidate.targetId as WeaponId, instanceId: 'preview', nodeId: 'preview', slot, level: resultingLevel, damageDealt: 0, branch: null, finalBranch: null, evolutionId: null }, this.latestBattleSnapshot?.supports, this.latestBattleSnapshot?.weapons)),
+          );
+          placementDetails.set(slot, details);
+          option.append(details);
+          placementList.append(option);
         }
         card.append(placementList, replacementConfirm);
       }
-      if (candidate.requiresNewItemFirst) card.append(element('p', 'upgrade-details', '候補を3つ保つため、新しい装置を先に取得すると選べます。'));
-      if (candidate.details) card.append(element('p', 'upgrade-details', candidate.details));
-      const ban = button(`この候補を除外（残り${payload.bansLeft}回）`, 'button button-small upgrade-ban');
+
+      if (candidate.requiresNewItemFirst) {
+        const note = element('section', 'upgrade-info-block upgrade-info-note');
+        note.append(
+          element('h4', 'upgrade-info-label', '補足'),
+          element('p', 'upgrade-details', '候補を3つ保つため、新しい装置を先に取得すると選べます。'),
+        );
+        card.append(note);
+      }
+      if (candidate.details) {
+        const note = element('section', 'upgrade-info-block upgrade-info-note');
+        note.append(element('h4', 'upgrade-info-label', '補足'), element('p', 'upgrade-details', candidate.details));
+        card.append(note);
+      }
+
+      const banArea = element('div', 'upgrade-ban-area');
+      const ban = button('この候補を除外（残り' + payload.bansLeft + '回）', 'button button-small upgrade-ban');
       ban.disabled = true;
       if (candidate.canBan === false) ban.title = '成長を止めないため除外できません';
       ban.addEventListener('click', () => {
@@ -569,20 +670,28 @@ export class AppController {
         ban.disabled = true;
         this.gameHost.banUpgrade(candidate.id, selectionId, runId);
       });
-      card.append(ban);
-      card.addEventListener('click', (event) => {
-        if ((event.target as HTMLElement).closest('button, details')) return;
-        choose.click();
-      });
+      banArea.append(
+        element('p', 'upgrade-ban-help', '不要な候補だけを、今回のプレイ中は出さないようにします。'),
+        ban,
+      );
+      card.append(banArea);
       list.append(card);
     }
+
     window.setTimeout(() => {
       if (!layer.isConnected) return;
       locked = false;
-      candidateButtons.forEach(({ button, candidate }) => { button.disabled = !candidate.isExisting || candidate.requiresNewItemFirst === true; });
-      selectionButtons.forEach((selection) => { if (selection.classList.contains('upgrade-placement')) selection.disabled = false; });
-      list.querySelectorAll<HTMLButtonElement>('.upgrade-ban').forEach((ban, index) => { ban.disabled = payload.bansLeft <= 0 || payload.candidates[index]?.canBan === false; });
+      candidateButtons.forEach(({ button, candidate }) => {
+        button.disabled = !candidate.isExisting || candidate.requiresNewItemFirst === true;
+      });
+      selectionButtons.forEach((selection) => {
+        if (selection.classList.contains('upgrade-placement')) selection.disabled = false;
+      });
+      list.querySelectorAll<HTMLButtonElement>('.upgrade-ban').forEach((ban, index) => {
+        ban.disabled = payload.bansLeft <= 0 || payload.candidates[index]?.canBan === false;
+      });
     }, 150);
+
     const moveSelection = (direction: 1 | -1): void => {
       for (let offset = 1; offset <= selectionButtons.length; offset += 1) {
         const nextIndex = (selectedIndex + direction * offset + selectionButtons.length) % selectionButtons.length;
@@ -595,8 +704,6 @@ export class AppController {
     };
     dialog.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
-        // Escape belongs to the upgrade dialog. Consume it here so a
-        // delayed browser key event cannot reach Phaser after selection.
         event.preventDefault();
         event.stopPropagation();
         return;
@@ -605,9 +712,10 @@ export class AppController {
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); moveSelection(1); }
       if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); moveSelection(-1); }
     });
+
     dialog.append(list);
     const footer = element('div', 'modal-footer');
-    const reroll = button(`引き直す（残り${payload.rerollsLeft}回）`, 'button button-secondary');
+    const reroll = button('引き直す（残り' + payload.rerollsLeft + '回）', 'button button-secondary');
     reroll.disabled = payload.rerollsLeft <= 0 || locked;
     reroll.addEventListener('click', () => {
       if (locked || reroll.disabled) return;
@@ -616,9 +724,13 @@ export class AppController {
       this.gameHost.rerollUpgrade(selectionId, runId);
     });
     footer.append(reroll);
-    dialog.append(footer); layer.append(dialog); shell.append(layer);
+    dialog.append(footer);
+    layer.append(dialog);
+    shell.append(layer);
     this.trapFocus(dialog);
-    window.setTimeout(() => { if (layer.isConnected) reroll.disabled = payload.rerollsLeft <= 0; }, 150);
+    window.setTimeout(() => {
+      if (layer.isConnected) reroll.disabled = payload.rerollsLeft <= 0;
+    }, 150);
     window.setTimeout(() => selectionButtons.find((choice) => !choice.disabled)?.focus(), 160);
   }
 
