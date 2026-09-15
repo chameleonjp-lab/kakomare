@@ -18,6 +18,7 @@ export interface PlacementPreviewOptions {
   kind?: BuildNodeKind;
   slots?: readonly number[];
   selectedSlot?: number;
+  onNodeSelect?: (kind: BuildNodeKind, slot: number) => void;
 }
 
 /** Read-only map. Large named buttons below it perform the actual selection. */
@@ -27,12 +28,16 @@ export function createPlacementPreview(snapshot: BattleSnapshot | null, options:
   const caption = element('figcaption', 'placement-caption', '戦場と同じ向きの配置見本');
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '-360 -360 720 720');
-  svg.setAttribute('role', 'img');
+  svg.setAttribute('role', 'group');
   svg.setAttribute('aria-label', '中央がコア。武器は上・右下・左下、補助は右上・下・左上。番号は内側から外側へ増えます。');
   const nodes = placementNodes(snapshot);
   const extent = Math.max(180, ...nodes.map((node) => Math.max(Math.abs(node.x), Math.abs(node.y)) + 60));
   svg.setAttribute('viewBox', `${-extent} ${-extent} ${extent * 2} ${extent * 2}`);
   const graph = snapshot?.build?.graph ?? new BuildGraph().snapshot();
+  const occupiedNodeIds = new Set([
+    ...(snapshot?.weapons ?? []).map((item) => item.nodeId),
+    ...(snapshot?.supports ?? []).map((item) => item.nodeId),
+  ]);
   for (const connection of graph.connections) {
     const support = nodes.find((node) => node.nodeId === connection.supportNodeId);
     if (!support) continue;
@@ -56,7 +61,17 @@ export function createPlacementPreview(snapshot: BattleSnapshot | null, options:
   for (const node of nodes) {
     const group = document.createElementNS(svg.namespaceURI, 'g');
     const allowed = options.kind === undefined || (node.kind === options.kind && (options.slots === undefined || options.slots.includes(node.slot)));
-    group.setAttribute('class', `placement-node placement-${node.kind}${allowed ? ' placement-available' : ''}${options.kind === node.kind && options.selectedSlot === node.slot ? ' placement-selected' : ''}`);
+    const occupied = occupiedNodeIds.has(node.nodeId);
+    const selectable = options.onNodeSelect !== undefined && allowed && (occupied || options.kind !== undefined);
+    const classes = [
+      'placement-node',
+      `placement-${node.kind}`,
+      occupied ? 'placement-occupied' : 'placement-empty',
+      allowed ? 'placement-available' : '',
+      options.kind === node.kind && options.selectedSlot === node.slot ? 'placement-selected' : '',
+      selectable ? 'placement-interactive' : '',
+    ].filter((className) => className.length > 0);
+    group.setAttribute('class', classes.join(' '));
     group.setAttribute('data-kind', node.kind);
     group.setAttribute('data-slot', String(node.slot));
     group.setAttribute('transform', `translate(${node.x} ${node.y})`);
@@ -67,11 +82,27 @@ export function createPlacementPreview(snapshot: BattleSnapshot | null, options:
     text.textContent = `${node.kind === 'weapon' ? '武' : '補'}${node.slot + 1}`;
     const title = document.createElementNS(svg.namespaceURI, 'title');
     title.textContent = placementLabel(node.kind, node.slot);
-    group.append(title, box, text); svg.append(group);
+    group.append(title, box, text);
+    if (selectable) {
+      group.setAttribute('role', 'button');
+      group.setAttribute('tabindex', '0');
+      group.setAttribute('aria-label', `${placementLabel(node.kind, node.slot)}を選択`);
+      const activate = (event: Event): void => {
+        event.preventDefault();
+        event.stopPropagation();
+        options.onNodeSelect?.(node.kind, node.slot);
+      };
+      group.addEventListener('click', activate);
+      group.addEventListener('keydown', (event) => {
+        const keyboardEvent = event as KeyboardEvent;
+        if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') activate(event);
+      });
+    }
+    svg.append(group);
   }
   const core = document.createElementNS(svg.namespaceURI, 'text');
   core.setAttribute('text-anchor', 'middle'); core.setAttribute('y', '8'); core.setAttribute('class', 'placement-core'); core.textContent = 'コア';
   svg.append(core);
-  figure.append(caption, svg, element('p', 'placement-legend', '青い四角「武」＝武器／金色の丸「補」＝補助。金色の線は左右の接続先です。配置は下の大きなボタンで選びます。'));
+  figure.append(caption, svg, element('p', 'placement-legend', '青い四角「武」＝武器／金色の丸「補」＝補助。金色の線は左右の接続先です。配置は図または下の大きなボタンで選びます。'));
   return figure;
 }

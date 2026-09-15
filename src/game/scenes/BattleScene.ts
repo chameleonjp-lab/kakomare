@@ -2698,8 +2698,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private renderScene(): void {
-    const width = this.scale.width / this.renderPixelRatio;
-    const height = this.scale.height / this.renderPixelRatio;
+    // Draw in one logical square regardless of backing-pixel density so the
+    // core and every ring stay centered in the visible frame.
+    const width = LOGICAL_RENDER_SIZE;
+    const height = LOGICAL_RENDER_SIZE;
     const cx = width / 2;
     const cy = height / 2;
     // The camera scales the complete active arena into the logical canvas.
@@ -2826,6 +2828,7 @@ export class BattleScene extends Phaser.Scene {
     // the camera, not the combat coordinates, so placement and collision math
     // remain deterministic across layers and devices.
     this.cameras.main.setZoom(this.renderPixelRatio * this.arenaViewportScale());
+    this.cameras.main.centerOn(LOGICAL_RENDER_SIZE / 2, LOGICAL_RENDER_SIZE / 2);
   }
 
   private arenaViewportScale(): number {

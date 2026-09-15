@@ -689,8 +689,7 @@ async function deferV0Upgrades(page: Page): Promise<void> {
   await page.getByRole('button', { name: '残りを保留して戦闘へ戻る' }).click();
   await page.getByTestId('battle-loadout-button').click();
   await expect(page.getByTestId('pending-upgrade-from-loadout')).toBeVisible();
-  await page.getByRole('button', { name: '一時停止へ戻る', exact: true }).click();
-  await page.getByTestId('resume-button').click();
+  await page.getByRole('button', { name: '再開', exact: true }).click();
   await expect(page.getByTestId('battle-loadout-button')).toBeVisible();
 }
 
@@ -768,6 +767,18 @@ test('P16-07: 保留から構成・停止・再開・強化・終了を画面操
   await expect(page.locator('.upgrade-layer')).toHaveCount(0);
 });
 
+test('戦闘画面の装置確認は一時停止メニューへ戻らず再開だけを表示する', async ({ page }) => {
+  await enterBattle(page);
+  await page.getByTestId('battle-loadout-button').click();
+  await expect(page.getByTestId('pause-loadout')).toBeVisible();
+  await expect(page.getByRole('button', { name: '一時停止へ戻る', exact: true })).toHaveCount(0);
+  await expect(page.locator('.pause-view-actions-single')).toBeVisible();
+  const resume = page.getByRole('button', { name: '再開', exact: true });
+  await expect(resume).toBeVisible();
+  await resume.click();
+  await expect(page.locator('.pause-layer')).toHaveCount(0);
+});
+
 test('V3/A09: 停止中の装置確認から同種の空き面へ移設できる', async ({ page }) => {
   await enterBattle(page);
   await page.getByTestId('pause-button').click();
@@ -780,6 +791,11 @@ test('V3/A09: 停止中の装置確認から同種の空き面へ移設できる
   await expect(loadout.locator('.loadout-help')).not.toHaveAttribute('open', '');
   await loadout.getByTestId('placement-preview-toggle').click();
   await expect(loadout.locator('.loadout-help')).toHaveAttribute('open', '');
+  await loadout.locator('.placement-node.placement-occupied[data-kind="weapon"][data-slot="0"]').click();
+  const weaponDetails = loadout.locator('[data-placement="weapon:0"]');
+  await expect(weaponDetails).toHaveAttribute('open', '');
+  await expect(weaponDetails).toContainText('連針砲 Lv1');
+  await expect(loadout.locator('.placement-node.placement-empty[data-kind="weapon"][data-slot="1"]')).toBeVisible();
   const move = loadout.getByTestId('placement-source').first();
   await expect(move).toBeEnabled();
   await move.click();
@@ -827,6 +843,10 @@ test('満枠でも武器を選び、番号見本と交換後Lv3・分岐を確�
   await expect(card.getByTestId('upgrade-placement')).toHaveCount(9);
   const oldXp = await page.getByTestId('hud-xp').textContent();
   const outputHelp = card.locator('details[data-slot="0"]');
+  await expect(card.getByTestId('upgrade-placement').first()).toBeEnabled();
+  await card.locator('.placement-node.placement-interactive[data-kind="weapon"][data-slot="0"]').click();
+  await expect(outputHelp).toHaveAttribute('open', '');
+  await outputHelp.locator('summary').click();
   await outputHelp.locator('summary').click();
   await expect(outputHelp.locator('.equipment-help')).toContainText('出力環: 接続中の武器の基礎威力に加算されます。');
   const cardBox = await card.boundingBox();
