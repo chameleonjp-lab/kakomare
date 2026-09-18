@@ -5,11 +5,11 @@
   "description": "六方向から迫る敵を防ぎ、装置を組み上げる全方位防衛ゲームです。",
   "share_text": "カコマレで無限の構成と危険を競おう。",
   "canonical_url": "https://chameleonjp-lab.github.io/kakomare/",
-  "release_date": "2026-09-11",
-  "client_version": "kakomare-web-v8",
+  "release_date": "2026-09-18",
+  "client_version": "kakomare-web-v9",
   "submission_mode": "shared",
   "lab": {
-    "representative_slug": "kakomare_endless"
+    "representative_slug": "kakomare"
   },
   "player_name": {
     "required_before_start": true,
@@ -31,8 +31,8 @@
   "ranking_entries": [
     {
       "mode_id": "endless",
-      "game_slug": "kakomare_endless",
-      "title": "カコマレ 無限モード",
+      "game_slug": "kakomare",
+      "title": "カコマレ",
       "display_order": 34,
       "top_ranking_type": "best",
       "score_order": "desc",

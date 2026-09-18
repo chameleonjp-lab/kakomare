@@ -1,4 +1,5 @@
 import { RANKING_CONFIG, RANKING_MANIFEST } from '../data/rankingConfig';
+import { isLocalTestHost } from '../app/testMode';
 import type {
   RankingFinishInput,
   RankingFinishRequest,
@@ -69,7 +70,11 @@ function storedSession(value: unknown): RankingSession | null {
 
 function storedSubmission(value: unknown): RankingSubmission | null {
   if (!isRecord(value) || !isBoundedText(value.submissionId) || !isBoundedText(value.playId) || !isBoundedText(value.displayName, 20) || !isBoundedText(value.gameSlug, 80) || !isBoundedText(value.clientVersion, 80) || !isBoundedText(value.ruleVersion, 120) || typeof value.score !== 'number' || !Number.isSafeInteger(value.score) || value.score < 0 || !isBoundedText(value.resultType, 40) || !isTimestamp(value.createdAt) || typeof value.attemptCount !== 'number' || !Number.isSafeInteger(value.attemptCount) || value.attemptCount < 0 || value.attemptCount > 1000 || typeof value.finishAcknowledged !== 'boolean' || !isScoreBreakdown(value.scoreBreakdown)) return null;
-  return { submissionId: value.submissionId, playId: value.playId, displayName: value.displayName, gameSlug: value.gameSlug, clientVersion: value.clientVersion, ruleVersion: value.ruleVersion, score: value.score, resultType: value.resultType, createdAt: value.createdAt, attemptCount: value.attemptCount, finishAcknowledged: value.finishAcknowledged, scoreBreakdown: { ...value.scoreBreakdown } };
+  const reachedWave = typeof value.reachedWave === 'number' && Number.isInteger(value.reachedWave)
+    ? value.reachedWave
+    : reachedWaveFromSurvivalTime(value.scoreBreakdown.survivalTimeSeconds ?? 0);
+  if (reachedWave < 1 || reachedWave > 30) return null;
+  return { submissionId: value.submissionId, playId: value.playId, displayName: value.displayName, gameSlug: value.gameSlug, clientVersion: value.clientVersion, ruleVersion: value.ruleVersion, score: value.score, reachedWave, resultType: value.resultType, createdAt: value.createdAt, attemptCount: value.attemptCount, finishAcknowledged: value.finishAcknowledged, scoreBreakdown: { ...value.scoreBreakdown } };
 }
 
 function isScoreBreakdown(value: unknown): value is Record<string, number> {
@@ -116,11 +121,10 @@ export class HttpRankingGateway implements RankingGateway {
 
   public startPlay(request: RankingStartRequest): Promise<RankingStartResponse> {
     return this.rpc(RANKING_CONFIG.startRpc, {
-      start_id: request.startId,
-      display_name: request.displayName,
-      game_slug: request.gameSlug,
-      client_version: request.clientVersion,
-      rule_version: request.ruleVersion,
+      p_start_id: request.startId,
+      p_display_name: request.displayName,
+      p_game_slug: request.gameSlug,
+      p_client_version: request.clientVersion,
     }).then((value) => {
       if (!isRecord(value) || value.accepted !== true || typeof value.play_id !== 'string' || typeof value.game_slug !== 'string' || typeof value.client_version !== 'string') throw new RankingError('invalid_start_response', false);
       return { accepted: true, playId: value.play_id, gameSlug: value.game_slug, clientVersion: value.client_version };
@@ -129,13 +133,14 @@ export class HttpRankingGateway implements RankingGateway {
 
   public finishPlay(request: RankingFinishRequest): Promise<RankingFinishResponse> {
     return this.rpc(RANKING_CONFIG.finishRpc, {
-      play_id: request.playId,
-      game_slug: request.gameSlug,
-      client_version: request.clientVersion,
-      rule_version: request.ruleVersion,
-      result_type: request.resultType,
-      score: request.score,
-      score_breakdown: request.scoreBreakdown,
+      p_play_id: request.playId,
+      p_display_name: request.displayName,
+      p_game_slug: request.gameSlug,
+      p_result_type: request.resultType,
+      p_reached_wave: request.reachedWave,
+      p_score: request.score,
+      p_client_version: request.clientVersion,
+      p_ranking_score: request.score,
     }).then((value) => {
       if (!isRecord(value) || value.accepted !== true || typeof value.play_id !== 'string') throw new RankingError('invalid_finish_response', false);
       return { accepted: true, playId: value.play_id };
@@ -144,18 +149,15 @@ export class HttpRankingGateway implements RankingGateway {
 
   public submitScore(request: RankingSubmitRequest): Promise<RankingSubmitResponse> {
     return this.rpc(RANKING_CONFIG.scoreRpc, {
-      submission_id: request.submissionId,
-      play_id: request.playId,
-      display_name: request.displayName,
-      game_slug: request.gameSlug,
-      client_version: request.clientVersion,
-      rule_version: request.ruleVersion,
-      result_type: request.resultType,
-      score: request.score,
-      score_breakdown: request.scoreBreakdown,
+      p_play_id: request.playId,
+      p_submission_id: request.submissionId,
+      p_display_name: request.displayName,
+      p_game_slug: request.gameSlug,
+      p_score: request.score,
+      p_client_version: request.clientVersion,
     }).then((value) => {
-      if (!isRecord(value) || value.accepted !== true || typeof value.submission_id !== 'string' || typeof value.play_id !== 'string' || typeof value.game_slug !== 'string' || typeof value.client_version !== 'string' || typeof value.score !== 'number' || !Number.isSafeInteger(value.score)) throw new RankingError('invalid_submit_response', false);
-      return { accepted: true, submissionId: value.submission_id, playId: value.play_id, gameSlug: value.game_slug, clientVersion: value.client_version, score: value.score };
+      if (!isRecord(value) || value.accepted !== true || typeof value.result_submission_id !== 'string' || typeof value.result_play_id !== 'string') throw new RankingError('invalid_submit_response', false);
+      return { accepted: true, submissionId: value.result_submission_id, playId: value.result_play_id, gameSlug: request.gameSlug, clientVersion: request.clientVersion, score: request.score };
     });
   }
 
@@ -187,6 +189,7 @@ export class HttpRankingGateway implements RankingGateway {
 }
 
 export function createBrowserRankingGateway(): RankingGateway {
+  if (typeof globalThis.location !== 'undefined' && isLocalTestHost(globalThis.location.hostname)) return new UnavailableRankingGateway();
   const config = (globalThis as typeof globalThis & { __KAKOMARE_RANKING__?: { endpoint?: string; publishableKey?: string } }).__KAKOMARE_RANKING__;
   if (!config?.endpoint || !config.publishableKey) return new UnavailableRankingGateway();
   return new HttpRankingGateway({ endpoint: config.endpoint, publishableKey: config.publishableKey });
@@ -316,6 +319,7 @@ export class RankingClient {
     if (normalizedName !== session.displayName) return this.fail('display_name_conflict', false);
     const breakdown = scoreBreakdown(result);
     if (!isScoreBreakdown(breakdown)) return this.fail('invalid_score_breakdown', false);
+    const reachedWave = reachedWaveFromSurvivalTime(result.survivalTime);
     if (!this.submission) {
       this.submission = {
         submissionId: uuid(),
@@ -325,6 +329,7 @@ export class RankingClient {
         clientVersion: session.clientVersion,
         ruleVersion: session.ruleVersion,
         score,
+        reachedWave,
         resultType,
         createdAt: new Date().toISOString(),
         attemptCount: 0,
@@ -332,7 +337,7 @@ export class RankingClient {
         scoreBreakdown: breakdown,
       };
       this.persistSubmission();
-    } else if (this.submission.score !== score || this.submission.resultType !== resultType || this.submission.playId !== session.playId
+    } else if (this.submission.score !== score || this.submission.reachedWave !== reachedWave || this.submission.resultType !== resultType || this.submission.playId !== session.playId
       || this.submission.displayName !== normalizedName || !sameBreakdown(this.submission.scoreBreakdown, breakdown)) return this.fail('submission_payload_conflict', false);
     await this.transmit(result);
     return this.snapshot();
@@ -355,7 +360,7 @@ export class RankingClient {
     const breakdown = { ...this.submission.scoreBreakdown };
     try {
       if (!submission.finishAcknowledged) {
-        const finishResponse = await this.gateway.finishPlay({ playId: submission.playId, gameSlug: submission.gameSlug, clientVersion: submission.clientVersion, ruleVersion: submission.ruleVersion, resultType: submission.resultType, score: submission.score, scoreBreakdown: breakdown });
+        const finishResponse = await this.gateway.finishPlay({ playId: submission.playId, displayName: submission.displayName, gameSlug: submission.gameSlug, clientVersion: submission.clientVersion, ruleVersion: submission.ruleVersion, resultType: submission.resultType, reachedWave: submission.reachedWave, score: submission.score, scoreBreakdown: breakdown });
         this.assertFinish(finishResponse, submission.playId);
         submission.finishAcknowledged = true;
         this.submission = { ...submission };
@@ -411,6 +416,12 @@ function scoreBreakdown(result: BattleResultLike): Record<string, number> {
     survivalTimeSeconds: Math.max(0, Math.round(result.survivalTime)),
     coreRemaining: Math.max(0, Math.round(result.coreRemaining)),
   };
+}
+
+/** The shared lab contract calls this field reached_wave. Kakomare has no
+ * discrete waves, so each five-minute endless danger tier occupies one slot. */
+function reachedWaveFromSurvivalTime(seconds: number): number {
+  return Math.min(30, Math.max(1, Math.floor(Math.max(0, seconds) / 300) + 1));
 }
 
 function sameBreakdown(first: Record<string, number>, second: Record<string, number>): boolean {

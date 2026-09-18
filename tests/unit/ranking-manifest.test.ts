@@ -7,7 +7,7 @@ describe('ranking manifest', () => {
   it('matches the common v1 shape and exposes only the representative endless slug', () => {
     expect(validateRankingManifest(manifest)).toEqual({ valid: true, errors: [] });
     expect(RANKING_CONFIG.gameId).toBe('kakomare');
-    expect(RANKING_CONFIG.representativeSlug).toBe('kakomare_endless');
+    expect(RANKING_CONFIG.representativeSlug).toBe('kakomare');
     expect(RANKING_CONFIG.startRpc).toBe('start_game_play_v1');
     expect(RANKING_CONFIG.scoreRpc).toBe('submit_score_idempotent_v1');
   });
