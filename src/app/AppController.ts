@@ -1205,14 +1205,16 @@ export class AppController {
     if (result.stageId !== 'endless' || result.retired) return;
     if (this.rankingStartPromise) await this.rankingStartPromise;
     const rankingState = this.rankingClient.snapshot();
-    if (!rankingState.session) return;
-    const session = rankingState.session;
-    const submitted = await this.rankingClient.finish({
-      displayName: this.state.save.profile.name,
-      playId: session?.playId ?? result.playId ?? null,
-      result,
-    });
-    if (submitted.status === 'retryable_failed') this.state.notice = 'ランキング送信に失敗しました。結果画面から再送できます。';
+    if (rankingState.session) {
+      const session = rankingState.session;
+      const submitted = await this.rankingClient.finish({
+        displayName: this.state.save.profile.name,
+        playId: session.playId ?? result.playId ?? null,
+        result,
+      });
+      if (submitted.status === 'retryable_failed') this.state.notice = 'ランキング送信に失敗しました。結果画面から再送できます。';
+    }
+    await this.rankingClient.loadTopRanking();
   }
 
   private async retryRanking(result: BattleResult): Promise<void> {
@@ -1222,9 +1224,11 @@ export class AppController {
       await this.rankingClient.retryStart(this.state.save.profile.name);
       const session = this.rankingClient.snapshot().session;
       if (session) await this.rankingClient.finish({ displayName: this.state.save.profile.name, playId: session.playId, result });
+      await this.rankingClient.loadTopRanking();
       return;
     }
     await this.rankingClient.retry(result);
+    await this.rankingClient.loadTopRanking();
   }
 
   private refreshRankingResult(): void {

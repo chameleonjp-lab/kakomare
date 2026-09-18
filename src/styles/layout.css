@@ -68,6 +68,15 @@
 .result-row:last-child { border-bottom: 0; }
 .result-label { color: #9db9c7; }
 .result-row strong { text-align: right; }
+.result-ranking-card { padding: 20px; margin: 12px 0; }
+.result-ranking-card h2, .result-ranking-card h3 { margin-bottom: 10px; }
+.result-ranking-card h3 { margin-top: 18px; color: #d8e7e9; font-size: 1.05rem; }
+.result-top-ranking { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.result-ranking-entry { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; min-height: 48px; padding: 8px 0; border-top: 1px solid rgba(55, 106, 128, .45); }
+.result-ranking-rank { color: #63d7e6; }
+.result-ranking-name { min-width: 0; overflow-wrap: anywhere; }
+.result-ranking-score { color: #f2f0e8; text-align: right; white-space: nowrap; }
+.result-ranking-plays { grid-column: 2 / -1; color: #9db9c7; font-size: .82rem; }
 .boot-screen { padding: 24px; }
 .boot-status { max-width: 36ch; overflow-wrap: anywhere; }
 .setting-row input, .setting-row select, .check-row input { min-width: 0; }

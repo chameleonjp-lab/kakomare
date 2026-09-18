@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HttpRankingGateway, RankingClient, RankingError } from '../../src/services/RankingClient';
-import type { RankingGateway, RankingStartRequest, RankingFinishRequest, RankingSubmitRequest } from '../../src/types/ranking';
+import type { RankingGateway, RankingStartRequest, RankingFinishRequest, RankingSubmitRequest, RankingEntry } from '../../src/types/ranking';
 import type { BattleResult } from '../../src/types/game';
 import type { StorageLike } from '../../src/services/SaveService';
 
@@ -19,6 +19,7 @@ class FakeGateway implements RankingGateway {
   starts: RankingStartRequest[] = [];
   finishes: RankingFinishRequest[] = [];
   submissions: RankingSubmitRequest[] = [];
+  topRanking: RankingEntry[] = [{ rank: 1, displayName: '上位者', firstScore: 100, bestScore: 200, playCount: 3, updatedAt: '2026-09-18T00:00:00.000Z' }];
   failStart = false;
   failSubmitOnce = false;
   public async startPlay(request: RankingStartRequest) {
@@ -32,6 +33,7 @@ class FakeGateway implements RankingGateway {
     if (this.failSubmitOnce) { this.failSubmitOnce = false; throw new RankingError('timeout', true); }
     return { accepted: true as const, submissionId: request.submissionId, playId: request.playId, gameSlug: request.gameSlug, clientVersion: request.clientVersion, score: request.score };
   }
+  public async getBestRanking(_gameSlug: string, _limit: number) { return this.topRanking.map((entry) => ({ ...entry })); }
 }
 
 describe('RankingClient', () => {
@@ -70,6 +72,13 @@ describe('RankingClient', () => {
     expect(state.diagnosticCode).toBe('ranking_endpoint_unconfigured');
   });
 
+  it('loads the best-score ranking independently from score submission', async () => {
+    const client = new RankingClient({ gateway: new FakeGateway(), storage: new MemoryStorage() });
+    const state = await client.loadTopRanking();
+    expect(state.topRankingStatus).toBe('loaded');
+    expect(state.topRanking).toEqual([{ rank: 1, displayName: '上位者', firstScore: 100, bestScore: 200, playCount: 3, updatedAt: '2026-09-18T00:00:00.000Z' }]);
+  });
+
   it('does not discard a retryable submission when another run is started', async () => {
     const gateway = new FakeGateway(); gateway.failSubmitOnce = true;
     const client = new RankingClient({ gateway, storage: new MemoryStorage() });
@@ -87,15 +96,17 @@ describe('RankingClient', () => {
   });
 
   it('maps the approved RPC payload names and rejects a non-single-row response', async () => {
-    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const calls: Array<{ url: string; body: Record<string, unknown>; keepalive?: boolean }> = [];
     const gateway = new HttpRankingGateway({
       endpoint: 'https://ranking.example.test/',
       publishableKey: 'public-key',
       fetchImpl: async (input, init) => {
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        calls.push({ url: String(input), body });
+        calls.push({ url: String(input), body, ...(init?.keepalive !== undefined ? { keepalive: init.keepalive } : {}) });
         const rpc = String(input).split('/').pop();
-        const payload = rpc === 'start_game_play_v1'
+        const payload = rpc === 'get_best_score_ranking'
+          ? [{ rank_no: 1, display_name: '上位者', first_score: 100, best_score: 200, play_count: 3, updated_at: '2026-09-18T00:00:00.000Z' }]
+          : rpc === 'start_game_play_v1'
           ? { accepted: true, play_id: 'server-play-1', game_slug: 'kakomare', client_version: 'kakomare-web-v9' }
           : rpc === 'finish_game_play_v1'
             ? { accepted: true, play_id: 'server-play-1' }
@@ -107,11 +118,14 @@ describe('RankingClient', () => {
     await gateway.startPlay(startRequest);
     await gateway.finishPlay({ playId: 'server-play-1', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless', resultType: 'game_over', reachedWave: 1, score: 120, scoreBreakdown: { kills: 3 } });
     await gateway.submitScore({ submissionId: 'submission-1', playId: 'server-play-1', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless', resultType: 'game_over', score: 120, scoreBreakdown: { kills: 3 } });
+    await expect(gateway.getBestRanking('kakomare', 10)).resolves.toEqual([{ rank: 1, displayName: '上位者', firstScore: 100, bestScore: 200, playCount: 3, updatedAt: '2026-09-18T00:00:00.000Z' }]);
     expect(calls.map((call) => call.body)).toEqual([
       { p_start_id: 'start-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_client_version: 'kakomare-web-v9' },
       { p_play_id: 'server-play-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_result_type: 'game_over', p_reached_wave: 1, p_score: 120, p_client_version: 'kakomare-web-v9', p_ranking_score: 120 },
       { p_play_id: 'server-play-1', p_submission_id: 'submission-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_score: 120, p_client_version: 'kakomare-web-v9' },
+      { p_game_slug: 'kakomare', p_limit: 10 },
     ]);
+    expect(calls[0]?.keepalive).toBe(true);
 
     const invalid = new HttpRankingGateway({
       endpoint: 'https://ranking.example.test',

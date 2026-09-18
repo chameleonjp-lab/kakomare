@@ -1,6 +1,16 @@
 import type { BattleResult } from './game';
 
 export type RankingStatus = 'idle' | 'submitting' | 'submitted' | 'retryable_failed' | 'permanent_failed';
+export type RankingFetchStatus = 'idle' | 'loading' | 'loaded' | 'failed';
+
+export interface RankingEntry {
+  rank: number;
+  displayName: string;
+  firstScore: number | null;
+  bestScore: number;
+  playCount: number;
+  updatedAt: string;
+}
 
 export interface RankingSession {
   startId: string;
@@ -33,6 +43,8 @@ export interface RankingSnapshot {
   status: RankingStatus;
   session: RankingSession | null;
   submission: RankingSubmission | null;
+  topRanking: RankingEntry[];
+  topRankingStatus: RankingFetchStatus;
   diagnosticCode?: string;
 }
 
@@ -93,6 +105,7 @@ export interface RankingGateway {
   startPlay(request: RankingStartRequest): Promise<RankingStartResponse>;
   finishPlay(request: RankingFinishRequest): Promise<RankingFinishResponse>;
   submitScore(request: RankingSubmitRequest): Promise<RankingSubmitResponse>;
+  getBestRanking(gameSlug: string, limit: number): Promise<RankingEntry[]>;
 }
 
 export interface RankingFinishInput {

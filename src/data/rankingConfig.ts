@@ -20,6 +20,7 @@ export const RANKING_CONFIG = Object.freeze({
   startRpc: RANKING_MANIFEST.play_count.rpc,
   finishRpc: 'finish_game_play_v1',
   scoreRpc: RANKING_MANIFEST.submission.rpc,
+  bestRankingRpc: 'get_best_score_ranking',
   ruleVersion: COMPETITIVE_RULES.version,
   timeoutMs: RANKING_MANIFEST.submission.timeout_ms,
 });
