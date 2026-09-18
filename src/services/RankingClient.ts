@@ -5,6 +5,8 @@ import type {
   RankingFinishRequest,
   RankingFinishResponse,
   RankingGateway,
+  RankingEntry,
+  RankingFetchStatus,
   RankingSession,
   RankingSnapshot,
   RankingStartRequest,
@@ -81,6 +83,24 @@ function isScoreBreakdown(value: unknown): value is Record<string, number> {
   return isRecord(value) && Object.values(value).every((item) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 0);
 }
 
+function parseRankingEntry(value: unknown): RankingEntry {
+  if (!isRecord(value)
+    || typeof value.rank_no !== 'number' || !Number.isSafeInteger(value.rank_no) || value.rank_no < 1
+    || !isBoundedText(value.display_name, 20)
+    || (value.first_score !== null && (typeof value.first_score !== 'number' || !Number.isSafeInteger(value.first_score) || value.first_score < 0))
+    || typeof value.best_score !== 'number' || !Number.isSafeInteger(value.best_score) || value.best_score < 0
+    || typeof value.play_count !== 'number' || !Number.isSafeInteger(value.play_count) || value.play_count < 1
+    || !isTimestamp(value.updated_at)) throw new RankingError('invalid_ranking_entry', false);
+  return {
+    rank: value.rank_no,
+    displayName: value.display_name,
+    firstScore: value.first_score,
+    bestScore: value.best_score,
+    playCount: value.play_count,
+    updatedAt: value.updated_at,
+  };
+}
+
 function storedStart(value: unknown): RankingStartRequest | null {
   if (!isRecord(value) || !isBoundedText(value.startId) || !isBoundedText(value.displayName, 20) || !isBoundedText(value.gameSlug, 80) || !isBoundedText(value.clientVersion, 80) || !isBoundedText(value.ruleVersion, 120)) return null;
   return { startId: value.startId, displayName: value.displayName, gameSlug: value.gameSlug, clientVersion: value.clientVersion, ruleVersion: value.ruleVersion };
@@ -94,6 +114,9 @@ export class UnavailableRankingGateway implements RankingGateway {
     throw new RankingError('ranking_endpoint_unconfigured', false);
   }
   public async submitScore(_request: RankingSubmitRequest): Promise<RankingSubmitResponse> {
+    throw new RankingError('ranking_endpoint_unconfigured', false);
+  }
+  public async getBestRanking(_gameSlug: string, _limit: number): Promise<RankingEntry[]> {
     throw new RankingError('ranking_endpoint_unconfigured', false);
   }
 }
@@ -125,7 +148,7 @@ export class HttpRankingGateway implements RankingGateway {
       p_display_name: request.displayName,
       p_game_slug: request.gameSlug,
       p_client_version: request.clientVersion,
-    }).then((value) => {
+    }, { keepalive: true }).then((value) => {
       if (!isRecord(value) || value.accepted !== true || typeof value.play_id !== 'string' || typeof value.game_slug !== 'string' || typeof value.client_version !== 'string') throw new RankingError('invalid_start_response', false);
       return { accepted: true, playId: value.play_id, gameSlug: value.game_slug, clientVersion: value.client_version };
     });
@@ -161,7 +184,31 @@ export class HttpRankingGateway implements RankingGateway {
     });
   }
 
-  private async rpc(name: string, body: unknown): Promise<unknown> {
+  public getBestRanking(gameSlug: string, limit: number): Promise<RankingEntry[]> {
+    if (!isBoundedText(gameSlug, 80) || !Number.isSafeInteger(limit) || limit < 1 || limit > 10) {
+      return Promise.reject(new RankingError('invalid_ranking_request', false));
+    }
+    return this.rpcRows(RANKING_CONFIG.bestRankingRpc, {
+      p_game_slug: gameSlug,
+      p_limit: limit,
+    }).then((rows) => rows.map(parseRankingEntry));
+  }
+
+  private async rpc(name: string, body: unknown, options?: Pick<RequestInit, 'keepalive'>): Promise<unknown> {
+    const parsed = await this.requestRpc(name, body, options);
+    if (Array.isArray(parsed) && parsed.length !== 1) throw new RankingError('invalid_rpc_payload', false);
+    const value = Array.isArray(parsed) ? parsed[0] : parsed;
+    if (!isRecord(value)) throw new RankingError('invalid_rpc_payload', false);
+    return value;
+  }
+
+  private async rpcRows(name: string, body: unknown): Promise<unknown[]> {
+    const parsed = await this.requestRpc(name, body);
+    if (!Array.isArray(parsed)) throw new RankingError('invalid_rpc_payload', false);
+    return parsed;
+  }
+
+  private async requestRpc(name: string, body: unknown, options?: Pick<RequestInit, 'keepalive'>): Promise<unknown> {
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -170,15 +217,11 @@ export class HttpRankingGateway implements RankingGateway {
         headers: { apikey: this.publishableKey, Authorization: `Bearer ${this.publishableKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(body),
         signal: controller.signal,
+        ...options,
       });
       const parsed: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new RankingError(`http_${response.status}`, response.status === 408 || response.status === 425 || response.status === 429 || response.status >= 500, response.status);
-      // RPC responses may be a single row or a one-row array. The contract
-      // requires exactly one accepted row for all three operations.
-      if (Array.isArray(parsed) && parsed.length !== 1) throw new RankingError('invalid_rpc_payload', false, response.status);
-      const value = Array.isArray(parsed) ? parsed[0] : parsed;
-      if (!isRecord(value)) throw new RankingError('invalid_rpc_payload', false, response.status);
-      return value;
+      return parsed;
     } catch (error) {
       if (error instanceof RankingError) throw error;
       throw new RankingError(error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'network_error', true);
@@ -205,6 +248,9 @@ export class RankingClient {
   private status: RankingStatus = 'idle';
   private diagnosticCode: string | undefined;
   private inFlight = false;
+  private topRanking: RankingEntry[] = [];
+  private topRankingStatus: RankingFetchStatus = 'idle';
+  private topRankingInFlight: Promise<RankingSnapshot> | null = null;
 
   public constructor(options: RankingClientOptions = {}) {
     this.storage = options.storage === undefined ? getStorage() : options.storage;
@@ -222,8 +268,33 @@ export class RankingClient {
       status: this.status,
       session: this.session ? { ...this.session } : null,
       submission: this.submission ? { ...this.submission } : null,
+      topRanking: this.topRanking.map((entry) => ({ ...entry })),
+      topRankingStatus: this.topRankingStatus,
       ...(this.diagnosticCode ? { diagnosticCode: this.diagnosticCode } : {}),
     };
+  }
+
+  public async loadTopRanking(): Promise<RankingSnapshot> {
+    if (this.topRankingInFlight) return this.topRankingInFlight;
+    this.topRankingStatus = 'loading';
+    this.emit();
+    const request = (async (): Promise<RankingSnapshot> => {
+      try {
+        this.topRanking = await this.gateway.getBestRanking(RANKING_CONFIG.representativeSlug, 10);
+        this.topRankingStatus = 'loaded';
+      } catch {
+        this.topRanking = [];
+        this.topRankingStatus = 'failed';
+      }
+      this.emit();
+      return this.snapshot();
+    })();
+    this.topRankingInFlight = request;
+    try {
+      return await request;
+    } finally {
+      this.topRankingInFlight = null;
+    }
   }
 
   public async start(displayName: string): Promise<RankingSnapshot> {
@@ -276,6 +347,8 @@ export class RankingClient {
     this.session = null;
     this.status = 'idle';
     this.diagnosticCode = undefined;
+    this.topRanking = [];
+    this.topRankingStatus = 'idle';
     this.removeSession();
     this.emit();
     return this.start(displayName);
