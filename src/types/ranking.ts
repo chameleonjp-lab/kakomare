@@ -20,6 +20,7 @@ export interface RankingSubmission {
   clientVersion: string;
   ruleVersion: string;
   score: number;
+  reachedWave: number;
   resultType: string;
   createdAt: string;
   attemptCount: number;
@@ -52,10 +53,12 @@ export interface RankingStartResponse {
 
 export interface RankingFinishRequest {
   playId: string;
+  displayName: string;
   gameSlug: string;
   clientVersion: string;
   ruleVersion: string;
   resultType: string;
+  reachedWave: number;
   score: number;
   scoreBreakdown: Record<string, number>;
 }

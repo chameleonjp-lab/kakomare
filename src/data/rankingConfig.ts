@@ -12,7 +12,7 @@ export const RANKING_MANIFEST = manifest as RankingManifest;
 export const RANKING_CONFIG = Object.freeze({
   gameId: RANKING_MANIFEST.game_id,
   canonicalUrl: RANKING_MANIFEST.canonical_url,
-  releaseId: 'kakomare-20260913-endless',
+  releaseId: 'kakomare-20260918-endless',
   clientVersion: RANKING_MANIFEST.client_version,
   submissionMode: RANKING_MANIFEST.submission_mode,
   representativeSlug: RANKING_MANIFEST.lab.representative_slug,
