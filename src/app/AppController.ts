@@ -4,6 +4,7 @@ import { SaveService } from '../services/SaveService';
 import { RunSaveService } from '../services/RunSaveService';
 import { ResultLedger } from '../services/ResultLedger';
 import { RankingClient } from '../services/RankingClient';
+import { RankingRunStore, type RankingRunRecord } from '../services/RankingRunStore';
 import { AudioService, audioCueForStatus } from '../services/AudioService';
 import { ShareService } from '../services/ShareService';
 import { LifecycleService } from '../services/LifecycleService';
@@ -11,7 +12,6 @@ import { GameHost } from '../game/GameHost';
 import type { BattleResult, BattleSnapshot, UpgradeCandidate, UpgradePayload } from '../types/game';
 import { createDefaultSave, type SaveData } from '../types/save';
 import { button, element, isValidPlayerName } from '../ui/viewUtils';
-import { createNameView } from '../ui/NameView';
 import { createHomeView } from '../ui/HomeView';
 import { createPlacementPreview, placementLabel } from '../ui/PlacementPreview';
 import { getSupportHelp, getWeaponHelp, renderEquipmentHelp } from '../ui/EquipmentHelp';
@@ -34,6 +34,12 @@ import { renderSynergyTags } from '../ui/SynergyTags';
 import { applyDeviceProfile, detectDeviceProfile, type DeviceProfile } from './deviceProfile';
 
 const FIRST_CLEAR_PART_BONUS = 25;
+interface RankingRunContext {
+  name: string;
+  record: RankingRunRecord | null;
+  client: RankingClient;
+  start: Promise<RankingSnapshot>;
+}
 
 function runStageIsCompatible(checkpoint: RunSaveEnvelope): boolean {
   const endless = checkpoint.stageId === 'endless';
@@ -65,8 +71,12 @@ export class AppController {
   private upgradeInterrupted = false;
   private latestBattleSnapshot: BattleSnapshot | null = null;
   private pendingResumeCheckpoint: RunSaveEnvelope | null = null;
-  private rankingStartPromise: Promise<RankingSnapshot> | null = null;
+  private readonly rankingRunStore = new RankingRunStore();
+  private activeRankingContext: RankingRunContext | null = null;
+  private resultRankingContext: RankingRunContext | null = null;
   private deviceProfile: DeviceProfile = 'mobile';
+  private activeRankingName = '';
+  private resultRankingName = '';
 
   public constructor(private readonly root: HTMLElement) {}
 
@@ -105,12 +115,7 @@ export class AppController {
     this.applyRootClasses(view);
     this.root.replaceChildren();
     if (view === 'boot') { this.renderBoot(); return; }
-    if (view === 'name-entry') {
-      const nameView = createNameView((name) => this.setName(name));
-      this.addNotice(nameView);
-      this.root.append(nameView);
-      return;
-    }
+    if (view === 'name-entry') { this.render('home'); return; }
     if (view === 'home') { this.root.append(this.homeView()); return; }
     if (view === 'stage-select' || view === 'research') { this.render('home'); return; }
     if (view === 'rules') { this.root.append(createRulesView(() => this.render('home'))); return; }
@@ -152,23 +157,47 @@ export class AppController {
     this.root.append(shell);
   }
 
-  private setName(name: string): void {
-    const next: SaveData = { ...this.state.save, profile: { name } };
-    this.commitSave(next);
-    void this.audio.start();
-    this.render('home');
-  }
-
   private homeView(): HTMLElement {
     const view = createHomeView(this.state.save, {
       start: () => this.startStage('endless'),
+      changeName: (name) => { this.commitSave({ ...this.state.save, profile: { name } }); },
       resume: this.runSaveService.hasSavedRun() ? () => this.resumeSavedRun() : undefined,
       settings: () => this.render('settings'),
       rules: () => this.render('rules'),
       share: () => { void this.shareHome(); },
     });
+    const pending = this.rankingRunStore.listPending();
+    for (const record of pending) {
+      const recover = button(`未送信の結果: ${Math.round(record.result!.score).toLocaleString('ja-JP')}点`);
+      recover.dataset.testid = 'pending-ranking-result';
+      recover.addEventListener('click', () => {
+        this.resultRankingContext = this.createRankingContext(record.name, record);
+        this.resultRankingName = record.name; this.lastResult = record.result!;
+        this.render('result'); void this.retryRanking(record.result!);
+      });
+      view.append(recover);
+    }
+    const legacy = this.rankingClient.snapshot().submission;
+    if (legacy) {
+      const retry = button(`以前の未送信記録を再送: ${legacy.score.toLocaleString('ja-JP')}点`);
+      retry.addEventListener('click', () => { void this.rankingClient.retry().then(snapshot => { this.state.notice = snapshot.status === 'submitted' ? '以前の記録を送信しました。' : '以前の記録を送信できませんでした。'; if (this.state.view === 'home') this.render('home'); }); });
+      view.append(retry);
+    }
     this.addNotice(view);
     return view;
+  }
+
+  private createRankingContext(name: string, saved?: RankingRunRecord): RankingRunContext {
+    let record = saved ?? null;
+    if (name && !record) {
+      try { record = this.rankingRunStore.create(name); } catch { this.state.notice = '送信情報を保存できません。現在のゲームは続けられます。'; }
+    }
+    const client = new RankingClient({
+      storage: record ? this.rankingRunStore.scopedStorage(record.id) : null,
+      preserveStoredRun: true,
+      onChange: () => { if (this.resultRankingContext?.client === client) this.refreshRankingResult(); },
+    });
+    return { name, record, client, start: Promise.resolve(client.snapshot()) };
   }
 
   private settingsView(): HTMLElement {
@@ -194,8 +223,8 @@ export class AppController {
 
   private startStage(stageId: StageId): void {
     if (this.runLifecycle.active || stageId !== 'endless') return;
-    if (!isValidPlayerName(this.state.save.profile.name)) {
-      this.state.notice = 'プレイを始める前に、1〜20文字の名前を入力してください。';
+    if (this.state.save.profile.name && !isValidPlayerName(this.state.save.profile.name)) {
+      this.state.notice = '名前は20文字以内で入力してください。';
       this.render('name-entry');
       return;
     }
@@ -207,9 +236,9 @@ export class AppController {
     this.commitSave(next);
     this.state.selectedStage = stageId;
     this.pendingResumeCheckpoint = null;
-    this.rankingStartPromise = stageId === 'endless'
-      ? this.rankingClient.begin(this.state.save.profile.name)
-      : null;
+    this.activeRankingName = this.state.save.profile.name.trim();
+    this.activeRankingContext = this.createRankingContext(this.activeRankingName);
+    this.activeRankingContext.start = this.activeRankingContext.client.begin(this.activeRankingName);
     void this.audio.start();
     this.render('countdown');
   }
@@ -222,11 +251,6 @@ export class AppController {
       this.render('home');
       return;
     }
-    if (!isValidPlayerName(this.state.save.profile.name)) {
-      this.state.notice = 'プレイを再開する前に、1〜20文字の名前を入力してください。';
-      this.render('name-entry');
-      return;
-    }
     if (!runStageIsCompatible(loaded.data)) {
       this.state.notice = 'この途中状態は現在の保存内容と互換性がありません。';
       this.render('home');
@@ -234,13 +258,15 @@ export class AppController {
     }
     if (!this.runLifecycle.start()) return;
     this.pendingResumeCheckpoint = loaded.data;
-    this.rankingStartPromise = loaded.data.stageId === 'endless'
-      ? loaded.data.rankingSession
-        ? Promise.resolve(this.rankingClient.restoreSession(loaded.data.rankingSession, this.state.save.profile.name))
-        : this.rankingClient.start(this.state.save.profile.name)
-      : null;
+    const savedRecord = loaded.data.rankingRunId ? this.rankingRunStore.get(loaded.data.rankingRunId) : null;
+    this.activeRankingName = savedRecord?.name ?? (loaded.data.rankingRunId ? '' : loaded.data.rankingName ?? loaded.data.rankingSession?.displayName ?? '');
+    this.activeRankingContext = this.createRankingContext(this.activeRankingName, savedRecord ?? undefined);
+    const client = this.activeRankingContext.client;
+    this.activeRankingContext.start = loaded.data.rankingSession && this.activeRankingName
+      ? Promise.resolve(client.restoreSession(loaded.data.rankingSession, this.activeRankingName))
+      : this.activeRankingName ? client.start(this.activeRankingName) : Promise.resolve(client.beginGuest());
     this.state.selectedStage = loaded.data.stageId;
-    this.state.notice = loaded.message;
+    this.state.notice = loaded.data.rankingRunId && !savedRecord ? '保存したランキング参加情報を確認できないため、公開登録せずに再開します。元の保存情報は残しています。' : loaded.message;
     void this.audio.start();
     this.render('battle');
   }
@@ -361,8 +387,8 @@ export class AppController {
           // A server-issued play belongs only to the competitive endless run
           // that started it. Do not copy a completed/stale session into a
           // normal-stage checkpoint.
-          const rankingSession = checkpoint.competitive ? this.rankingClient.snapshot().session : null;
-          const checkpointWithRanking = rankingSession ? { ...checkpoint, rankingSession } : checkpoint;
+          const rankingSession = checkpoint.competitive && this.activeRankingName ? this.activeRankingContext?.client.snapshot().session ?? null : null;
+          const checkpointWithRanking = { ...checkpoint, rankingName: this.activeRankingName, ...(this.activeRankingContext?.record ? { rankingRunId: this.activeRankingContext.record.id } : {}), ...(rankingSession ? { rankingSession } : {}) };
           if (!this.runSaveService.persist(checkpointWithRanking)) this.state.notice = '途中状態を保存できませんでした。現在のプレイは端末内で続けられます。';
         },
       },
@@ -1058,6 +1084,8 @@ export class AppController {
 
   private finishBattle(result: BattleResult): void {
     if (!this.runLifecycle.finish()) return;
+    this.resultRankingName = this.activeRankingName;
+    this.resultRankingContext = this.activeRankingContext;
     const previous = result.stageId === 'endless' ? null : this.state.save.records.stageBest[result.stageId];
     // Stage 3 preserves the direct endless route and also opens the V5 branch.
     // Both unlocks are committed atomically with the result.
@@ -1077,7 +1105,7 @@ export class AppController {
         // completed endless session may still be retained for result display
         // while the player finishes a normal stage, so never attach that
         // stale identifier to a non-competitive settlement.
-        playId: finalResult.playId ?? (finalResult.stageId === 'endless' ? this.rankingClient.snapshot().session?.playId ?? null : null),
+        playId: finalResult.playId ?? (finalResult.stageId === 'endless' ? this.resultRankingContext?.client.snapshot().session?.playId ?? null : null),
         stageId: finalResult.stageId,
         outcome: finalResult.outcome,
         retired: finalResult.retired,
@@ -1183,6 +1211,10 @@ export class AppController {
     };
     this.runSaveService.clear();
     if (this.commitSave(next)) this.state.notice = '';
+    if (this.resultRankingName && !this.resultRankingContext?.record) this.state.notice = '未送信の結果を端末保存できません。この画面の結果は保持しています。';
+    try {
+      if (this.resultRankingContext?.record && !finalResult.retired && !this.rankingRunStore.saveResult(this.resultRankingContext.record, finalResult)) this.state.notice = '結果の送信情報を保存できません。この画面から再試行できます。';
+    } catch { this.state.notice = '結果の送信情報を保存できません。この画面の結果は保持しています。'; }
     this.render('result');
     this.audio.cue(result.retired ? 'pause' : result.outcome === 'victory' ? 'victory' : 'defeat');
     this.announce(result.retired ? 'プレイを終了しました' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗');
@@ -1190,45 +1222,54 @@ export class AppController {
   }
 
   private resultView(result: BattleResult): HTMLElement {
+    const client = this.resultRankingContext?.client ?? this.rankingClient;
+    const ranking = client.snapshot();
+    if (ranking.topRankingStatus === 'idle') window.setTimeout(() => { void client.loadTopRanking(); }, 0);
     const view = createResultView(result, {
       again: () => this.startStage('endless'),
       next: () => this.startStage('endless'),
       home: () => this.render('home'),
       share: () => { void this.shareResult(result); },
-      ranking: this.rankingClient.snapshot(),
+      ranking: result.retired ? { ...ranking, status: 'idle', session: null, submission: null, diagnosticCode: 'unconfirmed_result' } : this.resultRankingName ? ranking : { ...ranking, status: 'idle', session: null, submission: null, diagnosticCode: 'guest_run' },
       retryRanking: () => { void this.retryRanking(result); },
     });
     this.addNotice(view); return view;
   }
 
+  private confirmRankingRecord(record: RankingRunRecord): void {
+    try { this.rankingRunStore.confirm(record); } catch { /* Keep the same durable submission ID for a later retry. */ }
+  }
+
   private async submitRanking(result: BattleResult): Promise<void> {
-    if (result.stageId !== 'endless' || result.retired) return;
-    if (this.rankingStartPromise) await this.rankingStartPromise;
-    const rankingState = this.rankingClient.snapshot();
-    if (rankingState.session) {
-      const session = rankingState.session;
-      const submitted = await this.rankingClient.finish({
-        displayName: this.state.save.profile.name,
-        playId: session.playId ?? result.playId ?? null,
-        result,
-      });
-      if (submitted.status === 'retryable_failed') this.state.notice = 'ランキング送信に失敗しました。結果画面から再送できます。';
+    const context = this.resultRankingContext;
+    if (result.stageId !== 'endless' || result.retired || !context) return;
+    const { client, name, record } = context;
+    if (!name) { await client.loadTopRanking(true); return; }
+    await context.start;
+    const session = client.snapshot().session;
+    if (session) {
+      const submitted = await client.finish({ displayName: session.displayName, playId: session.playId, result });
+      if (submitted.status === 'submitted' && record) this.confirmRankingRecord(record);
+      if (submitted.status === 'retryable_failed' && this.resultRankingContext === context) this.state.notice = 'ランキング送信に失敗しました。結果画面から再送できます。';
     }
-    await this.rankingClient.loadTopRanking();
+    await client.loadTopRanking(true);
   }
 
   private async retryRanking(result: BattleResult): Promise<void> {
-    const snapshot = this.rankingClient.snapshot();
-    if (snapshot.status !== 'retryable_failed') return;
-    if (!snapshot.submission) {
-      await this.rankingClient.retryStart(this.state.save.profile.name);
-      const session = this.rankingClient.snapshot().session;
-      if (session) await this.rankingClient.finish({ displayName: this.state.save.profile.name, playId: session.playId, result });
-      await this.rankingClient.loadTopRanking();
-      return;
+    const context = this.resultRankingContext;
+    if (!context || this.lastResult !== result || this.runLifecycle.active) return;
+    const { client, name, record } = context;
+    if (!name || result.retired) { await client.loadTopRanking(true); return; }
+    const snapshot = client.snapshot();
+    if (snapshot.status === 'submitted' || record?.confirmed) { await client.loadTopRanking(true); return; }
+    if (snapshot.submission) await client.retry(result);
+    else {
+      await client.retryStart(name);
+      const session = client.snapshot().session;
+      if (session) await client.finish({ displayName: session.displayName, playId: session.playId, result });
     }
-    await this.rankingClient.retry(result);
-    await this.rankingClient.loadTopRanking();
+    if (client.snapshot().status === 'submitted' && record) this.confirmRankingRecord(record);
+    await client.loadTopRanking(true);
   }
 
   private refreshRankingResult(): void {

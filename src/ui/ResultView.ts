@@ -45,6 +45,8 @@ function playerFacingCause(result: BattleResult): string {
 }
 
 function rankingStatusLabel(snapshot: RankingSnapshot): string {
+  if (snapshot.diagnosticCode === 'unconfirmed_result') return '中断した結果は公開登録しません。';
+  if (snapshot.diagnosticCode === 'guest_run') return '名前なしのため、今回の結果は公開登録しません。';
   if (snapshot.status === 'submitting') return 'ランキングへ送信中…';
   if (snapshot.status === 'submitted') return 'ランキングへ登録しました。';
   if (snapshot.status === 'retryable_failed') return 'ランキング送信を再試行できます。';
@@ -172,13 +174,13 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
   // Keep the three next actions in the first viewport, immediately below the score.
   shell.append(resultActions(result, actions));
 
-  if (result.stageId === 'endless' && !result.retired && actions.ranking) {
+  if (result.stageId === 'endless' && actions.ranking) {
     const rankingCard = card('card result-ranking-card');
     rankingCard.dataset.testid = 'ranking-status';
     rankingCard.append(heading('ランキング', 2), element('p', 'summary-line', rankingStatusLabel(actions.ranking)));
     rankingCard.append(heading('ランキング上位30名', 3), topRankingList(actions.ranking));
     if ((actions.ranking.status === 'retryable_failed' || actions.ranking.topRankingStatus === 'failed') && actions.retryRanking) {
-      const retry = button('ランキングへ再送', 'button button-secondary');
+      const retry = button(actions.ranking.status === 'retryable_failed' ? '記録を再送' : 'ランキングを再読み込み', 'button button-secondary');
       retry.dataset.testid = 'ranking-retry';
       retry.addEventListener('click', actions.retryRanking);
       rankingCard.append(retry);

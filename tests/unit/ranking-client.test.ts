@@ -37,6 +37,37 @@ class FakeGateway implements RankingGateway {
 }
 
 describe('RankingClient', () => {
+  it('starts guests without any public write and ignores an older delayed named start', async()=>{
+    const gateway=new FakeGateway();let resolveStart:((value:Awaited<ReturnType<FakeGateway['startPlay']>>)=>void)|undefined;
+    gateway.startPlay=(request)=>{gateway.starts.push(request);return new Promise(resolve=>{resolveStart=resolve;});};
+    const client=new RankingClient({gateway,storage:new MemoryStorage()});
+    const old=client.begin('元の名前');const request=gateway.starts[0]!;
+    await client.begin('   ');expect(client.snapshot().session).toBeNull();
+    resolveStart!({accepted:true,playId:'old-play',gameSlug:request.gameSlug,clientVersion:request.clientVersion});await old;
+    expect(client.snapshot().session).toBeNull();expect(gateway.starts).toHaveLength(1);
+    expect(client.snapshot().diagnosticCode).toBe('guest_run');
+    expect(gateway.finishes).toHaveLength(0);expect(gateway.submissions).toHaveLength(0);
+    expect((await client.loadTopRanking()).topRanking).toHaveLength(1);
+  });
+
+  it('a guest run never deletes an existing durable pending score',async()=>{
+    const gateway=new FakeGateway();gateway.failSubmitOnce=true;
+    const client=new RankingClient({gateway,storage:new MemoryStorage()});await client.start('元の名前');
+    const previous=await client.finish({displayName:'元の名前',playId:'server-play-1',result:result(120)});
+    const guest=await client.begin('');expect(guest.submission?.submissionId).toBe(previous.submission?.submissionId);expect(guest.session).toBeNull();
+    expect(gateway.starts).toHaveLength(1);expect(gateway.submissions).toHaveLength(1);
+  });
+
+  it('a fresh ranking read after submission cannot be replaced by an older response',async()=>{
+    const gateway=new FakeGateway();const responses:Array<(value:RankingEntry[])=>void>=[];
+    gateway.getBestRanking=()=>new Promise(resolve=>responses.push(resolve));
+    const client=new RankingClient({gateway,storage:new MemoryStorage()});
+    const old=client.loadTopRanking(),fresh=client.loadTopRanking(true);
+    responses[1]!([{...gateway.topRanking[0]!,bestScore:999}]);await fresh;
+    responses[0]!([{...gateway.topRanking[0]!,bestScore:1}]);await old;
+    expect(client.snapshot().topRanking[0]?.bestScore).toBe(999);
+  });
+
   it('reuses the same start_id when a start request is retried', async () => {
     const gateway = new FakeGateway(); gateway.failStart = true;
     const client = new RankingClient({ gateway, storage: new MemoryStorage() });

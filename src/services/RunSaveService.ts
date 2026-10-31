@@ -297,6 +297,9 @@ function isValidEnvelope(value: unknown): value is RunSaveEnvelope {
   if (typeof value.competitive !== 'boolean' || !isRunPhase(value.phase) || typeof value.savedAt !== 'string' || !finite(Date.parse(value.savedAt)) || !Number.isSafeInteger(value.tick) || !nonNegativeInteger(value.tick) || value.tick > 1_000_000_000) return false;
   if (!isSnapshot(value.snapshot) || !isInputLog(value.inputLog, value.tick) || !isRandomState(value.randomState)) return false;
   if (value.rankingSession !== undefined && !isRankingSession(value.rankingSession)) return false;
+  if (value.rankingRunId !== undefined && (typeof value.rankingRunId !== 'string' || !/^[0-9a-f-]{36}$/i.test(value.rankingRunId))) return false;
+  if (value.rankingName !== undefined && (typeof value.rankingName !== 'string' || [...value.rankingName].length > 20 || [...value.rankingName].some(char => { const code = char.codePointAt(0) ?? 0; return code <= 31 || code === 127; }))) return false;
+  if (value.rankingName !== undefined && isRecord(value.rankingSession) && value.rankingSession.displayName !== value.rankingName) return false;
   if (value.spawnState !== undefined && !isSpawnState(value.spawnState)) return false;
   if (value.runtimeState !== undefined && !isRuntimeState(value.runtimeState)) return false;
   const runtime = value.runtimeState;

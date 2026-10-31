@@ -20,8 +20,8 @@ export function createSettingsView(save: SaveData, actions: SettingsActions): HT
   const nameRow = element('label', 'setting-row', '名前');
   const nameInput = element('input') as HTMLInputElement;
   nameInput.id = 'settings-name';
-  nameInput.type = 'text'; nameInput.maxLength = 20; nameInput.value = save.profile.name; nameInput.setAttribute('autocomplete', 'nickname'); nameInput.setAttribute('aria-label', 'プレイヤー名');
-  nameInput.addEventListener('change', () => { const name = nameInput.value.trim(); if (isValidPlayerName(name)) actions.changeName(name); else nameInput.value = save.profile.name; });
+  nameInput.type = 'text'; nameInput.value = save.profile.name; nameInput.setAttribute('autocomplete', 'nickname'); nameInput.setAttribute('aria-label', 'プレイヤー名');
+  nameInput.addEventListener('change', () => { const name = nameInput.value.trim(); if (name === '' || isValidPlayerName(name)) actions.changeName(name); else nameInput.value = save.profile.name; });
   nameRow.append(nameInput); settingsCard.append(nameRow);
 
   const sound = element('label', 'setting-row', '効果音');

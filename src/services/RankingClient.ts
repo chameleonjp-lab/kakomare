@@ -26,6 +26,7 @@ export interface RankingClientOptions {
   gateway?: RankingGateway;
   storage?: StorageLike | null;
   onChange?: (snapshot: RankingSnapshot) => void;
+  preserveStoredRun?: boolean;
 }
 
 export class RankingError extends Error {
@@ -242,20 +243,25 @@ export class RankingClient {
   private readonly storage: StorageLike | null;
   private readonly gateway: RankingGateway;
   private readonly onChange?: (snapshot: RankingSnapshot) => void;
+  private readonly preserveStoredRun: boolean;
   private session: RankingSession | null;
   private submission: RankingSubmission | null;
   private startPending: RankingStartRequest | null;
   private status: RankingStatus = 'idle';
   private diagnosticCode: string | undefined;
   private inFlight = false;
+  private startSequence = 0;
+  private malformedStorage = false;
   private topRanking: RankingEntry[] = [];
   private topRankingStatus: RankingFetchStatus = 'idle';
   private topRankingInFlight: Promise<RankingSnapshot> | null = null;
+  private rankingReadSequence = 0;
 
   public constructor(options: RankingClientOptions = {}) {
     this.storage = options.storage === undefined ? getStorage() : options.storage;
     this.gateway = options.gateway ?? createBrowserRankingGateway();
     this.onChange = options.onChange;
+    this.preserveStoredRun = options.preserveStoredRun ?? false;
     const loaded = this.readStorage();
     this.session = loaded.session;
     this.submission = loaded.submission;
@@ -274,15 +280,19 @@ export class RankingClient {
     };
   }
 
-  public async loadTopRanking(): Promise<RankingSnapshot> {
-    if (this.topRankingInFlight) return this.topRankingInFlight;
+  public async loadTopRanking(fresh = false): Promise<RankingSnapshot> {
+    if (this.topRankingInFlight && !fresh) return this.topRankingInFlight;
     this.topRankingStatus = 'loading';
     this.emit();
+    const sequence = ++this.rankingReadSequence;
     const request = (async (): Promise<RankingSnapshot> => {
       try {
-        this.topRanking = await this.gateway.getBestRanking(RANKING_CONFIG.representativeSlug, 30);
+        const rows = await this.gateway.getBestRanking(RANKING_CONFIG.representativeSlug, 30);
+        if (sequence !== this.rankingReadSequence) return this.snapshot();
+        this.topRanking = rows;
         this.topRankingStatus = 'loaded';
       } catch {
+        if (sequence !== this.rankingReadSequence) return this.snapshot();
         this.topRanking = [];
         this.topRankingStatus = 'failed';
       }
@@ -293,11 +303,12 @@ export class RankingClient {
     try {
       return await request;
     } finally {
-      this.topRankingInFlight = null;
+      if (this.topRankingInFlight === request) this.topRankingInFlight = null;
     }
   }
 
   public async start(displayName: string): Promise<RankingSnapshot> {
+    if (this.preserveStoredRun && this.malformedStorage) return this.fail('invalid_saved_ranking_state', false);
     const normalized = displayName.trim();
     if ([...normalized].length < 1 || [...normalized].length > 20) return this.fail('invalid_display_name', false);
     if (this.submission) {
@@ -309,33 +320,45 @@ export class RankingClient {
       return this.fail('pending_submission_exists', true);
     }
     if (this.session && this.session.displayName === normalized && this.session.gameSlug === RANKING_CONFIG.representativeSlug
-      && this.session.clientVersion === RANKING_CONFIG.clientVersion && this.session.ruleVersion === RANKING_CONFIG.ruleVersion) return this.snapshot();
-    const startId = this.startPending && this.startPending.displayName === normalized
+      && (this.preserveStoredRun || this.session.clientVersion === RANKING_CONFIG.clientVersion && this.session.ruleVersion === RANKING_CONFIG.ruleVersion)) return this.snapshot();
+    const pending = this.startPending && this.startPending.displayName === normalized
       && this.startPending.gameSlug === RANKING_CONFIG.representativeSlug
-      && this.startPending.clientVersion === RANKING_CONFIG.clientVersion
-      && this.startPending.ruleVersion === RANKING_CONFIG.ruleVersion
-      ? this.startPending.startId
-      : uuid();
-    const request: RankingStartRequest = { startId, displayName: normalized, gameSlug: RANKING_CONFIG.representativeSlug, clientVersion: RANKING_CONFIG.clientVersion, ruleVersion: RANKING_CONFIG.ruleVersion };
+      && (this.preserveStoredRun || this.startPending.clientVersion === RANKING_CONFIG.clientVersion && this.startPending.ruleVersion === RANKING_CONFIG.ruleVersion)
+      ? this.startPending : null;
+    const startId = pending?.startId ?? uuid();
+    const request: RankingStartRequest = pending ? { ...pending } : { startId, displayName: normalized, gameSlug: RANKING_CONFIG.representativeSlug, clientVersion: RANKING_CONFIG.clientVersion, ruleVersion: RANKING_CONFIG.ruleVersion };
     this.startPending = request;
-    this.persistStartPending();
+    if (!this.persistStartPending() && this.preserveStoredRun) return this.fail('start_storage_unavailable', true);
+    const sequence = ++this.startSequence;
     try {
       const response = await this.gateway.startPlay(request);
-      this.assertStart(response);
+      if (sequence !== this.startSequence) return this.snapshot();
+      this.assertStart(response, request);
       this.session = { startId, playId: response.playId, displayName: normalized, gameSlug: request.gameSlug, clientVersion: request.clientVersion, ruleVersion: request.ruleVersion, startedAt: new Date().toISOString() };
       this.submission = null;
       this.startPending = null;
       this.status = 'idle';
       this.diagnosticCode = undefined;
-      this.persistSession();
-      this.removeStartPending();
+      if (this.persistSession()) this.removeStartPending();
       this.emit();
-    } catch (error) { return this.failFromError(error); }
+    } catch (error) { if (sequence !== this.startSequence) return this.snapshot(); return this.failFromError(error); }
     return this.snapshot();
   }
 
   /** Begin a new ranking-eligible run. A repeated `start` remains idempotent. */
+  public beginGuest(): RankingSnapshot {
+    ++this.startSequence;
+    this.session = null; this.startPending = null;
+    this.removeSession(); this.removeStartPending();
+    if (!this.submission) { this.status = 'idle'; this.diagnosticCode = 'guest_run'; }
+    this.emit();
+    return this.snapshot();
+  }
+
   public async begin(displayName: string): Promise<RankingSnapshot> {
+    if (!displayName.trim()) return this.beginGuest();
+    ++this.startSequence;
+    this.startPending = null; this.removeStartPending();
     // A retryable result is durable state. Never discard it merely because the
     // player starts another local run; the original submission_id and score
     // must remain available for a safe retry.
@@ -360,6 +383,7 @@ export class RankingClient {
 
   /** Reattach a server-issued session stored alongside an unfinished run. */
   public restoreSession(session: RankingSession, displayName: string): RankingSnapshot {
+    ++this.startSequence;
     const normalized = displayName.trim();
     if (this.submission) return this.fail('pending_submission_exists', true);
     if (!storedSession(session) || session.displayName !== normalized || session.gameSlug !== RANKING_CONFIG.representativeSlug
@@ -368,13 +392,13 @@ export class RankingClient {
     this.startPending = null;
     this.status = 'idle';
     this.diagnosticCode = undefined;
-    this.persistSession();
-    this.removeStartPending();
+    if (this.persistSession()) this.removeStartPending();
     this.emit();
     return this.snapshot();
   }
 
   public async finish(input: RankingFinishInput): Promise<RankingSnapshot> {
+    if (this.preserveStoredRun && this.malformedStorage) return this.fail('invalid_saved_ranking_state', false);
     if (this.status === 'submitted') return this.snapshot();
     const session = this.session;
     if (!session || !input.playId || input.playId !== session.playId) return this.fail('missing_server_play_id', false);
@@ -416,19 +440,19 @@ export class RankingClient {
     return this.snapshot();
   }
 
-  public async retry(result: BattleResultLike): Promise<RankingSnapshot> {
+  public async retry(result?: BattleResultLike): Promise<RankingSnapshot> {
     if (this.status !== 'retryable_failed' || !this.submission) return this.snapshot();
     await this.transmit(result);
     return this.snapshot();
   }
 
-  private async transmit(_result: BattleResultLike): Promise<void> {
+  private async transmit(_result?: BattleResultLike): Promise<void> {
     if (!this.submission || this.inFlight) return;
     this.inFlight = true;
     this.status = 'submitting';
     this.diagnosticCode = undefined;
     this.submission = { ...this.submission, attemptCount: this.submission.attemptCount + 1 };
-    this.persistSubmission();
+    if (!this.persistSubmission() && this.preserveStoredRun) { this.inFlight = false; this.fail('submission_storage_unavailable', true); return; }
     const submission = this.submission;
     const breakdown = { ...this.submission.scoreBreakdown };
     try {
@@ -453,8 +477,8 @@ export class RankingClient {
     }
   }
 
-  private assertStart(response: RankingStartResponse): void {
-    if (response.accepted !== true || !response.playId || response.gameSlug !== RANKING_CONFIG.representativeSlug || response.clientVersion !== RANKING_CONFIG.clientVersion) throw new RankingError('invalid_start_contract', false);
+  private assertStart(response: RankingStartResponse, request: RankingStartRequest): void {
+    if (response.accepted !== true || !response.playId || response.gameSlug !== request.gameSlug || response.clientVersion !== request.clientVersion) throw new RankingError('invalid_start_contract', false);
   }
   private assertFinish(response: RankingFinishResponse, playId: string): void { if (response.accepted !== true || response.playId !== playId) throw new RankingError('invalid_finish_contract', false); }
   private assertSubmit(response: RankingSubmitResponse, submission: RankingSubmission): void { if (response.accepted !== true || response.submissionId !== submission.submissionId || response.playId !== submission.playId || response.gameSlug !== submission.gameSlug || response.clientVersion !== submission.clientVersion || response.score !== submission.score) throw new RankingError('invalid_submit_contract', false); }
@@ -469,13 +493,15 @@ export class RankingClient {
       const sessionRaw = this.storage.getItem(RANKING_SESSION_KEY);
       const pendingRaw = this.storage.getItem(RANKING_PENDING_KEY);
       const startRaw = this.storage.getItem(RANKING_START_PENDING_KEY);
-      return { session: sessionRaw ? storedSession(JSON.parse(sessionRaw)) : null, submission: pendingRaw ? storedSubmission(JSON.parse(pendingRaw)) : null, startPending: startRaw ? storedStart(JSON.parse(startRaw)) : null };
-    } catch { return { session: null, submission: null, startPending: null }; }
+      const values = { session: sessionRaw ? storedSession(JSON.parse(sessionRaw)) : null, submission: pendingRaw ? storedSubmission(JSON.parse(pendingRaw)) : null, startPending: startRaw ? storedStart(JSON.parse(startRaw)) : null };
+      this.malformedStorage = Boolean(sessionRaw && !values.session || pendingRaw && !values.submission || startRaw && !values.startPending);
+      return values;
+    } catch { this.malformedStorage = true; return { session: null, submission: null, startPending: null }; }
   }
-  private persistSession(): void { try { this.storage?.setItem(RANKING_SESSION_KEY, JSON.stringify(this.session)); } catch { /* gameplay remains local */ } }
-  private persistSubmission(): void { try { if (this.submission) this.storage?.setItem(RANKING_PENDING_KEY, JSON.stringify(this.submission)); } catch { /* retry state remains in memory */ } }
+  private persistSession(): boolean { try { if (!this.storage) return false; this.storage.setItem(RANKING_SESSION_KEY, JSON.stringify(this.session)); return true; } catch { return false; } }
+  private persistSubmission(): boolean { try { if (!this.storage || !this.submission) return false; this.storage.setItem(RANKING_PENDING_KEY, JSON.stringify(this.submission)); return true; } catch { return false; } }
   private removePendingSubmission(): void { try { this.storage?.removeItem(RANKING_PENDING_KEY); } catch { /* best effort */ } }
-  private persistStartPending(): void { try { if (this.startPending) this.storage?.setItem(RANKING_START_PENDING_KEY, JSON.stringify(this.startPending)); } catch { /* gameplay remains local */ } }
+  private persistStartPending(): boolean { try { if (!this.storage || !this.startPending) return false; this.storage.setItem(RANKING_START_PENDING_KEY, JSON.stringify(this.startPending)); return true; } catch { return false; } }
   private removeStartPending(): void { try { this.storage?.removeItem(RANKING_START_PENDING_KEY); } catch { /* best effort */ } }
   private removeSession(): void { try { this.storage?.removeItem(RANKING_SESSION_KEY); } catch { /* best effort */ } }
 }

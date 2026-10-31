@@ -41,7 +41,6 @@ async function enterHome(page: Page): Promise<void> {
   await expect(page.locator('.name-input, [data-testid="start-game"]').first()).toBeVisible({ timeout: 10_000 });
   if (await name.isVisible()) {
     await name.fill('テスト守');
-    await page.getByRole('button', { name: 'この名前で始める' }).click();
   }
   await expect(page.getByText('カコマレ', { exact: true }).first()).toBeVisible();
 }
@@ -52,7 +51,6 @@ async function enterBattle(page: Page, query = '?test=1'): Promise<void> {
   await expect(page.locator('.name-input, [data-testid="start-game"]').first()).toBeVisible();
   if (await name.isVisible()) {
     await name.fill('戦闘確認');
-    await page.getByRole('button', { name: 'この名前で始める' }).click();
   }
   await page.getByTestId('start-game').click();
   await expect(page.getByTestId('countdown-screen')).toBeVisible();
@@ -60,16 +58,18 @@ async function enterBattle(page: Page, query = '?test=1'): Promise<void> {
   await expect(page.getByTestId('battle-screen')).toBeVisible({ timeout: 8000 });
 }
 
-test('初回の名前入力からホームへ進み、再読込で名前を保つ', async ({ page }) => {
+test('ホームの任意名は保存され、消去でき、IME確定で開始しない', async ({ page }) => {
   await page.goto('./?test=1');
   await expect(page.locator('.name-input')).toBeVisible();
-  await page.getByRole('button', { name: 'この名前で始める' }).click();
-  await expect(page.locator('.form-error')).toContainText('1〜20文字');
+  await expect(page.getByTestId('start-game')).toBeEnabled();
+  await expect(page.getByText('名前を入力すると、名前と記録がランキングに公開されます。空欄でも遊べます。')).toBeVisible();
   await page.locator('.name-input').fill('ひかり');
-  await page.getByRole('button', { name: 'この名前で始める' }).click();
   await expect(page.getByText('ひかりさん、コアを守りましょう。')).toBeVisible();
   await page.reload();
   await expect(page.getByText('ひかりさん、コアを守りましょう。')).toBeVisible();
+  await page.locator('.name-input').dispatchEvent('keydown',{key:'Enter',isComposing:true});
+  await expect(page.getByTestId('start-game')).toBeVisible();
+  await page.locator('.name-input').fill('');await page.reload();await expect(page.locator('.name-input')).toHaveValue('');
 });
 
 test('プレイするを連打しても無限の1プレイだけ開始して回数を1だけ増やす', async ({ page }) => {
@@ -87,7 +87,6 @@ test('プレイするを連打しても無限の1プレイだけ開始して回�
 test('3秒カウントダウン後に戦闘が始まり、ドラッグ照準と強化を使える', async ({ page }) => {
   await page.goto('./?test=1&upgrade=1');
   await page.locator('.name-input').fill('照準確認');
-  await page.getByRole('button', { name: 'この名前で始める' }).click();
   await page.getByTestId('start-game').click();
   await expect(page.getByTestId('countdown-number')).toHaveText('3');
   await expect(page.getByTestId('countdown-number')).toHaveText('2', { timeout: 2500 });
@@ -690,7 +689,6 @@ test('保存領域への書き込み失敗を画面遷移後も表示する', as
   });
   await page.goto('./?test=1');
   await page.locator('.name-input').fill('保存失敗確認');
-  await page.getByRole('button', { name: 'この名前で始める' }).click();
   await expect(page.locator('.notice')).toContainText('端末へ保存できませんでした');
   await page.getByTestId('start-game').click();
   await expect(page.getByTestId('countdown-screen')).toBeVisible();
@@ -706,7 +704,6 @@ test('破損保存を白画面にせず退避を保持し、設定にデータ�
   await expect(page.locator('.name-input')).toBeVisible();
   await expect(page.locator('.notice')).toContainText('保存データを読み込めなかった');
   await page.locator('.name-input').fill('復旧確認');
-  await page.getByRole('button', { name: 'この名前で始める' }).click();
   await page.getByRole('button', { name: '設定' }).click();
   await expect(page.getByTestId('copy-damaged-save')).toHaveCount(0);
   await expect(page.getByTestId('export-save')).toHaveCount(0);
@@ -777,6 +774,7 @@ test('強化候補を開いた直後の再読込でも選択前の画面から�
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('resume-saved-run')).toBeVisible({ timeout: 10_000 });
+  await page.locator('.name-input').fill('次回からの名前');
   await page.getByTestId('resume-saved-run').click();
   await expect(page.getByTestId('battle-screen')).toBeVisible({ timeout: 8_000 });
   await expect(page.locator('.pause-layer')).toBeVisible({ timeout: 4_000 });
@@ -784,6 +782,8 @@ test('強化候補を開いた直後の再読込でも選択前の画面から�
   await expect(page.getByTestId('upgrade-card')).toHaveCount(3);
   expect(await page.getByTestId('upgrade-card').evaluateAll((cards) => cards.map((card) => card.getAttribute('data-candidate-id')))).toEqual(candidates);
   await expect(page.getByTestId('hud-xp')).toHaveText(xp ?? '');
+  const savedRunName = await page.evaluate(() => JSON.parse(localStorage.getItem('kakomare-run-save-v3') ?? '{}').rankingName);
+  expect(savedRunName).toBe('戦闘確認');
   await chooseV0Upgrade(page);
   await expect(page.locator('.upgrade-layer')).toHaveCount(0);
 });
@@ -968,4 +968,38 @@ test('P16-03/07: 3回の再戦で前プレイの保留・停止ボタンが現�
       await expect(page.getByTestId('battle-screen')).toBeVisible({ timeout: 8000 });
     }
   }
+});
+
+
+test('空白名で開始して結果とランキング・共有を使い、後の改名で公開しない', async ({page})=>{
+ const writes:string[]=[];
+ await page.route('https://**.supabase.co/**', async route=>{writes.push(route.request().url());await route.fulfill({status:503,body:'{}'});});
+ await page.goto('./?test=1&outcome=defeat');
+ await page.locator('.name-input').fill('   ');await page.getByTestId('start-game').click();
+ await expect(page.getByRole('heading',{name:'防衛失敗'})).toBeVisible({timeout:10000});
+ await expect(page.getByTestId('ranking-status')).toContainText('今回の結果は公開登録しません');
+ await expect(page.getByRole('button',{name:'Xでシェア'})).toBeVisible();
+ expect(writes).toEqual([]);
+ await page.getByRole('button',{name:'ホーム',exact:true}).click();
+ await page.locator('.name-input').fill('後から入力');
+ expect(writes).toEqual([]);
+});
+
+
+test('失敗した二つの名前付き結果をホームから別々に再表示できる',async({page})=>{
+ await page.goto('./?test=1&outcome=defeat');
+ for(const name of ['開始名A','開始名B']){
+  await page.locator('.name-input').fill(name);await page.getByTestId('start-game').click();
+  await expect(page.getByTestId('result-screen')).toBeVisible({timeout:10000});
+  await page.getByRole('button',{name:'ホーム',exact:true}).click();
+ }
+ await expect(page.getByTestId('pending-ranking-result')).toHaveCount(2);
+ await page.locator('.name-input').fill('');await page.reload();
+ await expect(page.getByTestId('pending-ranking-result')).toHaveCount(2);
+ await page.getByTestId('pending-ranking-result').first().click();
+ await expect(page.getByTestId('result-screen')).toBeVisible();
+ await page.getByRole('button',{name:'ホーム',exact:true}).click();
+ await expect(page.getByTestId('pending-ranking-result')).toHaveCount(2);
+ const savedNames=await page.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('kakomare:ranking-run:v1:')&&key.endsWith(':meta')).map(key=>JSON.parse(localStorage.getItem(key)!).name).sort());
+ expect(savedNames).toEqual(['開始名A','開始名B']);
 });

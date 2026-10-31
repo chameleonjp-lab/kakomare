@@ -34,6 +34,8 @@ export interface RunSaveEnvelope {
   inputLog: NormalizedRunInput[];
   randomState: RunRandomState;
   /** Server-issued ranking session associated with this unfinished run. */
+  rankingName?: string;
+  rankingRunId?: string;
   rankingSession?: {
     startId: string;
     playId: string;

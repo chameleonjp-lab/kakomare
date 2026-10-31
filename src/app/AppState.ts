@@ -11,7 +11,7 @@ export interface AppState {
 
 export function createAppState(save: SaveData): AppState {
   return {
-    view: save.profile.name ? 'home' : 'name-entry',
+    view: 'home',
     save,
     selectedStage: 'endless',
     notice: '',

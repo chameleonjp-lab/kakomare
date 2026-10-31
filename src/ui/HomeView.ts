@@ -1,8 +1,9 @@
 import type { SaveData } from '../types/save';
-import { button, card, element, heading, pageShell } from './viewUtils';
+import { button, card, element, heading, isValidPlayerName, pageShell } from './viewUtils';
 
 export interface HomeActions {
   start: () => void;
+  changeName?: (name: string) => void;
   resume?: () => void;
   /** Optional secondary navigation kept for hosts that expose preferences. */
   settings?: () => void;
@@ -21,7 +22,24 @@ export function createHomeView(save: SaveData, actions: HomeActions): HTMLElemen
   const start = button('プレイする', 'button button-primary button-large');
   start.dataset.testid = 'start-game';
   start.addEventListener('click', actions.start);
-  hero.append(title, element('p', 'hero-copy', `${save.profile.name}さん、コアを守りましょう。`), start);
+  const greeting = element('p', 'hero-copy', save.profile.name ? `${save.profile.name}さん、コアを守りましょう。` : 'コアを守りましょう。');
+  const label = element('label', 'field-label', '名前（任意）');
+  const input = element('input', 'name-input');
+  input.id = 'player-name'; input.type = 'text'; input.value = save.profile.name;
+  input.setAttribute('autocomplete', 'nickname'); input.placeholder = '空欄でも遊べます';
+  label.htmlFor = input.id;
+  input.setAttribute('aria-describedby', 'name-help name-error');
+  const help = element('p', 'field-help', '名前を入力すると、名前と記録がランキングに公開されます。空欄でも遊べます。'); help.id = 'name-help';
+  const error = element('p', 'form-error'); error.id = 'name-error'; error.setAttribute('role', 'alert');
+  const update = (): void => {
+    const name = input.value.trim(); const valid = name === '' || isValidPlayerName(name);
+    start.disabled = !valid; error.textContent = valid ? '' : '名前は20文字以内で入力してください。';
+    if (valid) { actions.changeName?.(name); greeting.textContent = name ? `${name}さん、コアを守りましょう。` : 'コアを守りましょう。'; }
+  };
+  input.addEventListener('input', (event) => { if (!(event as InputEvent).isComposing) update(); });
+  input.addEventListener('compositionend', update);
+  // Enter never starts a run from this field, including Japanese IME confirmation.
+  hero.append(title, greeting, label, input, help, error, start);
   if (actions.resume) {
     const resume = button('中断したプレイを再開', 'button button-secondary button-large');
     resume.dataset.testid = 'resume-saved-run';
