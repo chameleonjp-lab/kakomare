@@ -56,17 +56,17 @@ function rankingStatusLabel(snapshot: RankingSnapshot): string {
 
 function topRankingList(snapshot: RankingSnapshot): HTMLElement {
   if (snapshot.topRankingStatus === 'loading' || snapshot.topRankingStatus === 'idle') {
-    return element('p', 'summary-line', '上位10件を読み込んでいます…');
+    return element('p', 'summary-line', '上位30名を読み込んでいます…');
   }
   if (snapshot.topRankingStatus === 'failed') {
-    return element('p', 'summary-line', 'ランキング上位10件を取得できませんでした。');
+    return element('p', 'summary-line', 'ランキング上位30名を取得できませんでした。');
   }
   if (snapshot.topRanking.length === 0) {
     return element('p', 'summary-line', 'まだランキング記録がありません。');
   }
   const list = element('ol', 'result-top-ranking');
   list.dataset.testid = 'result-top-ranking';
-  for (const entry of snapshot.topRanking.slice(0, 10)) {
+  for (const entry of snapshot.topRanking.slice(0, 30)) {
     const row = element('li', 'result-ranking-entry');
     row.dataset.testid = 'result-ranking-entry';
     const rank = element('strong', 'result-ranking-rank', `${entry.rank}位`);
@@ -87,7 +87,7 @@ function resultActions(result: BattleResult, actions: ResultActions): HTMLElemen
   actionsGrid.append(again);
 
   if (!result.retired) {
-    const share = button('結果を共有', 'button button-secondary button-large');
+    const share = button('Xでシェア', 'button button-secondary button-large');
     share.dataset.testid = 'share-result';
     share.addEventListener('click', actions.share);
     actionsGrid.append(share);
@@ -176,8 +176,8 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
     const rankingCard = card('card result-ranking-card');
     rankingCard.dataset.testid = 'ranking-status';
     rankingCard.append(heading('ランキング', 2), element('p', 'summary-line', rankingStatusLabel(actions.ranking)));
-    rankingCard.append(heading('ランキング上位10件', 3), topRankingList(actions.ranking));
-    if (actions.ranking.status === 'retryable_failed' && actions.retryRanking) {
+    rankingCard.append(heading('ランキング上位30名', 3), topRankingList(actions.ranking));
+    if ((actions.ranking.status === 'retryable_failed' || actions.ranking.topRankingStatus === 'failed') && actions.retryRanking) {
       const retry = button('ランキングへ再送', 'button button-secondary');
       retry.dataset.testid = 'ranking-retry';
       retry.addEventListener('click', actions.retryRanking);
@@ -188,8 +188,8 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
 
   shell.append(resultDetails(result), resultEquipment(result));
 
-  const external = element('a', 'experiment-link', 'カメレオンJPの実験場');
-  external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/';
+  const external = element('a', 'experiment-link', 'ランキング');
+  external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/ranking.html?game=kakomare';
   external.target = '_blank';
   external.rel = 'noopener noreferrer';
   shell.append(external);

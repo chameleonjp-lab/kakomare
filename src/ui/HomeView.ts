@@ -42,15 +42,15 @@ export function createHomeView(save: SaveData, actions: HomeActions): HTMLElemen
     actionsGrid.append(settingsButton);
   }
   if (actions.share) {
-    const shareButton = button('ゲームを共有');
+    const shareButton = button('Xでシェア');
     shareButton.dataset.testid = 'share-home';
     shareButton.addEventListener('click', actions.share);
     actionsGrid.append(shareButton);
   }
   if (actionsGrid.childElementCount > 0) shell.append(actionsGrid);
 
-  const external = element('a', 'experiment-link', 'カメレオンJPの実験場');
-  external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/';
+  const external = element('a', 'experiment-link', 'ランキング');
+  external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/ranking.html?game=kakomare';
   external.target = '_blank';
   external.rel = 'noopener noreferrer';
   shell.append(external);

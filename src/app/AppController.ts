@@ -1240,7 +1240,7 @@ export class AppController {
     const result = await this.shareService.share('カコマレ', '全方位防衛ゲーム「カコマレ」\n六方向から迫る敵を防ぎ、装置を組み上げよう。');
     if (result.method === 'cancelled') return;
     if (!result.success) this.showManualShare('全方位防衛ゲーム「カコマレ」\n六方向から迫る敵を防ぎ、装置を組み上げよう。');
-    else this.showVisibleNotice(result.method === 'native' ? '共有を完了しました。' : '共有文とURLをコピーしました。');
+    else this.showVisibleNotice(result.method === 'x' ? 'Xの投稿画面を開きました。' : '共有文とURLをコピーしました。');
   }
 
   private async shareResult(result: BattleResult): Promise<void> {
@@ -1248,7 +1248,7 @@ export class AppController {
     const shared = await this.shareService.share('カコマレの結果', text);
     if (shared.method === 'cancelled') return;
     if (!shared.success) this.showManualShare(text);
-    else this.showVisibleNotice(shared.method === 'native' ? '共有を完了しました。' : '結果とURLをコピーしました。');
+    else this.showVisibleNotice(shared.method === 'x' ? 'Xの投稿画面を開きました。' : '結果とURLをコピーしました。');
   }
 
   private showManualShare(text: string): void {

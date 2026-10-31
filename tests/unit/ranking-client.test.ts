@@ -118,12 +118,12 @@ describe('RankingClient', () => {
     await gateway.startPlay(startRequest);
     await gateway.finishPlay({ playId: 'server-play-1', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless', resultType: 'game_over', reachedWave: 1, score: 120, scoreBreakdown: { kills: 3 } });
     await gateway.submitScore({ submissionId: 'submission-1', playId: 'server-play-1', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless', resultType: 'game_over', score: 120, scoreBreakdown: { kills: 3 } });
-    await expect(gateway.getBestRanking('kakomare', 10)).resolves.toEqual([{ rank: 1, displayName: '上位者', firstScore: 100, bestScore: 200, playCount: 3, updatedAt: '2026-09-18T00:00:00.000Z' }]);
+    await expect(gateway.getBestRanking('kakomare', 30)).resolves.toEqual([{ rank: 1, displayName: '上位者', firstScore: 100, bestScore: 200, playCount: 3, updatedAt: '2026-09-18T00:00:00.000Z' }]);
     expect(calls.map((call) => call.body)).toEqual([
       { p_start_id: 'start-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_client_version: 'kakomare-web-v9' },
       { p_play_id: 'server-play-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_result_type: 'game_over', p_reached_wave: 1, p_score: 120, p_client_version: 'kakomare-web-v9', p_ranking_score: 120 },
       { p_play_id: 'server-play-1', p_submission_id: 'submission-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_score: 120, p_client_version: 'kakomare-web-v9' },
-      { p_game_slug: 'kakomare', p_limit: 10 },
+      { p_game_slug: 'kakomare', p_limit: 30 },
     ]);
     expect(calls[0]?.keepalive).toBe(true);
 

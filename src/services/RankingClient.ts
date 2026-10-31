@@ -185,7 +185,7 @@ export class HttpRankingGateway implements RankingGateway {
   }
 
   public getBestRanking(gameSlug: string, limit: number): Promise<RankingEntry[]> {
-    if (!isBoundedText(gameSlug, 80) || !Number.isSafeInteger(limit) || limit < 1 || limit > 10) {
+    if (!isBoundedText(gameSlug, 80) || !Number.isSafeInteger(limit) || limit < 1 || limit > 30) {
       return Promise.reject(new RankingError('invalid_ranking_request', false));
     }
     return this.rpcRows(RANKING_CONFIG.bestRankingRpc, {
@@ -280,7 +280,7 @@ export class RankingClient {
     this.emit();
     const request = (async (): Promise<RankingSnapshot> => {
       try {
-        this.topRanking = await this.gateway.getBestRanking(RANKING_CONFIG.representativeSlug, 10);
+        this.topRanking = await this.gateway.getBestRanking(RANKING_CONFIG.representativeSlug, 30);
         this.topRankingStatus = 'loaded';
       } catch {
         this.topRanking = [];

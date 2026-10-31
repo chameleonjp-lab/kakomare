@@ -306,7 +306,7 @@ test('敗北結果へ進み、結果画面の共有導線と実験場リンク�
   await enterBattle(page, '?test=1&outcome=defeat&seed=1');
   await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 4000 });
   await expect(page.getByRole('heading', { name: '防衛失敗' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '結果を共有' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Xでシェア' })).toBeVisible();
   const deviceRecords = page.getByTestId('result-device-records');
   // This fixture ends before the first shot lands. Do not invent a weapon
   // contribution merely because the starting weapon was installed.
@@ -317,7 +317,7 @@ test('敗北結果へ進み、結果画面の共有導線と実験場リンク�
   await expect(page.getByTestId('result-screen')).not.toContainText('方向別の被害');
   await expect(page.getByTestId('result-screen')).not.toContainText('強化順');
   await expect(page.getByTestId('result-screen')).not.toContainText('反響核');
-  await expect(page.getByRole('link', { name: 'カメレオンJPの実験場' })).toHaveAttribute('href', 'https://chameleonjp-lab.github.io/chameleonjp_lab/');
+  await expect(page.getByRole('link', { name: 'ランキング', exact: true })).toHaveAttribute('href', 'https://chameleonjp-lab.github.io/chameleonjp_lab/ranking.html?game=kakomare');
 });
 
 test('勝利結果へ進み、もう一度でカウントダウンを開始できる', async ({ page }) => {
@@ -627,7 +627,7 @@ test('画面回転と非表示からの復帰で戦闘を一時停止する', as
 
 test('共有できない環境では画面内のコピー欄へ切り替える', async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(Navigator.prototype, 'share', { configurable: true, value: undefined });
+    window.open = () => null;
     Object.defineProperty(Navigator.prototype, 'clipboard', { configurable: true, value: undefined });
   });
   await enterHome(page);
@@ -647,13 +647,10 @@ test('共有できない環境では画面内のコピー欄へ切り替える',
   await expect(page.getByTestId('share-home')).toBeFocused();
 });
 
-test('ネイティブ共有をキャンセルしてもクリップボードへコピーしない', async ({ page }) => {
+test('Xの投稿画面を開いてもクリップボードへコピーしない', async ({ page }) => {
   await page.addInitScript(() => {
     (window as Window & { copyAttempts?: number }).copyAttempts = 0;
-    Object.defineProperty(Navigator.prototype, 'share', {
-      configurable: true,
-      value: () => Promise.reject(new DOMException('cancelled', 'AbortError')),
-    });
+    window.open = () => ({ opener: null }) as Window;
     Object.defineProperty(Navigator.prototype, 'clipboard', {
       configurable: true,
       value: { writeText: () => { (window as Window & { copyAttempts?: number }).copyAttempts = ((window as Window & { copyAttempts?: number }).copyAttempts ?? 0) + 1; return Promise.resolve(); } },
@@ -668,7 +665,7 @@ test('ネイティブ共有をキャンセルしてもクリップボードへ�
 
 test('ホーム共有と結果共有で異なる文章を生成する', async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(Navigator.prototype, 'share', { configurable: true, value: undefined });
+    window.open = () => null;
     Object.defineProperty(Navigator.prototype, 'clipboard', { configurable: true, value: undefined });
   });
   await enterHome(page);

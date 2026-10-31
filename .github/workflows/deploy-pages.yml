@@ -31,7 +31,7 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium webkit
       - name: Run static and unit checks
-        run: npm run lint && npm run typecheck && npm run test
+        run: npm run lint && npm run typecheck && npm run test && npm run verify:expansion-docs && npm run verify:ranking-manifest
       - name: Run Chromium checks
         run: npm run test:e2e:chromium
       - name: Run WebKit checks
@@ -52,6 +52,16 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check this is still the production branch head
+        id: current
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = await github.rest.git.getRef({
+              ...context.repo, ref: 'heads/main'
+            });
+            core.setOutput('current', ref.data.object.sha === context.sha);
       - name: Deploy to GitHub Pages
         id: deployment
+        if: steps.current.outputs.current == 'true'
         uses: actions/deploy-pages@v5
