@@ -1,3 +1,5 @@
+import { translateData, translateGameText } from '../services/GameTextService';
+import { translate as t, formatNumber } from '../services/TranslationService';
 import { BOSSES } from '../data/bosses';
 import { SUPPORTS, SUPPORT_ORDER } from '../data/supports';
 import { WEAPONS, WEAPON_ORDER } from '../data/weapons';
@@ -41,40 +43,40 @@ function playerFacingCause(result: BattleResult): string {
   // The replay/ledger keeps the exact source. The compact result intentionally
   // uses a generic label so a boss name never leaks back into player copy.
   for (const boss of Object.values(BOSSES)) cause = cause.replaceAll(boss.name, 'ボス');
-  return cause;
+  return translateGameText(cause);
 }
 
 function rankingStatusLabel(snapshot: RankingSnapshot): string {
-  if (snapshot.diagnosticCode === 'unconfirmed_result') return '中断した結果は公開登録しません。';
-  if (snapshot.diagnosticCode === 'guest_run') return '名前なしのため、今回の結果は公開登録しません。';
-  if (snapshot.status === 'submitting') return 'ランキングへ送信中…';
-  if (snapshot.status === 'submitted') return 'ランキングへ登録しました。';
-  if (snapshot.status === 'retryable_failed') return 'ランキング送信を再試行できます。';
+  if (snapshot.diagnosticCode === 'unconfirmed_result') return t('result.unconfirmed');
+  if (snapshot.diagnosticCode === 'guest_run') return t('result.guest');
+  if (snapshot.status === 'submitting') return t('result.submitting');
+  if (snapshot.status === 'submitted') return t('result.submitted');
+  if (snapshot.status === 'retryable_failed') return t('result.retryable');
   if (snapshot.status === 'permanent_failed') return snapshot.diagnosticCode === 'ranking_endpoint_unconfigured'
-    ? 'ランキング受付が未設定のため、今回の記録は送信していません。'
-    : 'ランキングへ登録できませんでした。結果と再戦は利用できます。';
-  return 'ランキング受付を確認しています。';
+    ? t('result.unconfigured')
+    : t('result.failed');
+  return t('result.checking');
 }
 
 function topRankingList(snapshot: RankingSnapshot): HTMLElement {
   if (snapshot.topRankingStatus === 'loading' || snapshot.topRankingStatus === 'idle') {
-    return element('p', 'summary-line', '上位30名を読み込んでいます…');
+    return element('p', 'summary-line', t('ranking.loading'));
   }
   if (snapshot.topRankingStatus === 'failed') {
-    return element('p', 'summary-line', 'ランキング上位30名を取得できませんでした。');
+    return element('p', 'summary-line', t('ranking.failed'));
   }
   if (snapshot.topRanking.length === 0) {
-    return element('p', 'summary-line', 'まだランキング記録がありません。');
+    return element('p', 'summary-line', t('ranking.empty'));
   }
   const list = element('ol', 'result-top-ranking');
   list.dataset.testid = 'result-top-ranking';
   for (const entry of snapshot.topRanking.slice(0, 30)) {
     const row = element('li', 'result-ranking-entry');
     row.dataset.testid = 'result-ranking-entry';
-    const rank = element('strong', 'result-ranking-rank', `${entry.rank}位`);
+    const rank = element('strong', 'result-ranking-rank', t('ranking.rank', { value: formatNumber(entry.rank) }));
     const name = element('span', 'result-ranking-name', entry.displayName);
-    const score = element('strong', 'result-ranking-score', `${entry.bestScore.toLocaleString('ja-JP')}点`);
-    const plays = element('span', 'result-ranking-plays', `${entry.playCount}プレイ`);
+    const score = element('strong', 'result-ranking-score', t('common.points', { value: formatNumber(entry.bestScore) }));
+    const plays = element('span', 'result-ranking-plays', t('ranking.plays', { value: formatNumber(entry.playCount) }));
     row.append(rank, name, score, plays);
     list.append(row);
   }
@@ -83,19 +85,19 @@ function topRankingList(snapshot: RankingSnapshot): HTMLElement {
 
 function resultActions(result: BattleResult, actions: ResultActions): HTMLElement {
   const actionsGrid = element('div', 'result-actions result-actions-top');
-  const again = button('もう一度', 'button button-primary button-large');
+  const again = button(t('result.again'), 'button button-primary button-large');
   again.dataset.testid = 'result-again';
   again.addEventListener('click', actions.again);
   actionsGrid.append(again);
 
   if (!result.retired) {
-    const share = button('Xでシェア', 'button button-secondary button-large');
+    const share = button(t('common.share'), 'button button-secondary button-large');
     share.dataset.testid = 'share-result';
     share.addEventListener('click', actions.share);
     actionsGrid.append(share);
   }
 
-  const home = button('ホーム', 'button button-secondary button-large');
+  const home = button(t('common.home'), 'button button-secondary button-large');
   home.dataset.testid = 'result-home';
   home.addEventListener('click', actions.home);
   actionsGrid.append(home);
@@ -104,12 +106,12 @@ function resultActions(result: BattleResult, actions: ResultActions): HTMLElemen
 
 function resultDetails(result: BattleResult): HTMLElement {
   const details = card('result-details result-summary-details');
-  details.append(heading('プレイの内訳', 2));
+  details.append(heading(t('result.details'), 2));
   const cause = playerFacingCause(result);
   const rows: Array<[string, string]> = [
-    ['残り耐久力', `${Math.max(0, Math.round(result.coreRemaining))}`],
-    ['ボス撃破', `${result.bossesDefeated}体`],
-    [result.retired ? '終了理由' : '主な敗因', cause],
+    [t('result.health'), `${Math.max(0, Math.round(result.coreRemaining))}`],
+    [t('result.bossKills'), formatNumber(result.bossesDefeated)],
+    [result.retired ? t('result.endReason') : t('result.defeatReason'), cause],
   ];
   for (const [label, value] of rows) {
     const row = element('div', 'result-row');
@@ -124,16 +126,16 @@ function resultEquipment(result: BattleResult): HTMLElement {
   deviceCard.dataset.testid = 'result-device-records';
 
   const weapons = topContributingWeapons(result);
-  deviceCard.append(heading('主な武器（上位3）', 2));
+  deviceCard.append(heading(t('result.weapons'), 2));
   if (weapons.length === 0) {
-    deviceCard.append(element('p', 'summary-line', 'このプレイで記録された武器ダメージはありません。'));
+    deviceCard.append(element('p', 'summary-line', t('result.noDamage')));
   } else {
     const list = element('ol', 'result-weapon-list');
     for (const weapon of weapons) {
       const entry = element('li', 'result-weapon-entry');
-      const name = element('span', 'result-weapon-name', WEAPONS[weapon.id].name);
-      const role = element('span', 'result-device-role', WEAPONS[weapon.id].role);
-      const damage = element('strong', 'result-device-value', `${Math.round(weapon.damage)}ダメージ`);
+      const name = element('span', 'result-weapon-name', translateData(`data.weapons.name.${weapon.id}`, WEAPONS[weapon.id].name));
+      const role = element('span', 'result-device-role', translateData(`data.weapons.role.${weapon.id}`, WEAPONS[weapon.id].role));
+      const damage = element('strong', 'result-device-value', t('result.damage', { value: formatNumber(Math.round(weapon.damage)) }));
       entry.append(name, role, damage);
       list.append(entry);
     }
@@ -142,11 +144,11 @@ function resultEquipment(result: BattleResult): HTMLElement {
 
   const supports = usedSupportIds(result);
   if (supports.length > 0) {
-    deviceCard.append(heading('使った補助', 2));
+    deviceCard.append(heading(t('result.supports'), 2));
     const supportSummary = element('p', 'result-support-summary');
     supportSummary.dataset.testid = 'result-supports';
     supportSummary.textContent = supports
-      .map((id) => SUPPORTS[id].name)
+      .map((id) => translateData(`data.supports.name.${id}`, SUPPORTS[id].name))
       .join(' / ');
     deviceCard.append(supportSummary);
   }
@@ -154,21 +156,21 @@ function resultEquipment(result: BattleResult): HTMLElement {
 }
 
 export function createResultView(result: BattleResult, actions: ResultActions): HTMLElement {
-  const title = result.retired ? 'プレイ終了' : result.outcome === 'victory' ? '防衛成功' : '防衛失敗';
+  const title = result.retired ? t('result.ended') : result.outcome === 'victory' ? t('result.victory') : t('result.defeat');
   const description = result.retired
-    ? 'このプレイの得点は確定しません。'
+    ? t('result.noScore')
     : result.outcome === 'victory'
-      ? '防衛を終えました。'
+      ? t('result.defended')
       : playerFacingCause(result);
   const shell = pageShell(title, description);
   shell.dataset.testid = 'result-screen';
 
   const scoreCard = card('result-score-card');
-  const score = heading(result.retired ? '記録は未確定です' : `${result.score.toLocaleString('ja-JP')} 点`, 2);
+  const score = heading(result.retired ? t('result.pending') : t('common.points', { value: formatNumber(result.score) }), 2);
   score.className = 'result-score';
   score.dataset.testid = 'result-score';
   scoreCard.append(score);
-  scoreCard.append(element('p', 'result-highlight', `${Math.floor(result.survivalTime)}秒生存 / 撃破 ${result.kills}`));
+  scoreCard.append(element('p', 'result-highlight', t('result.highlight', { seconds: formatNumber(Math.floor(result.survivalTime)), kills: formatNumber(result.kills) })));
   shell.append(scoreCard);
 
   // Keep the three next actions in the first viewport, immediately below the score.
@@ -177,10 +179,10 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
   if (result.stageId === 'endless' && actions.ranking) {
     const rankingCard = card('card result-ranking-card');
     rankingCard.dataset.testid = 'ranking-status';
-    rankingCard.append(heading('ランキング', 2), element('p', 'summary-line', rankingStatusLabel(actions.ranking)));
-    rankingCard.append(heading('ランキング上位30名', 3), topRankingList(actions.ranking));
+    rankingCard.append(heading(t('common.ranking'), 2), element('p', 'summary-line', rankingStatusLabel(actions.ranking)));
+    rankingCard.append(heading(t('ranking.top'), 3), topRankingList(actions.ranking));
     if ((actions.ranking.status === 'retryable_failed' || actions.ranking.topRankingStatus === 'failed') && actions.retryRanking) {
-      const retry = button(actions.ranking.status === 'retryable_failed' ? '記録を再送' : 'ランキングを再読み込み', 'button button-secondary');
+      const retry = button(actions.ranking.status === 'retryable_failed' ? t('ranking.retry') : t('ranking.reload'), 'button button-secondary');
       retry.dataset.testid = 'ranking-retry';
       retry.addEventListener('click', actions.retryRanking);
       rankingCard.append(retry);
@@ -190,10 +192,11 @@ export function createResultView(result: BattleResult, actions: ResultActions): 
 
   shell.append(resultDetails(result), resultEquipment(result));
 
-  const external = element('a', 'experiment-link', 'ランキング');
+  const external = element('a', 'experiment-link', t('common.ranking'));
   external.href = 'https://chameleonjp-lab.github.io/chameleonjp_lab/ranking.html?game=kakomare';
   external.target = '_blank';
   external.rel = 'noopener noreferrer';
   shell.append(external);
   return shell;
 }
+

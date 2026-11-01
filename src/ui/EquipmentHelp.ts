@@ -1,3 +1,4 @@
+import { translateEquipmentText } from '../services/GameTextService';
 import { SUPPORTS } from '../data/supports';
 import { WEAPONS } from '../data/weapons';
 import { supportSynergyTags, weaponSynergyTags, type SynergyTagId } from '../data/synergyTags';
@@ -519,24 +520,32 @@ function supportHelp(input: SupportId | SupportSnapshot, weapons: readonly Weapo
 /** Build explanations from the exact installed weapon/support snapshot. */
 export function getEquipmentHelp(snapshot: Pick<BattleSnapshot, 'weapons' | 'supports'>): EquipmentHelpBundle {
   return {
-    weapons: snapshot.weapons.map((weapon) => weaponHelp(weapon, snapshot.supports, snapshot.weapons)),
-    supports: snapshot.supports.map((support) => supportHelp(support, snapshot.weapons)),
+    weapons: snapshot.weapons.map((weapon) => localizeHelp(weaponHelp(weapon, snapshot.supports, snapshot.weapons))),
+    supports: snapshot.supports.map((support) => localizeHelp(supportHelp(support, snapshot.weapons))),
   };
 }
 
 /** Explain a weapon by id or by its installed snapshot. */
 export function getWeaponHelp(input: WeaponId | WeaponSnapshot, supports: readonly SupportSnapshot[] = [], weapons: readonly WeaponSnapshot[] = []): EquipmentHelp {
-  return weaponHelp(input, supports, weapons);
+  return localizeHelp(weaponHelp(input, supports, weapons));
 }
 
 /** Explain a support by id or by its installed snapshot. */
 export function getSupportHelp(input: SupportId | SupportSnapshot, weapons: readonly WeaponSnapshot[] = []): EquipmentHelp {
-  return supportHelp(input, weapons);
+  return localizeHelp(supportHelp(input, weapons));
 }
 
 /** Alias names make the snapshot-oriented API easy to discover from UI code. */
 export const weaponHelpForSnapshot = getWeaponHelp;
 export const supportHelpForSnapshot = getSupportHelp;
+
+function localizeHelp(help: EquipmentHelp): EquipmentHelp {
+  return { ...help, name: translateEquipmentText(help.name), role: translateEquipmentText(help.role),
+    summary: translateEquipmentText(help.summary), current: translateEquipmentText(help.current),
+    effects: help.effects.map(translateEquipmentText), conditions: help.conditions.map(translateEquipmentText),
+    limits: help.limits.map(translateEquipmentText), connections: help.connections.map(translateEquipmentText), synergies: help.synergies.map(translateEquipmentText),
+  };
+}
 
 /** Render the same structured copy as a compact, accessible card. */
 export function renderEquipmentHelp(help: EquipmentHelp): HTMLElement {
@@ -558,9 +567,10 @@ function appendSection(parent: HTMLElement, key: string, title: string, lines: r
   if (lines.length === 0) return;
   const section = element('section', 'equipment-help-section');
   section.dataset.section = key;
-  section.append(element('h5', '', title));
+  section.append(element('h5', '', translateEquipmentText(title)));
   const list = element('ul', 'equipment-help-list');
   for (const line of lines) list.append(element('li', '', line));
   section.append(list);
   parent.append(section);
 }
+

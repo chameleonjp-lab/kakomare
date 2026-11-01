@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { languageService } from '../../src/services/LanguageService';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { BuildGraph } from '../../src/game/build/BuildGraph';
 import { placementLabel, placementNodes } from '../../src/ui/PlacementPreview';
 import type { BattleSnapshot } from '../../src/types/game';
 
 describe('placement preview uses combat coordinates and stable slot labels', () => {
+  beforeEach(() => languageService.select('ja'));
   it('defaults to the six initially available nodes', () => {
     expect(placementNodes(null)).toHaveLength(6);
     expect(placementLabel('weapon', 0)).toBe('武器面1（内側・上）');
@@ -23,3 +25,4 @@ describe('placement preview uses combat coordinates and stable slot labels', () 
     expect(placementLabel('support', 4)).toBe('補助面5（中側・下）');
   });
 });
+
