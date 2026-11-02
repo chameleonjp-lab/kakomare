@@ -1313,7 +1313,7 @@ export class AppController {
     this.showCopyDialog(
       t('share.copy'),
       t('share.manual'),
-      `${text}\n${this.shareService.getShareUrl()}`,
+      this.shareService.getShareText(text),
       t('share.copy'),
       'manual-share-copy',
       'share-modal',

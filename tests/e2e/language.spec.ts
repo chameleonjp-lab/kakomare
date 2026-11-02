@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './isolatedTest';
 
 test.use({ locale: 'en-US', viewport: { width: 320, height: 568 } });
 

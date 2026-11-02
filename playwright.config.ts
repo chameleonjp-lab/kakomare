@@ -10,6 +10,7 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4173/kakomare/',
     locale: 'ja-JP', // Existing Japanese-copy checks explicitly model a Japanese browser.
     trace: 'on-first-retry',
+    serviceWorkers: 'block',
   },
   webServer: {
     command: 'npm run build && npm run preview -- --host 127.0.0.1',
