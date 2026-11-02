@@ -33,12 +33,8 @@ jobs:
         run: npm run lint && npm run typecheck && npm run test && npm run verify:expansion-docs && npm run verify:ranking-manifest && git diff --check
       - name: Run Chromium checks
         run: npm run test:e2e:chromium -- --output=test-results/chromium
-        env:
-          KAKOMARE_CAPTURE_SHARE_MATERIAL: ${{ github.ref == 'refs/heads/work/kakomare-share-acceptance-20261102' && '1' || '0' }}
       - name: Run WebKit checks
         run: npm run test:e2e:webkit -- --output=test-results/webkit
-        env:
-          KAKOMARE_CAPTURE_SHARE_MATERIAL: ${{ github.ref == 'refs/heads/work/kakomare-share-acceptance-20261102' && '1' || '0' }}
       - name: Build and verify release files
         run: npm run build && npm run verify:dist && npm run verify:originality
       - name: Upload browser evidence
@@ -74,12 +70,8 @@ jobs:
         run: npm run lint && npm run typecheck && npm run test && npm run verify:expansion-docs && npm run verify:ranking-manifest && git diff --check
       - name: Run Chromium checks
         run: npm run test:e2e:chromium -- --output=test-results/chromium
-        env:
-          KAKOMARE_CAPTURE_SHARE_MATERIAL: ${{ github.ref == 'refs/heads/work/kakomare-share-acceptance-20261102' && '1' || '0' }}
       - name: Run WebKit checks
         run: npm run test:e2e:webkit -- --output=test-results/webkit
-        env:
-          KAKOMARE_CAPTURE_SHARE_MATERIAL: ${{ github.ref == 'refs/heads/work/kakomare-share-acceptance-20261102' && '1' || '0' }}
       - name: Build and verify release files
         run: npm run build && npm run verify:dist && npm run verify:originality
       - name: Upload browser evidence

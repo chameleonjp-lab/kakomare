@@ -777,3 +777,9 @@
 }
 
 [data-testid="share-home"], [data-testid="share-result"] { background: #000; color: #fff; min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
+
+/* X remains black/white while the shared button hover transition is active. */
+.button[data-testid="share-home"]:hover:not(:disabled),
+.button[data-testid="share-result"]:hover:not(:disabled),
+.button[data-testid="share-home"]:active,
+.button[data-testid="share-result"]:active { background: #000; color: #fff; }
