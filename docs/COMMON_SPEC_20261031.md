@@ -145,3 +145,12 @@ GitHub Pages Source は `GitHub Actions`（workflow）をAPIで確認。
 独立レビュー済みの表示境界に対し、全50武器の成長境界Lv1/3/4/7/8から実際に候補を生成して各言語の表示を検査し、候補原本が変わらないことを確認。装備snapshot検査は実際の最大9面内で複数回に分け、最大台数を超える仮想配置に依存しない形へ修正。未知文をそのまま残す保守的な処理は維持する。これらは文法・キー・表示経路のローカル検査であり、全訳の母語確認や実ブラウザでの読みやすさを証明するものではない。
 
 現在の残件は最終差分レビュー、既存PRへの反映とそのheadのCI（Chromium/WebKit）、マージ後の公開動作、iPhone実機/実音/翻訳の自然さ、および既存サーバーの名前単位識別の制約。サーバーの本人識別/旧スコア移行を未承認で変更しない。未接続の旧export/import/reset/研究/ステージ選択の再公開も行っていない。
+
+## 2026-11-02 専用3段階 ACK の残漏れ補修
+
+- HTTP adapter の開始/終了/登録受領を、lab PR43固定 `b06135ee60006b2ca2c9d177e2497077bcb5fb48` の専用契約と照合。start は JSONB の開始UUID/サーバーplay UUID/名前/版/ゲーム/duplicate、finish は play/ゲーム/結果種別/wave/score/duplicate、submit は1行TABLEの11列/ID/名前/boolean/int4を検査する。normal9列契約を流用せず、専用SQLが返さないgame/version/scoreを返却必須列にはしない。
+- 欠落・型違い・不一致等の曖昧なACKは retryable とし、保存した開始ID・play/submission ID・名前・結果を変えず再送。finish未確認ではsubmitしない。finish確認済みのsubmit再送はfinishを再実行しない。明示 `accepted:false` は永久失敗分類を維持し、自動再試行へ変えない。
+- 実HTTP adapter→RankingClient の追加20回帰は修正前16失敗/合法4成功、修正後成功。明示拒否の保持1回帰を加え全27件、全59ファイル412単体、lint/typecheck成功。signed first/0/最大countの合法履歴を保持。旧HTTP成功mockは専用契約の完全な応答へ訂正し、検査を無効化しない。
+- build/配布物/ドキュメント/v7検証とブラウザCIはこの変更headの最終受領票を参照。既存の本番連携の有効化、参加者identity、設定・マージ・実機・本番確認の残件は維持。DB/Edgeや本番登録状態、ゲーム規則・スコア・保存キーは変更しない。
+
+独立レビュー追記: duplicateのresult_display_nameは現在aggregateの値を返す契約なので、初回のみrequestと一致を要求し、duplicateは型/非空白/20文字以内を検証。normalized名と受領IDは厳密一致を維持。合法duplicate表示名の回帰は変更前失敗→成功、null/欠落/空白/超過/非文字列は拒否する。

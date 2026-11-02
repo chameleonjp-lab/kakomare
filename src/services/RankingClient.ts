@@ -129,6 +129,9 @@ interface HttpRankingGatewayOptions {
   fetchImpl?: typeof globalThis.fetch;
 }
 
+const isUuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const isInt4 = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= -2147483648 && value <= 2147483647;
+
 /** REST adapter for the approved RPC contract. It is opt-in and never reads a service key. */
 export class HttpRankingGateway implements RankingGateway {
   private readonly endpoint: string;
@@ -150,7 +153,7 @@ export class HttpRankingGateway implements RankingGateway {
       p_game_slug: request.gameSlug,
       p_client_version: request.clientVersion,
     }, { keepalive: true }).then((value) => {
-      if (!isRecord(value) || value.accepted !== true || typeof value.play_id !== 'string' || typeof value.game_slug !== 'string' || typeof value.client_version !== 'string') throw new RankingError('invalid_start_response', false);
+      if (!isRecord(value) || value.accepted !== true || !isUuid(value.play_id) || value.start_id !== request.startId || value.game_slug !== request.gameSlug || value.client_version !== request.clientVersion || value.display_name !== request.displayName || value.normalized_name !== request.displayName || typeof value.duplicate !== 'boolean') throw new RankingError('invalid_start_response', true);
       return { accepted: true, playId: value.play_id, gameSlug: value.game_slug, clientVersion: value.client_version };
     });
   }
@@ -166,7 +169,7 @@ export class HttpRankingGateway implements RankingGateway {
       p_client_version: request.clientVersion,
       p_ranking_score: request.score,
     }).then((value) => {
-      if (!isRecord(value) || value.accepted !== true || typeof value.play_id !== 'string') throw new RankingError('invalid_finish_response', false);
+      if (!isRecord(value) || value.accepted !== true || value.play_id !== request.playId || value.game_slug !== request.gameSlug || value.result_type !== request.resultType || value.reached_wave !== request.reachedWave || value.score !== request.score || typeof value.duplicate !== 'boolean') throw new RankingError('invalid_finish_response', true);
       return { accepted: true, playId: value.play_id };
     });
   }
@@ -179,8 +182,8 @@ export class HttpRankingGateway implements RankingGateway {
       p_game_slug: request.gameSlug,
       p_score: request.score,
       p_client_version: request.clientVersion,
-    }).then((value) => {
-      if (!isRecord(value) || value.accepted !== true || typeof value.result_submission_id !== 'string' || typeof value.result_play_id !== 'string') throw new RankingError('invalid_submit_response', false);
+    }, undefined, true).then((value) => {
+      if (!isRecord(value) || value.accepted !== true || !isUuid(value.result_submission_id) || !isUuid(value.result_play_id) || value.result_submission_id !== request.submissionId || value.result_play_id !== request.playId || (typeof value.result_display_name !== 'string' || !value.result_display_name.trim() || [...value.result_display_name].length > 20 || (value.was_duplicate === false && value.result_display_name !== request.displayName)) || value.result_normalized_name !== request.displayName || !isInt4(value.result_first_score) || !isInt4(value.result_best_score) || !isInt4(value.result_play_count) || value.result_play_count < 1 || typeof value.is_first_play !== 'boolean' || typeof value.is_new_best !== 'boolean' || typeof value.was_duplicate !== 'boolean') throw new RankingError('invalid_submit_response', true);
       return { accepted: true, submissionId: value.result_submission_id, playId: value.result_play_id, gameSlug: request.gameSlug, clientVersion: request.clientVersion, score: request.score };
     });
   }
@@ -195,11 +198,13 @@ export class HttpRankingGateway implements RankingGateway {
     }).then((rows) => rows.map(parseRankingEntry));
   }
 
-  private async rpc(name: string, body: unknown, options?: Pick<RequestInit, 'keepalive'>): Promise<unknown> {
+  private async rpc(name: string, body: unknown, options?: Pick<RequestInit, 'keepalive'>, table = false): Promise<unknown> {
     const parsed = await this.requestRpc(name, body, options);
-    if (Array.isArray(parsed) && parsed.length !== 1) throw new RankingError('invalid_rpc_payload', false);
-    const value = Array.isArray(parsed) ? parsed[0] : parsed;
-    if (!isRecord(value)) throw new RankingError('invalid_rpc_payload', false);
+    if (table ? !Array.isArray(parsed) || parsed.length !== 1 : Array.isArray(parsed)) throw new RankingError('invalid_rpc_payload', true);
+    const value = table ? (parsed as unknown[])[0] : parsed;
+    if (!isRecord(value)) throw new RankingError('invalid_rpc_payload', true);
+    // A declared server rejection is not an ambiguous transport/ACK failure.
+    if (value.accepted === false) throw new RankingError('server_rejected', false);
     return value;
   }
 
