@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './isolatedTest';
 
 const browserErrors = new WeakMap<Page, string[]>();
 
@@ -634,6 +634,7 @@ test('共有できない環境では画面内のコピー欄へ切り替える',
   await expect(page.getByTestId('manual-share-copy')).toBeVisible();
   await expect(page.locator('.share-text')).toContainText('全方位防衛ゲーム「カコマレ」');
   await expect(page.locator('.share-text')).toContainText('/kakomare/');
+  await expect(page.locator('.share-text')).toContainText('#カコマレ #ゲーム制作');
   await expect(page.locator('.share-text')).toBeFocused();
   await expect(page.locator('.page-shell')).toHaveAttribute('inert', '');
   await page.keyboard.press('Shift+Tab');
