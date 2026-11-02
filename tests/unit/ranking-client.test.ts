@@ -37,6 +37,37 @@ class FakeGateway implements RankingGateway {
 }
 
 describe('RankingClient', () => {
+  it('starts guests without any public write and ignores an older delayed named start', async()=>{
+    const gateway=new FakeGateway();let resolveStart:((value:Awaited<ReturnType<FakeGateway['startPlay']>>)=>void)|undefined;
+    gateway.startPlay=(request)=>{gateway.starts.push(request);return new Promise(resolve=>{resolveStart=resolve;});};
+    const client=new RankingClient({gateway,storage:new MemoryStorage()});
+    const old=client.begin('元の名前');const request=gateway.starts[0]!;
+    await client.begin('   ');expect(client.snapshot().session).toBeNull();
+    resolveStart!({accepted:true,playId:'old-play',gameSlug:request.gameSlug,clientVersion:request.clientVersion});await old;
+    expect(client.snapshot().session).toBeNull();expect(gateway.starts).toHaveLength(1);
+    expect(client.snapshot().diagnosticCode).toBe('guest_run');
+    expect(gateway.finishes).toHaveLength(0);expect(gateway.submissions).toHaveLength(0);
+    expect((await client.loadTopRanking()).topRanking).toHaveLength(1);
+  });
+
+  it('a guest run never deletes an existing durable pending score',async()=>{
+    const gateway=new FakeGateway();gateway.failSubmitOnce=true;
+    const client=new RankingClient({gateway,storage:new MemoryStorage()});await client.start('元の名前');
+    const previous=await client.finish({displayName:'元の名前',playId:'server-play-1',result:result(120)});
+    const guest=await client.begin('');expect(guest.submission?.submissionId).toBe(previous.submission?.submissionId);expect(guest.session).toBeNull();
+    expect(gateway.starts).toHaveLength(1);expect(gateway.submissions).toHaveLength(1);
+  });
+
+  it('a fresh ranking read after submission cannot be replaced by an older response',async()=>{
+    const gateway=new FakeGateway();const responses:Array<(value:RankingEntry[])=>void>=[];
+    gateway.getBestRanking=()=>new Promise(resolve=>responses.push(resolve));
+    const client=new RankingClient({gateway,storage:new MemoryStorage()});
+    const old=client.loadTopRanking(),fresh=client.loadTopRanking(true);
+    responses[1]!([{...gateway.topRanking[0]!,bestScore:999}]);await fresh;
+    responses[0]!([{...gateway.topRanking[0]!,bestScore:1}]);await old;
+    expect(client.snapshot().topRanking[0]?.bestScore).toBe(999);
+  });
+
   it('reuses the same start_id when a start request is retried', async () => {
     const gateway = new FakeGateway(); gateway.failStart = true;
     const client = new RankingClient({ gateway, storage: new MemoryStorage() });
@@ -107,23 +138,23 @@ describe('RankingClient', () => {
         const payload = rpc === 'get_best_score_ranking'
           ? [{ rank_no: 1, display_name: '上位者', first_score: 100, best_score: 200, play_count: 3, updated_at: '2026-09-18T00:00:00.000Z' }]
           : rpc === 'start_game_play_v1'
-          ? { accepted: true, play_id: 'server-play-1', game_slug: 'kakomare', client_version: 'kakomare-web-v9' }
+          ? { accepted: true, play_id: '11111111-1111-4111-8111-111111111111', game_slug: 'kakomare', client_version: 'kakomare-web-v9', start_id: body.p_start_id, display_name: body.p_display_name, normalized_name: body.p_display_name, duplicate: false }
           : rpc === 'finish_game_play_v1'
-            ? { accepted: true, play_id: 'server-play-1' }
-            : { accepted: true, result_submission_id: 'submission-1', result_play_id: 'server-play-1', result_display_name: '競技者', result_first_score: 120, result_best_score: 120, result_play_count: 1, is_first_play: true, is_new_best: true, was_duplicate: false };
+            ? { accepted: true, play_id: '11111111-1111-4111-8111-111111111111', game_slug: body.p_game_slug, result_type: body.p_result_type, reached_wave: body.p_reached_wave, score: body.p_score, duplicate: false }
+            : [{ accepted: true, result_submission_id: '22222222-2222-4222-8222-222222222222', result_play_id: '11111111-1111-4111-8111-111111111111', result_display_name: '競技者', result_normalized_name: '競技者', result_first_score: 120, result_best_score: 120, result_play_count: 1, is_first_play: true, is_new_best: true, was_duplicate: false }];
         return { ok: true, status: 200, json: async () => payload } as Response;
       },
     });
-    const startRequest: RankingStartRequest = { startId: 'start-1', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless' };
+    const startRequest: RankingStartRequest = { startId: '33333333-3333-4333-8333-333333333333', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless' };
     await gateway.startPlay(startRequest);
-    await gateway.finishPlay({ playId: 'server-play-1', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless', resultType: 'game_over', reachedWave: 1, score: 120, scoreBreakdown: { kills: 3 } });
-    await gateway.submitScore({ submissionId: 'submission-1', playId: 'server-play-1', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless', resultType: 'game_over', score: 120, scoreBreakdown: { kills: 3 } });
-    await expect(gateway.getBestRanking('kakomare', 10)).resolves.toEqual([{ rank: 1, displayName: '上位者', firstScore: 100, bestScore: 200, playCount: 3, updatedAt: '2026-09-18T00:00:00.000Z' }]);
+    await gateway.finishPlay({ playId: '11111111-1111-4111-8111-111111111111', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless', resultType: 'game_over', reachedWave: 1, score: 120, scoreBreakdown: { kills: 3 } });
+    await gateway.submitScore({ submissionId: '22222222-2222-4222-8222-222222222222', playId: '11111111-1111-4111-8111-111111111111', displayName: '競技者', gameSlug: 'kakomare', clientVersion: 'kakomare-web-v9', ruleVersion: 'expansion-v8-endless', resultType: 'game_over', score: 120, scoreBreakdown: { kills: 3 } });
+    await expect(gateway.getBestRanking('kakomare', 30)).resolves.toEqual([{ rank: 1, displayName: '上位者', firstScore: 100, bestScore: 200, playCount: 3, updatedAt: '2026-09-18T00:00:00.000Z' }]);
     expect(calls.map((call) => call.body)).toEqual([
-      { p_start_id: 'start-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_client_version: 'kakomare-web-v9' },
-      { p_play_id: 'server-play-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_result_type: 'game_over', p_reached_wave: 1, p_score: 120, p_client_version: 'kakomare-web-v9', p_ranking_score: 120 },
-      { p_play_id: 'server-play-1', p_submission_id: 'submission-1', p_display_name: '競技者', p_game_slug: 'kakomare', p_score: 120, p_client_version: 'kakomare-web-v9' },
-      { p_game_slug: 'kakomare', p_limit: 10 },
+      { p_start_id: '33333333-3333-4333-8333-333333333333', p_display_name: '競技者', p_game_slug: 'kakomare', p_client_version: 'kakomare-web-v9' },
+      { p_play_id: '11111111-1111-4111-8111-111111111111', p_display_name: '競技者', p_game_slug: 'kakomare', p_result_type: 'game_over', p_reached_wave: 1, p_score: 120, p_client_version: 'kakomare-web-v9', p_ranking_score: 120 },
+      { p_play_id: '11111111-1111-4111-8111-111111111111', p_submission_id: '22222222-2222-4222-8222-222222222222', p_display_name: '競技者', p_game_slug: 'kakomare', p_score: 120, p_client_version: 'kakomare-web-v9' },
+      { p_game_slug: 'kakomare', p_limit: 30 },
     ]);
     expect(calls[0]?.keepalive).toBe(true);
 

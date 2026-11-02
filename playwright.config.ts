@@ -8,6 +8,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:4173/kakomare/',
+    locale: 'ja-JP', // Existing Japanese-copy checks explicitly model a Japanese browser.
     trace: 'on-first-retry',
   },
   webServer: {
@@ -21,3 +22,4 @@ export default defineConfig({
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
 });
+

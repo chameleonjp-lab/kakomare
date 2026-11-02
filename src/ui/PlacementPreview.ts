@@ -1,3 +1,4 @@
+import { translatePlacementText as rt } from '../services/GameTextService';
 import { BuildGraph } from '../game/build/BuildGraph';
 import type { BuildNode, BuildNodeKind } from '../types/build';
 import type { BattleSnapshot } from '../types/game';
@@ -11,7 +12,7 @@ export function placementNodes(snapshot: BattleSnapshot | null): BuildNode[] {
 export function placementLabel(kind: BuildNodeKind, slot: number): string {
   const directions = kind === 'weapon' ? ['上', '右下', '左下'] : ['右上', '下', '左上'];
   const rings = ['内側', '中側', '外側'];
-  return `${kind === 'weapon' ? '武器' : '補助'}面${slot + 1}（${rings[Math.floor(slot / 3)]}・${directions[slot % 3]}）`;
+  return rt(`${kind === 'weapon' ? '武器' : '補助'}面${slot + 1}（${rings[Math.floor(slot / 3)]}・${directions[slot % 3]}）`);
 }
 
 export interface PlacementPreviewOptions {
@@ -25,11 +26,11 @@ export interface PlacementPreviewOptions {
 export function createPlacementPreview(snapshot: BattleSnapshot | null, options: PlacementPreviewOptions = {}): HTMLElement {
   const figure = element('figure', 'placement-preview');
   figure.dataset.testid = 'placement-preview';
-  const caption = element('figcaption', 'placement-caption', '戦場と同じ向きの配置見本');
+  const caption = element('figcaption', 'placement-caption', rt('戦場と同じ向きの配置見本'));
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '-360 -360 720 720');
   svg.setAttribute('role', 'group');
-  svg.setAttribute('aria-label', '中央がコア。武器は上・右下・左下、補助は右上・下・左上。番号は内側から外側へ増えます。');
+  svg.setAttribute('aria-label', rt('中央がコア。武器は上・右下・左下、補助は右上・下・左上。番号は内側から外側へ増えます。'));
   const nodes = placementNodes(snapshot);
   const extent = Math.max(180, ...nodes.map((node) => Math.max(Math.abs(node.x), Math.abs(node.y)) + 60));
   svg.setAttribute('viewBox', `${-extent} ${-extent} ${extent * 2} ${extent * 2}`);
@@ -79,14 +80,14 @@ export function createPlacementPreview(snapshot: BattleSnapshot | null, options:
     box.setAttribute('x', '-42'); box.setAttribute('y', '-26'); box.setAttribute('width', '84'); box.setAttribute('height', '52'); box.setAttribute('rx', node.kind === 'weapon' ? '8' : '24');
     const text = document.createElementNS(svg.namespaceURI, 'text');
     text.setAttribute('text-anchor', 'middle'); text.setAttribute('y', '8');
-    text.textContent = `${node.kind === 'weapon' ? '武' : '補'}${node.slot + 1}`;
+    text.textContent = rt(`${node.kind === 'weapon' ? '武' : '補'}${node.slot + 1}`);
     const title = document.createElementNS(svg.namespaceURI, 'title');
     title.textContent = placementLabel(node.kind, node.slot);
     group.append(title, box, text);
     if (selectable) {
       group.setAttribute('role', 'button');
       group.setAttribute('tabindex', '0');
-      group.setAttribute('aria-label', `${placementLabel(node.kind, node.slot)}を選択`);
+      group.setAttribute('aria-label', rt(`${placementLabel(node.kind, node.slot)}を選択`));
       const activate = (event: Event): void => {
         event.preventDefault();
         event.stopPropagation();
@@ -101,8 +102,9 @@ export function createPlacementPreview(snapshot: BattleSnapshot | null, options:
     svg.append(group);
   }
   const core = document.createElementNS(svg.namespaceURI, 'text');
-  core.setAttribute('text-anchor', 'middle'); core.setAttribute('y', '8'); core.setAttribute('class', 'placement-core'); core.textContent = 'コア';
+  core.setAttribute('text-anchor', 'middle'); core.setAttribute('y', '8'); core.setAttribute('class', 'placement-core'); core.textContent = rt('コア');
   svg.append(core);
-  figure.append(caption, svg, element('p', 'placement-legend', '青い四角「武」＝武器／金色の丸「補」＝補助。金色の線は左右の接続先です。配置は図または下の大きなボタンで選びます。'));
+  figure.append(caption, svg, element('p', 'placement-legend', rt('青い四角「武」＝武器／金色の丸「補」＝補助。金色の線は左右の接続先です。配置は図または下の大きなボタンで選びます。')));
   return figure;
 }
+

@@ -775,3 +775,5 @@
   .upgrade-placement-option { padding: 8px; }
   .upgrade-connection-text { font-size: .86rem; }
 }
+
+[data-testid="share-home"], [data-testid="share-result"] { background: #000; color: #fff; min-height: 44px; white-space: normal; overflow-wrap: anywhere; }

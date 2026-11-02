@@ -1,27 +1,24 @@
 export interface ShareResult {
   success: boolean;
-  method: 'native' | 'clipboard' | 'manual' | 'failed' | 'cancelled';
+  method: 'x' | 'native' | 'clipboard' | 'manual' | 'failed' | 'cancelled';
 }
 
 export class ShareService {
   public getShareUrl(): string {
-    const url = new URL(window.location.href);
-    url.search = '';
-    url.hash = '';
-    return url.toString();
+    return 'https://chameleonjp-lab.github.io/kakomare/';
   }
 
-  public async share(title: string, text: string): Promise<ShareResult> {
+  public async share(_title: string, text: string): Promise<ShareResult> {
     const url = this.getShareUrl();
+    const intent = new URL('https://x.com/intent/post');
+    intent.searchParams.set('text', `${text}\n${url}`);
     try {
-      if (navigator.share) {
-        await navigator.share({ title, text, url });
-        return { success: true, method: 'native' };
+      const popup = window.open(intent.href, '_blank');
+      if (popup) {
+        popup.opener = null;
+        return { success: true, method: 'x' };
       }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return { success: false, method: 'cancelled' };
-      if (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') return { success: false, method: 'cancelled' };
-    }
+    } catch { /* Fall through to copying. */ }
     try {
       if (!navigator.clipboard) throw new Error('クリップボードが使えません。');
       await navigator.clipboard.writeText(`${text}\n${url}`);

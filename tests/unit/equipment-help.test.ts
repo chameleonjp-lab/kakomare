@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { languageService } from '../../src/services/LanguageService';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { SUPPORTS, SUPPORT_ORDER } from '../../src/data/supports';
 import { WEAPONS, WEAPON_ORDER } from '../../src/data/weapons';
 import { SUPPORT_SYNERGY_TAGS, SYNERGY_TAGS, WEAPON_SYNERGY_TAGS } from '../../src/data/synergyTags';
@@ -32,6 +33,7 @@ function supportSnapshot(id: (typeof SUPPORT_ORDER)[number], slot: number, level
 }
 
 describe('equipment help copy and snapshot connections', () => {
+  beforeEach(() => languageService.select('ja'));
   it('does not promise enemy-following drones or shield-ignoring lances in the candidate summary', () => {
     expect(WEAPONS.drone.description).toContain('設置した武器の周り');
     expect(getWeaponHelp('drone').current).toContain('設置した武器の周り');
@@ -163,3 +165,4 @@ describe('equipment help copy and snapshot connections', () => {
     expect(getSupportHelp('reserve').tags).toEqual(['charge']);
   });
 });
+
