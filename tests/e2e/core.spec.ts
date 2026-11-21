@@ -2,6 +2,10 @@ import { expect, test, type Page } from './isolatedTest';
 
 const browserErrors = new WeakMap<Page, string[]>();
 
+// The battle shell can be visible before the local upgrade fixture advances
+// 0.7 simulated seconds. Slow WebKit frames are capped at five fixed steps.
+const TEST_UPGRADE_READY_TIMEOUT_MS = 10_000;
+
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
   browserErrors.set(page, errors);
@@ -97,7 +101,7 @@ test('3秒カウントダウン後に戦闘が始まり、ドラッグ照準と�
   await page.mouse.move(250, 180);
   await page.mouse.up();
   await expect(page.getByTestId('aim-state')).toContainText('手動照準');
-  await expect(page.getByTestId('upgrade-candidate').first()).toBeVisible({ timeout: 3000 });
+  await expect(page.getByTestId('upgrade-candidate').first()).toBeVisible({ timeout: TEST_UPGRADE_READY_TIMEOUT_MS });
   await expect(page.locator('.upgrade-guide')).toContainText('候補名のボタンと装着場所のボタンだけ');
   await expect(page.locator('.upgrade-info-block').first()).toContainText('この強化の内容');
   await expect(page.locator('.upgrade-help-details summary').first()).toContainText('詳しい効果を見る');
@@ -206,7 +210,7 @@ test('強化中は背景操作を遮断し、フォーカス中の候補だけ�
 test('除外操作後も有効な3枚の候補を維持する', async ({ page }) => {
   await enterBattle(page, '?test=1&upgrade=1');
   const candidates = page.getByTestId('upgrade-candidate');
-  await expect(candidates.first()).toBeEnabled({ timeout: 3000 });
+  await expect(candidates.first()).toBeEnabled({ timeout: TEST_UPGRADE_READY_TIMEOUT_MS });
   const ban = page.locator('.upgrade-ban:not([disabled])').first();
   await expect(ban).toBeEnabled();
   await ban.click();
@@ -217,7 +221,7 @@ test('除外操作後も有効な3枚の候補を維持する', async ({ page })
 test('除外を使い切った後も新しい装置を面へ装着できる', async ({ page }) => {
   await enterBattle(page, '?test=1&upgrade=1&seed=1');
   const candidates = page.getByTestId('upgrade-candidate');
-  await expect(candidates.first()).toBeVisible({ timeout: 3000 });
+  await expect(candidates.first()).toBeVisible({ timeout: TEST_UPGRADE_READY_TIMEOUT_MS });
   const bans = page.locator('.upgrade-ban');
   await expect(bans).toHaveCount(3);
   // Endless has the same two exclusions for every player; consume both
