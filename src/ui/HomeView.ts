@@ -58,7 +58,11 @@ export function createHomeView(save: SaveData, actions: HomeActions): HTMLElemen
     }
     actions.changeLanguage?.(language);
   };
-  if (actions.changeLanguage) shell.append(createLanguageSelect(requestLanguage));
+  if (actions.changeLanguage) {
+    const language = createLanguageSelect(requestLanguage);
+    language.classList.add('home-language');
+    shell.prepend(language);
+  }
   // Enter never starts a run from this field, including Japanese IME confirmation.
   hero.append(title, greeting, label, input, help, error, start);
   if (actions.resume) {

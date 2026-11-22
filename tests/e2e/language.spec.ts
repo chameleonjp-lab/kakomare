@@ -2,6 +2,30 @@ import { expect, test } from './isolatedTest';
 
 test.use({ locale: 'en-US', viewport: { width: 320, height: 568 } });
 
+test('home language selector stays upper-left without covering the heading', async ({ page }) => {
+  await page.goto('./?test=1');
+  const picker = page.getByTestId('language-select');
+  await expect(picker.locator('option')).toHaveCount(15);
+  await picker.selectOption('pt-BR');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
+  for (const viewport of [{ width: 320, height: 568 }, { width: 402, height: 700 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(viewport);
+    await expect(picker).toBeVisible();
+    const fits = await picker.evaluate(select => {
+      const row = select.closest('label')!.getBoundingClientRect();
+      const shell = select.closest('.page-shell')!;
+      const bounds = shell.getBoundingClientRect();
+      const title = shell.querySelector('h1')!.getBoundingClientRect();
+      const control = select.getBoundingClientRect();
+      return Math.abs(row.left - bounds.left) <= 1 &&
+        Math.abs(row.top - bounds.top - parseFloat(getComputedStyle(shell).paddingTop)) <= 1 &&
+        row.bottom <= title.top && control.height >= 48 && control.right <= bounds.right + 1 &&
+        document.documentElement.scrollWidth <= innerWidth + 1;
+    });
+    expect(fits, `home language selector fits ${viewport.width}×${viewport.height}`).toBe(true);
+  }
+});
+
 test('supported languages preserve name, muted sound and game progress across home/settings/rules', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
