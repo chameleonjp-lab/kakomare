@@ -303,8 +303,12 @@ export class AppController {
       if (remaining <= 0) {
         this.clearCountdown();
         this.audio.cue('start');
-        const playCounterUrl = "https://chameleonjp-lab.github.io/chameleonjp_lab/play-start.js";
-        void import(/* @vite-ignore */ playCounterUrl).then(module => module.recordPlayStart("kakomare")).catch(() => {});
+        if (globalThis.location?.origin === "https://chameleonjp-lab.github.io") {
+          const playCounterUrl = "https://chameleonjp-lab.github.io/chameleonjp_lab/play-start.js";
+          void import(/* @vite-ignore */ playCounterUrl)
+            .then(module => module.recordPlayStart("kakomare"))
+            .catch(() => {});
+        }
 
         this.render('battle');
         return;
